@@ -84,7 +84,7 @@ exit $PYTEST_EXIT_CODE
 """
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dangerously-skip-permissions", action="store_true")
     parser.add_argument("-p", "--prompt", type=str)

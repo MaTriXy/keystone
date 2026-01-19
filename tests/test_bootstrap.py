@@ -10,7 +10,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def test_cli_help():
+def test_cli_help() -> None:
     result = subprocess.run(
         ["python3", "bootstrap_devcontainer.py", "--help"],
         capture_output=True,
@@ -20,7 +20,7 @@ def test_cli_help():
     assert "bootstrap_devcontainer.py [OPTIONS] PROJECT_ROOT" in result.stdout
 
 
-def _stream_reader(stream, lines_list, log_prefix):
+def _stream_reader(stream: object, lines_list: list[str], log_prefix: str) -> None:
     """Read lines from stream and log them in real-time."""
     for line in stream:
         line = line.rstrip('\n')
@@ -28,12 +28,11 @@ def _stream_reader(stream, lines_list, log_prefix):
         lines_list.append(line)
 
 
-def test_e2e_with_fake_agent(tmp_path):
+def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
     """
-    import shutil
 
     # Copy sample project to tmp_path
     original_project_root = Path("samples/python_project").resolve()
@@ -109,7 +108,7 @@ def test_e2e_with_fake_agent(tmp_path):
 
 
 @pytest.mark.manual
-def test_e2e_sample_project(tmp_path):
+def test_e2e_sample_project(tmp_path: Path) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
     original_project_root = Path("samples/python_project").resolve()
     project_root = tmp_path / "project"
