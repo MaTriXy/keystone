@@ -13,3 +13,4 @@ dependencies = [
 markers = [
     "manual: marks tests as manual (select with '-m manual')",
 ]
+testpaths = ["tests"]
