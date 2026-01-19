@@ -39,3 +39,6 @@ bd sync               # Sync with git
 - If push fails, resolve and retry until it succeeds
 - **Always use merge, never rebase** - Preserve commit history with merge commits
 
+## Code Style
+
+- **No inline imports** - Put all imports at the top of the file, not inside functions

@@ -2,6 +2,7 @@ import subprocess
 import json
 import logging
 import os
+import shutil
 import threading
 import pytest
 from pathlib import Path
@@ -29,8 +30,6 @@ def _stream_reader(stream, lines_list, log_prefix):
 
 @pytest.mark.manual
 def test_e2e_sample_project(tmp_path):
-    import shutil
-
     # Copy sample project to tmp_path to avoid modifying the original source tree
     original_project_root = Path("samples/python_project").resolve()
     project_root = tmp_path / "project"
