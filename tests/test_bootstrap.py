@@ -29,12 +29,12 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     """
 
     # Copy sample project to tmp_path
-    original_project_root = Path("samples/python_project").resolve()
+    original_project_root = Path(__file__).parent.parent / "samples/python_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
     scratch_dir = tmp_path / "scratch"
-    fake_agent = Path("tests/fake_agent.py").resolve()
+    fake_agent = Path(__file__).parent / "fake_agent.py"
 
     logger.info("=" * 60)
     logger.info("E2E Test with Fake Agent Starting")
@@ -71,7 +71,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 @pytest.mark.manual
 def test_e2e_sample_project(tmp_path: Path) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
-    original_project_root = Path("samples/python_project").resolve()
+    original_project_root = Path(__file__).parent.parent / "samples/python_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
