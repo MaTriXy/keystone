@@ -6,7 +6,7 @@ The coding agent should be prompted to:
 
 1. Create a //.devcontainer/devcontainer.json file at the project root (// is the project root).  
 2. Create a //.devcontainer/Dockerfile alongside that.  
-3. Create a run\_all\_tests.sh script alongside the Dockerfile  
+3. Create a run\_all\_tests.sh script alongside the Dockerfile (and make it executable with `chmod +x`)  
    1. run\_all\_tests.sh should take an arg called \--test\_artifact\_dir  
    2. It should return 0 (success) IFF all tests pass and forward enough information to stdout/stderr to enable debugging failing tests.  
    3. test\_artifact\_dir should be populated with artifacts from running the tests that prove the ran: JSON reports, coverage reports, etc.  For now, it can be organized loosely, but with a few requests:  
