@@ -2,6 +2,7 @@ import subprocess
 import json
 import logging
 import os
+import shlex
 import shutil
 import threading
 import pytest
@@ -53,7 +54,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         "bootstrap_devcontainer.py",
         str(project_root),
         "--scratch-dir", str(scratch_dir),
-        "--agent-cmd", f"python3 {fake_agent}",
+        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
