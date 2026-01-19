@@ -68,6 +68,50 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert (scratch_dir / "final_result.json").exists()
 
 
+def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
+    """
+    Test that the fake agent (which generates Python devcontainer) fails
+    when used against a Rust project, demonstrating proper failure detection.
+    """
+
+    # Copy Rust sample project to tmp_path
+    original_project_root = Path(__file__).parent.parent / "samples/rust_project"
+    project_root = tmp_path / "project"
+    shutil.copytree(original_project_root, project_root)
+
+    scratch_dir = tmp_path / "scratch"
+    fake_agent = Path(__file__).parent / "fake_agent.py"
+
+    logger.info("=" * 60)
+    logger.info("E2E Test: Fake Agent on Rust Project (Expected Failure)")
+    logger.info("Project root: %s", project_root)
+    logger.info("Scratch dir: %s", scratch_dir)
+    logger.info("=" * 60)
+
+    cmd = [
+        "python3", "-u",
+        "bootstrap_devcontainer.py",
+        str(project_root),
+        "--scratch-dir", str(scratch_dir),
+        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
+    ]
+
+    logger.info("Running: %s", ' '.join(cmd))
+
+    result = run_process(cmd, log_prefix="[fake-agent-rust]")
+
+    logger.info("Return code: %s", result.returncode)
+
+    # The script should complete but report failure since Python devcontainer
+    # won't have Rust toolchain to run cargo test
+    assert result.returncode != 0 or not json.loads(result.stdout).get("success", True), \
+        "Expected failure: Python devcontainer cannot run Rust tests"
+
+    # Verify the devcontainer was created (agent ran successfully)
+    assert (project_root / ".devcontainer" / "devcontainer.json").exists()
+    assert (project_root / ".devcontainer" / "Dockerfile").exists()
+
+
 @pytest.mark.manual
 def test_e2e_sample_project(tmp_path: Path) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
