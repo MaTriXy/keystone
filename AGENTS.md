@@ -42,3 +42,5 @@ bd sync               # Sync with git
 ## Code Style
 
 - **No inline imports** - Put all imports at the top of the file, not inside functions
+- **Always use type annotations** - Add Python type annotations to all function parameters and return values
+- **Use uv for running Python** - Run tests with `uv run pytest`, not `python -m pytest`
