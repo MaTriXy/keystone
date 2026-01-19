@@ -31,6 +31,9 @@ Instructions:
 5. The Dockerfile should leave the CWD as /project_src.
 
 Notes:
+* Start by exploring the repository structure. Use commands like:
+  - `find . -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn` to identify file types
+  - `find . -iname '*test*'` to find test-related files and folders
 * Only make changes in the .devcontainer/... subtree.
 * Optimize the Dockerfile in stages for faster rebuilds.
 * Run parts of test suites in parallel if feasible.
