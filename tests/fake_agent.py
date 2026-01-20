@@ -104,6 +104,22 @@ def main() -> None:
     run_script.chmod(0o755)
 
     # Output in stream-json format like claude does
+    # First emit some status messages as an assistant would
+    status_messages = [
+        "BOOTSTRAP_DEVCONTAINER_STATUS: Exploring repository structure.",
+        "BOOTSTRAP_DEVCONTAINER_STATUS: Creating devcontainer.json and Dockerfile.",
+        "BOOTSTRAP_DEVCONTAINER_STATUS: Completed setup of devcontainer files.",
+    ]
+
+    for status in status_messages:
+        assistant_msg = {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": status}]
+            },
+        }
+        print(json.dumps(assistant_msg))
+
     result = {
         "type": "result",
         "usage": {

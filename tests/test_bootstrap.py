@@ -57,7 +57,22 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     logger.info("Return code: %s", result.returncode)
 
     assert result.returncode == 0, f"Process failed: {result.stderr}"
-    output = json.loads(result.stdout)
+
+    # Check that status lines were emitted to stdout (rich prints in blue)
+    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, \
+        "Expected status lines in stdout"
+
+    # Parse the JSON output (last line after status messages)
+    # Find the JSON object in stdout (it spans multiple lines)
+    stdout_lines = result.stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+    assert json_start is not None, "Could not find JSON output"
+    json_str = "\n".join(stdout_lines[json_start:])
+    output = json.loads(json_str)
     assert output["success"], f"Test failed: {output}"
 
     # Check artifacts
@@ -104,8 +119,22 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 
     # The script should complete but report failure since Python devcontainer
     # won't have Rust toolchain to run cargo test
-    assert result.returncode != 0 or not json.loads(result.stdout).get("success", True), \
-        "Expected failure: Python devcontainer cannot run Rust tests"
+    # Parse the JSON output (find it after status messages)
+    stdout_lines = result.stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+    if json_start is not None:
+        json_str = "\n".join(stdout_lines[json_start:])
+        output = json.loads(json_str)
+        assert result.returncode != 0 or not output.get("success", True), \
+            "Expected failure: Python devcontainer cannot run Rust tests"
+    else:
+        # If we can't parse JSON, the process must have failed
+        assert result.returncode != 0, \
+            "Expected failure: Python devcontainer cannot run Rust tests"
 
     # Verify the devcontainer was created (agent ran successfully)
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()

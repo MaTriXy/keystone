@@ -1,4 +1,5 @@
 import json
+import logging
 import shlex
 import subprocess
 import sys
@@ -6,10 +7,15 @@ import time
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
 from process_runner import run_process
 
 app = typer.Typer()
+console = Console()
+logger = logging.getLogger(__name__)
+
+STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 
 AGENT_PROMPT_TEMPLATE = """
 We need to build an appropriate dev container and Dockerfile in which this project's test suite runs successfully. You are currently at the project root.
@@ -32,13 +38,19 @@ Instructions:
 
 Notes:
 * Start by exploring the repository structure. Use commands like:
-  - `find . -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn` to identify file types
+  - `find . -type f | sed 's/.*\\.//' | sort | uniq -c | sort -rn` to identify file types
   - `find . -iname '*test*'` to find test-related files and folders
 * Only make changes in the .devcontainer/... subtree.
 * Optimize the Dockerfile in stages for faster rebuilds.
 * Run parts of test suites in parallel if feasible.
 * Monitor test runs to avoid waiting on stuck tests (e.g., use `timeout`).
 * If tests cannot be fixed by environment changes, disable them via command line args.
+* Emit status updates before and after each major action using this format:
+  BOOTSTRAP_DEVCONTAINER_STATUS: <your status message>
+  Examples:
+  - BOOTSTRAP_DEVCONTAINER_STATUS: Exploring repository structure to identify file types and test locations.
+  - BOOTSTRAP_DEVCONTAINER_STATUS: Creating initial Dockerfile based on detected Python 3.11 project.
+  - BOOTSTRAP_DEVCONTAINER_STATUS: Build failed due to missing dependency; adding libpq-dev to Dockerfile.
 
 To verify:
 1. Build with `devcontainer build --workspace-folder .`
@@ -67,6 +79,21 @@ def main(
 
     token_spending = {"input": 0, "cached": 0, "output": 0}
 
+    def check_and_print_status(text: str) -> bool:
+        """Check for status marker in text and print in blue if found.
+
+        Returns True if a status marker was found.
+        """
+        found = False
+        for line in text.split("\n"):
+            if STATUS_MARKER in line:
+                # Extract the status message after the marker
+                idx = line.find(STATUS_MARKER)
+                status_msg = line[idx:].strip()
+                console.print(status_msg, style="blue")
+                found = True
+        return found
+
     def process_agent_stdout(line: str) -> None:
         """Process a line of agent stdout, extracting messages and token usage."""
         try:
@@ -79,11 +106,12 @@ def main(
                     if item.get("type") == "text":
                         txt = item.get("text", "").strip()
                         if txt:
-                            print(f"Assistant: {txt}", file=sys.stderr)
+                            if not check_and_print_status(txt):
+                                logger.debug("Assistant: %s", txt)
                     elif item.get("type") == "tool_use":
                         name = item.get("name")
                         input_data = item.get("input", {})
-                        print(f"Tool Call: {name}({input_data})", file=sys.stderr)
+                        logger.debug("Tool Call: %s(%s)", name, input_data)
 
             elif msg_type == "result":
                 usage = data.get("usage", {})
@@ -96,8 +124,8 @@ def main(
             pass
 
     def process_agent_stderr(line: str) -> None:
-        """Forward agent stderr to our stderr."""
-        print(line, file=sys.stderr)
+        """Forward agent stderr at warning level."""
+        logger.warning("Agent: %s", line)
 
     try:
         # We use stream-json and verbose for progressive output and token tracking
