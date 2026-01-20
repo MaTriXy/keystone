@@ -43,8 +43,10 @@ Notes:
 * Run parts of test suites in parallel if feasible.
 * Monitor test runs to avoid waiting on stuck tests (e.g., use `timeout`).
 * If tests cannot be fixed by environment changes, disable them via command line args.
-* Emit status updates before and after each major action using this format:
-  BOOTSTRAP_DEVCONTAINER_STATUS: <your status message>
+* Emit status updates before and after each major action as plain text output (not via tool calls).
+  Simply include the status line in your assistant message text, like:
+  BOOTSTRAP_DEVCONTAINER_STATUS: Exploring repository structure to identify file types and test locations.
+  Do NOT use echo or bash commands to emit these - just write them as regular assistant text output.
   Examples:
   - BOOTSTRAP_DEVCONTAINER_STATUS: Exploring repository structure to identify file types and test locations.
   - BOOTSTRAP_DEVCONTAINER_STATUS: Creating initial Dockerfile based on detected Python 3.11 project.
