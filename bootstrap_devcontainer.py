@@ -41,7 +41,8 @@ Notes:
 * Only make changes in the .devcontainer/... subtree.
 * Optimize the Dockerfile in stages for faster rebuilds.
 * Run parts of test suites in parallel if feasible.
-* Monitor test runs to avoid waiting on stuck tests (e.g., use `timeout`).
+* Prefix commands with `time` to see how long they take, and `timeout` to set deadlines.
+  Example: `time timeout 300 pytest tests/` to run tests with a 5-minute limit.
 * If tests cannot be fixed by environment changes, disable them via command line args.
 * Emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:
