@@ -58,7 +58,7 @@ To verify:
 3. Examine /tmp/scratch content.
 
 When finished, emit a final summary as plain text (not via tool calls):
-BOOTSTRAP_DEVCONTAINER_SUMMARY: <summary of what worked, what didn't, and any tips for future runs>
+BOOTSTRAP_DEVCONTAINER_SUMMARY: <One-line summary of what worked, what didn't, and any tips for future runs.>
 Include anything you wish you had been told at the start. Examples:
 - BOOTSTRAP_DEVCONTAINER_SUMMARY: Everything worked. Tip: this project needed uv installed in the container.
 - BOOTSTRAP_DEVCONTAINER_SUMMARY: Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
