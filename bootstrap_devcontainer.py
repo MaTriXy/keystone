@@ -1,5 +1,4 @@
 import json
-import logging
 import shlex
 import subprocess
 import sys
@@ -13,7 +12,6 @@ from process_runner import run_process
 
 app = typer.Typer()
 console = Console()
-logger = logging.getLogger(__name__)
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 
@@ -107,11 +105,11 @@ def main(
                         txt = item.get("text", "").strip()
                         if txt:
                             if not check_and_print_status(txt):
-                                logger.debug("Assistant: %s", txt)
+                                print(f"Assistant: {txt}", file=sys.stderr)
                     elif item.get("type") == "tool_use":
                         name = item.get("name")
                         input_data = item.get("input", {})
-                        logger.debug("Tool Call: %s(%s)", name, input_data)
+                        print(f"Tool Call: {name}({input_data})", file=sys.stderr)
 
             elif msg_type == "result":
                 usage = data.get("usage", {})
@@ -124,8 +122,8 @@ def main(
             pass
 
     def process_agent_stderr(line: str) -> None:
-        """Forward agent stderr at warning level."""
-        logger.warning("Agent: %s", line)
+        """Forward agent stderr to our stderr."""
+        print(f"Agent stderr: {line}", file=sys.stderr)
 
     try:
         # We use stream-json and verbose for progressive output and token tracking
