@@ -100,6 +100,9 @@ def main(
         ..., "--test-artifacts-dir", help="Directory for test artifacts"
     ),
     agent_cmd: str = typer.Option("claude", help="Agent command to run"),
+    max_budget_usd: float = typer.Option(
+        1.0, "--max-budget-usd", help="Maximum dollar amount to spend on agent inference"
+    ),
 ):
     # Check Docker is available before proceeding
     if not check_docker_available():
@@ -185,6 +188,7 @@ def main(
             "stream-json",
             "--verbose",
         ]
+        full_cmd.extend(["--max-budget-usd", str(max_budget_usd)])
 
         result = run_process(
             full_cmd,

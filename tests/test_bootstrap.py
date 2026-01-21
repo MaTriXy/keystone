@@ -179,3 +179,56 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
+
+
+
+@pytest.mark.manual
+def test_max_budget_zero_fails(tmp_path: Path) -> None:
+    """
+    Test that setting --max-budget-usd 0 causes the claude agent to fail
+    immediately since it cannot make any API calls.
+    """
+    # Copy sample project to tmp_path
+    original_project_root = Path(__file__).parent.parent / "samples/python_project"
+    project_root = tmp_path / "project"
+    shutil.copytree(original_project_root, project_root)
+
+    test_artifacts_dir = tmp_path / "test_artifacts"
+
+    logger.info("=" * 60)
+    logger.info("Testing max-budget-usd=0 causes failure")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "python3", "-u",
+        "bootstrap_devcontainer.py",
+        str(project_root),
+        "--test-artifacts-dir", str(test_artifacts_dir),
+        "--max-budget-usd", "0",
+    ]
+
+    logger.info("Running: %s", ' '.join(cmd))
+
+    result = run_process(cmd, log_prefix="[budget-zero]")
+
+    logger.info("Return code: %s", result.returncode)
+
+    # Parse JSON output if present
+    stdout_lines = result.stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+
+    if json_start is not None:
+        json_str = "\n".join(stdout_lines[json_start:])
+        output = json.loads(json_str)
+        assert not output.get("success", True), \
+            "Expected failure with zero budget"
+    else:
+        # If no JSON output, process should have failed
+        assert result.returncode != 0, \
+            "Expected failure with zero budget"
+
