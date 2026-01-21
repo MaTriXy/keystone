@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 
 from process_runner import run_process
+from schema import BootstrapResult, TokenSpending
 
 app = typer.Typer()
 console = Console()
@@ -127,6 +128,7 @@ def main(
 
     token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
     total_cost_usd = 0.0
+    model_name = ""
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
@@ -169,8 +171,9 @@ def main(
                         print(f"Tool Call: {name}({input_data})", file=sys.stderr)
 
             elif msg_type == "result":
-                nonlocal total_cost_usd
+                nonlocal total_cost_usd, model_name
                 total_cost_usd = data.get("total_cost_usd", 0.0)
+                model_name = data.get("model", "")
                 usage = data.get("usage", {})
                 token_spending["input"] = usage.get("input_tokens", 0)
                 token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
@@ -261,15 +264,16 @@ def main(
     except Exception as e:
         print(f"Verification error: {e}", file=sys.stderr)
 
-    output = {
-        "success": verification_success and exit_code == 0,
-        "total_time": total_time,
-        "token_spending": token_spending,
-        "cost_usd": total_cost_usd,
-        "agent_exit_code": exit_code,
-    }
+    output = BootstrapResult(
+        success=verification_success and exit_code == 0,
+        total_time=total_time,
+        model=model_name,
+        token_spending=TokenSpending(**token_spending),
+        cost_usd=total_cost_usd,
+        agent_exit_code=exit_code,
+    )
 
-    print(json.dumps(output, indent=2))
+    print(output.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":

@@ -170,7 +170,18 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     result = run_process(cmd, log_prefix="[e2e]")
 
     assert result.returncode == 0
-    output = json.loads(result.stdout)
+
+    # Parse the JSON output (find the JSON object in stdout)
+    stdout_lines = result.stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+    assert json_start is not None, "Could not find JSON output"
+    json_str = "\n".join(stdout_lines[json_start:])
+    output = json.loads(json_str)
+
     assert "success" in output
     assert "total_time" in output
     assert "token_spending" in output

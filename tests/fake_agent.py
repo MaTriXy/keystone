@@ -90,6 +90,7 @@ def main() -> None:
     parser.add_argument("-p", "--prompt", type=str)
     parser.add_argument("--output-format", type=str)
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--max-budget-usd", type=float, default=1.0)
     args = parser.parse_args()
 
     # Create .devcontainer directory
