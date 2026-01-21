@@ -6,7 +6,6 @@ Usage:
     cd eval
     uv run pytest test_local_worker.py -v
 """
-import os
 from pathlib import Path
 
 import pytest
@@ -24,10 +23,6 @@ def samples_dir() -> Path:
     return path
 
 
-@pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set"
-)
 def test_eval_local_tarball_flow(samples_dir: Path, tmp_path: Path) -> None:
     """Test that eval_local_tarball_flow succeeds on the sample project."""
     # Create tarball

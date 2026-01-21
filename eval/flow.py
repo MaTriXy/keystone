@@ -11,13 +11,16 @@ where execution happens.
 """
 import json
 import os
+import shutil
 import tarfile
 import tempfile
 from pathlib import Path
 from typing import Optional
 
+import boto3
 from prefect import flow, task
 from prefect.futures import wait
+from prefect.task_runners import ProcessPoolTaskRunner
 from prefect.task_runners import ThreadPoolTaskRunner
 
 from config import AgentConfig, EvalConfig, RepoEntry, WorkerResult
@@ -61,7 +64,6 @@ def process_repo_task(
     temp_download_dir = None
     
     if repo_source.startswith("s3://"):
-        import boto3
         temp_download_dir = Path(tempfile.mkdtemp(prefix="s3_download_"))
         tarball_path = temp_download_dir / "input.tar.gz"
         
@@ -83,7 +85,6 @@ def process_repo_task(
     finally:
         # Clean up temp download
         if temp_download_dir and temp_download_dir.exists():
-            import shutil
             shutil.rmtree(temp_download_dir, ignore_errors=True)
 
 
@@ -100,10 +101,9 @@ def get_task_runner(execution_mode: str, max_workers: int):
     if execution_mode == "local":
         return ThreadPoolTaskRunner(max_workers=max_workers)
     elif execution_mode == "process":
-        from prefect.task_runners import ProcessPoolTaskRunner
         return ProcessPoolTaskRunner(max_workers=max_workers)
     elif execution_mode == "dask":
-        from prefect_dask import DaskTaskRunner
+        from prefect_dask import DaskTaskRunner  # Optional dependency
         return DaskTaskRunner()
     elif execution_mode == "modal":
         # Modal integration via Prefect - requires prefect to be configured

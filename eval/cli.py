@@ -1,5 +1,6 @@
 """CLI for the eval harness."""
 import json
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -84,8 +85,6 @@ def test_local(
     
     Creates a tarball from the source directory and runs the eval.
     """
-    import tempfile
-    
     source_dir = source_dir.resolve()
     
     if output_dir is None:
