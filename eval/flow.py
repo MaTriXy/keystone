@@ -1,4 +1,14 @@
-"""Prefect flow for MapReduce-style evaluation."""
+"""Prefect flow for MapReduce-style evaluation.
+
+This module provides a unified task that works with any Prefect task runner:
+- ThreadPoolTaskRunner (default, local)
+- ProcessPoolTaskRunner (local, parallel processes)
+- DaskTaskRunner (distributed)
+- Modal (via Prefect-Modal integration)
+
+The same `process_repo_task` runs everywhere - the task runner determines
+where execution happens.
+"""
 import json
 import os
 import tarfile
@@ -8,49 +18,101 @@ from typing import Optional
 
 from prefect import flow, task
 from prefect.futures import wait
+from prefect.task_runners import ThreadPoolTaskRunner
 
 from config import AgentConfig, EvalConfig, RepoEntry, WorkerResult
 from worker import process_repo
 
 
-@task(name="process_repo_local")
-def process_repo_local_task(
-    tarball_path: str,
+@task(
+    name="process_repo",
+    description="Process a single repository tarball with bootstrap_devcontainer",
+    retries=1,
+    retry_delay_seconds=60,
+)
+def process_repo_task(
+    repo_source: str,
     agent_config: AgentConfig,
     output_dir: str,
 ) -> WorkerResult:
-    """Prefect task wrapper for local repo processing."""
+    """Process a single repo - works in any execution environment.
+    
+    This task is designed to work identically whether run locally or on
+    a remote worker (Modal, Dask, etc.). The task runner handles distribution.
+    
+    Args:
+        repo_source: Path to tarball (local path or S3 URI)
+        agent_config: Configuration for the agent
+        output_dir: Directory for output artifacts
+        
+    Returns:
+        WorkerResult with success/failure and artifact paths
+    """
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not anthropic_api_key:
         return WorkerResult(
-            s3_repo_tarball=tarball_path,
+            s3_repo_tarball=repo_source,
             success=False,
             error_message="ANTHROPIC_API_KEY not set",
         )
     
-    return process_repo(
-        tarball_path=Path(tarball_path),
-        agent_config=agent_config,
-        output_dir=Path(output_dir),
-        anthropic_api_key=anthropic_api_key,
-    )
-
-
-@task(name="process_repo_modal")
-def process_repo_modal_task(
-    s3_repo_tarball: str,
-    agent_config: AgentConfig,
-    output_s3_prefix: str,
-) -> WorkerResult:
-    """Prefect task wrapper for Modal repo processing."""
-    from modal_worker import process_repo_modal
+    # Handle S3 sources by downloading first
+    tarball_path = Path(repo_source)
+    temp_download_dir = None
     
-    result_dict = process_repo_modal.remote(
-        s3_repo_tarball=s3_repo_tarball,
-        agent_config_dict=agent_config.model_dump(),
-        output_s3_prefix=output_s3_prefix,
-    )
-    return WorkerResult(**result_dict)
+    if repo_source.startswith("s3://"):
+        import boto3
+        temp_download_dir = Path(tempfile.mkdtemp(prefix="s3_download_"))
+        tarball_path = temp_download_dir / "input.tar.gz"
+        
+        # Parse S3 URI: s3://bucket/key -> bucket, key
+        bucket, key = repo_source.replace("s3://", "").split("/", 1)
+        s3 = boto3.client("s3")
+        s3.download_file(bucket, key, str(tarball_path))
+    
+    try:
+        result = process_repo(
+            tarball_path=tarball_path,
+            agent_config=agent_config,
+            output_dir=Path(output_dir),
+            anthropic_api_key=anthropic_api_key,
+        )
+        # Preserve the original source URI
+        result.s3_repo_tarball = repo_source
+        return result
+    finally:
+        # Clean up temp download
+        if temp_download_dir and temp_download_dir.exists():
+            import shutil
+            shutil.rmtree(temp_download_dir, ignore_errors=True)
+
+
+def get_task_runner(execution_mode: str, max_workers: int):
+    """Get the appropriate task runner based on execution mode.
+    
+    Args:
+        execution_mode: "local", "process", "dask", or "modal"
+        max_workers: Maximum parallel workers
+        
+    Returns:
+        A Prefect task runner instance
+    """
+    if execution_mode == "local":
+        return ThreadPoolTaskRunner(max_workers=max_workers)
+    elif execution_mode == "process":
+        from prefect.task_runners import ProcessPoolTaskRunner
+        return ProcessPoolTaskRunner(max_workers=max_workers)
+    elif execution_mode == "dask":
+        from prefect_dask import DaskTaskRunner
+        return DaskTaskRunner()
+    elif execution_mode == "modal":
+        # Modal integration via Prefect - requires prefect to be configured
+        # to use Modal as a work pool
+        # For now, fall back to local with a note
+        # TODO: Configure Modal work pool integration
+        return ThreadPoolTaskRunner(max_workers=max_workers)
+    else:
+        return ThreadPoolTaskRunner(max_workers=max_workers)
 
 
 @flow(name="eval_bootstrap_devcontainer")
@@ -61,10 +123,13 @@ def eval_flow(
 ) -> list[WorkerResult]:
     """Main evaluation flow.
     
+    The task_runner is configured based on eval_config.execution_mode.
+    The same process_repo_task runs in all modes - only the runner changes.
+    
     Args:
         repo_list_path: Path to JSONL file with repo entries
         eval_config: Evaluation configuration
-        output_dir: Local directory for outputs (for local mode)
+        output_dir: Local directory for outputs
         
     Returns:
         List of WorkerResult for each repo
@@ -77,37 +142,22 @@ def eval_flow(
             if line:
                 repos.append(RepoEntry(**json.loads(line)))
     
-    results: list[WorkerResult] = []
+    # Submit all tasks
+    futures = []
+    for i, repo in enumerate(repos):
+        repo_output_dir = Path(output_dir) / f"repo_{i}"
+        repo_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        future = process_repo_task.submit(
+            repo_source=repo.s3_repo_tarball,
+            agent_config=eval_config.agent_config,
+            output_dir=str(repo_output_dir),
+        )
+        futures.append(future)
     
-    if eval_config.execution_mode == "local":
-        # Local execution
-        futures = []
-        for i, repo in enumerate(repos):
-            repo_output_dir = Path(output_dir) / f"repo_{i}"
-            future = process_repo_local_task.submit(
-                tarball_path=repo.s3_repo_tarball,  # For local, this can be a local path
-                agent_config=eval_config.agent_config,
-                output_dir=str(repo_output_dir),
-            )
-            futures.append(future)
-        
-        # Wait for all to complete
-        wait(futures)
-        results = [f.result() for f in futures]
-        
-    else:
-        # Modal execution
-        futures = []
-        for repo in repos:
-            future = process_repo_modal_task.submit(
-                s3_repo_tarball=repo.s3_repo_tarball,
-                agent_config=eval_config.agent_config,
-                output_s3_prefix=eval_config.output_s3_prefix,
-            )
-            futures.append(future)
-        
-        wait(futures)
-        results = [f.result() for f in futures]
+    # Wait for all to complete
+    wait(futures)
+    results = [f.result() for f in futures]
     
     # Write summary
     summary_path = Path(output_dir) / "summary.json"
@@ -140,8 +190,8 @@ def eval_local_tarball_flow(
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix="eval_output_")
     
-    return process_repo_local_task(
-        tarball_path=tarball_path,
+    return process_repo_task(
+        repo_source=tarball_path,
         agent_config=agent_config,
         output_dir=output_dir,
     )

@@ -2,9 +2,8 @@
 name = "eval"
 version = "0.1.0"
 description = "Eval harness for bootstrap_devcontainer"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "bootstrap-devcontainer",  # The main package (install from git or local)
     "pydantic>=2.0",
     "prefect>=3.0",
     "typer>=0.9",
@@ -13,8 +12,12 @@ dependencies = [
     "boto3>=1.28",
 ]
 
+# Note: bootstrap-devcontainer is expected to be installed separately
+# either from git: pip install 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod'
+# or locally: pip install -e ..  (when developing)
+
 [project.optional-dependencies]
-modal = ["modal>=0.60"]
+dask = ["prefect-dask>=0.3"]
 
 [project.scripts]
 eval-harness = "eval.cli:app"

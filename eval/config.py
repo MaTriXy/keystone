@@ -57,10 +57,13 @@ class EvalConfig(BaseModel):
     
     agent_config: AgentConfig = Field(default_factory=AgentConfig)
     
-    # Execution mode
-    execution_mode: Literal["local", "modal"] = Field(
+    # Execution mode - determines which Prefect task runner to use
+    # "local" = ThreadPoolTaskRunner (default)
+    # "process" = ProcessPoolTaskRunner (parallel processes)
+    # "dask" = DaskTaskRunner (distributed, requires prefect-dask)
+    execution_mode: Literal["local", "process", "dask"] = Field(
         default="local",
-        description="Where to run workers"
+        description="Task runner mode: local (threads), process (parallel), dask (distributed)"
     )
     
     # Output settings  

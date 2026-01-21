@@ -2,14 +2,17 @@
 
 MapReduce-style evaluation harness that runs `bootstrap_devcontainer` on many code repositories.
 
+Uses Prefect for flow orchestration with pluggable task runners - the same task code
+runs identically whether executing locally or distributed.
+
 ## Installation
 
 ```bash
 cd eval
 uv pip install -e .
 
-# For Modal support:
-uv pip install -e ".[modal]"
+# For distributed execution with Dask:
+uv pip install -e ".[dask]"
 ```
 
 ## Usage
@@ -18,27 +21,23 @@ uv pip install -e ".[modal]"
 
 ```bash
 # Test with samples/python_project
-uv run python -m eval.cli test-local ../samples/python_project --output-dir ./test_output
+uv run python -m cli test-local ../samples/python_project --output-dir ./test_output
 
 # With custom budget
-uv run python -m eval.cli test-local ../samples/python_project --max-budget-usd 2.0
+uv run python -m cli test-local ../samples/python_project --max-budget-usd 2.0
 ```
 
-### Run on a list of repos (local execution)
+### Run on a list of repos
 
 ```bash
-uv run python -m eval.cli run examples/agent_config.json5 examples/repo_list.jsonl --mode local
-```
+# Local execution (ThreadPoolTaskRunner - default)
+uv run python -m cli run examples/agent_config.json5 examples/repo_list.jsonl --mode local
 
-### Run on a list of repos (Modal execution)
+# Parallel processes (ProcessPoolTaskRunner)
+uv run python -m cli run examples/agent_config.json5 examples/repo_list.jsonl --mode process
 
-```bash
-# First, set up Modal secrets:
-modal secret create anthropic-api-key ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
-modal secret create aws-credentials AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-
-# Then run:
-uv run python -m eval.cli run examples/agent_config.json5 examples/repo_list.jsonl --mode modal
+# Distributed with Dask (requires prefect-dask)
+uv run python -m cli run examples/agent_config.json5 examples/repo_list.jsonl --mode dask
 ```
 
 ## Configuration
@@ -93,8 +92,11 @@ A `summary.json` file is written with results for all repos.
 
 The harness uses:
 - **Prefect** for flow orchestration and task management
-- **Modal** (optional) for distributed worker execution
-- Workers run in isolated environments with:
+- **Pluggable task runners** - same code runs locally or distributed:
+  - `ThreadPoolTaskRunner` (default) - concurrent threads
+  - `ProcessPoolTaskRunner` - parallel processes
+  - `DaskTaskRunner` - distributed across cluster
+- Workers need:
   - Docker (for devcontainer builds)
   - Node.js + Claude Code CLI
   - devcontainer CLI
