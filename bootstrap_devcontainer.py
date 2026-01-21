@@ -88,16 +88,16 @@ Please don't forget to emit the summary at the end.
 
 To verify, use something like this (adding arguments as appropriate for permissions, etc.)
 1. Build with `devcontainer build --workspace-folder .`
-2. Run `docker run -v /tmp/scratch:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
-3. Examine /tmp/scratch content.
+2. Run `docker run -v /tmp/test_artifacts:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
+3. Examine /tmp/test_artifacts content.
 """
 
 
 @app.command()
 def main(
     project_root: Path = typer.Argument(..., help="Path to the source project"),
-    scratch_dir: Path = typer.Option(
-        ..., "--scratch-dir", help="Directory for test artifacts"
+    test_artifacts_dir: Path = typer.Option(
+        ..., "--test-artifacts-dir", help="Directory for test artifacts"
     ),
     agent_cmd: str = typer.Option("claude", help="Agent command to run"),
 ):
@@ -110,8 +110,8 @@ def main(
         raise typer.Exit(code=1)
 
     project_root = project_root.resolve()
-    scratch_dir = scratch_dir.resolve()
-    scratch_dir.mkdir(parents=True, exist_ok=True)
+    test_artifacts_dir = test_artifacts_dir.resolve()
+    test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     prompt = AGENT_PROMPT_TEMPLATE
 
@@ -225,7 +225,7 @@ def main(
                 "run",
                 "--rm",
                 "-v",
-                f"{scratch_dir}:/test_artifacts",
+                f"{test_artifacts_dir}:/test_artifacts",
                 image_name,
                 "./.devcontainer/run_all_tests.sh",
                 "--test_artifact_dir",

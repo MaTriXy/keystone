@@ -33,20 +33,20 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
-    scratch_dir = tmp_path / "scratch"
+    test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
 
     logger.info("=" * 60)
     logger.info("E2E Test with Fake Agent Starting")
     logger.info("Project root: %s", project_root)
-    logger.info("Scratch dir: %s", scratch_dir)
+    logger.info("Test artifacts dir: %s", test_artifacts_dir)
     logger.info("=" * 60)
 
     cmd = [
         "python3", "-u",
         "bootstrap_devcontainer.py",
         str(project_root),
-        "--scratch-dir", str(scratch_dir),
+        "--test-artifacts-dir", str(test_artifacts_dir),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
     ]
 
@@ -79,8 +79,8 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
-    assert (scratch_dir / "pytest-json-report.json").exists()
-    assert (scratch_dir / "final_result.json").exists()
+    assert (test_artifacts_dir / "pytest-json-report.json").exists()
+    assert (test_artifacts_dir / "final_result.json").exists()
 
 
 def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
@@ -94,20 +94,20 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
-    scratch_dir = tmp_path / "scratch"
+    test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
 
     logger.info("=" * 60)
     logger.info("E2E Test: Fake Agent on Rust Project (Expected Failure)")
     logger.info("Project root: %s", project_root)
-    logger.info("Scratch dir: %s", scratch_dir)
+    logger.info("Test artifacts dir: %s", test_artifacts_dir)
     logger.info("=" * 60)
 
     cmd = [
         "python3", "-u",
         "bootstrap_devcontainer.py",
         str(project_root),
-        "--scratch-dir", str(scratch_dir),
+        "--test-artifacts-dir", str(test_artifacts_dir),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
     ]
 
@@ -148,12 +148,12 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
-    scratch_dir = tmp_path / "scratch"
+    test_artifacts_dir = tmp_path / "test_artifacts"
 
     logger.info("=" * 60)
     logger.info("E2E Test Starting")
     logger.info("Project root: %s", project_root)
-    logger.info("Scratch dir: %s", scratch_dir)
+    logger.info("Test artifacts dir: %s", test_artifacts_dir)
     logger.info("=" * 60)
 
     # Use -u for unbuffered Python output
@@ -161,8 +161,8 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
         "python3", "-u",
         "bootstrap_devcontainer.py",
         str(project_root),
-        "--scratch-dir",
-        str(scratch_dir),
+        "--test-artifacts-dir",
+        str(test_artifacts_dir),
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
