@@ -16,6 +16,14 @@ uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirec
   --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./samples/python_project
+
+# Run local code tree on a project.
+uv run bootstrap-devcontainer \
+  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
+  --test_artifacts_dir /tmp/test_artifacts \
+  --project_root ~/nix_pytest_docker_build.small/tmp/nix-build-python3.11-geopy-2.4.0.drv-0/
+
+
 ```
 
 ### Options
