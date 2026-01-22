@@ -6,4 +6,11 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-# Pyright: run manually with `uv run pyright` (not in pre-commit due to existing type issues)
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: ./scripts/typecheck
+        language: system
+        types: [python]
+        pass_filenames: false
