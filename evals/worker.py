@@ -7,7 +7,7 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from bootstrap_devcontainer.process_runner import run_process
 from config import AgentConfig, WorkerResult
@@ -97,6 +97,7 @@ def process_repo(
     agent_config: AgentConfig,
     output_dir: Path,
     anthropic_api_key: str,
+    log_callback: Callable[[str], None] | None = None,
 ) -> WorkerResult:
     """Process a single repo tarball.
     
@@ -196,9 +197,11 @@ def process_repo(
         # TODO: Add timeout support via ["timeout", str(timeout_secs)] + cmd prefix if needed
         result = run_process(
             cmd,
-            log_prefix="bootstrap",
+            log_prefix="" if log_callback else "bootstrap",
             env=env,
             cwd=str(actual_project_dir),
+            stdout_callback=log_callback,
+            stderr_callback=log_callback,
         )
         
         # Read result from output file
