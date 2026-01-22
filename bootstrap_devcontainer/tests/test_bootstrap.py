@@ -223,7 +223,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     output = json.loads(json_str)
 
     assert "success" in output
-    assert "total_time" in output
+    assert "agent_work_time" in output
     assert "token_spending" in output
 
     # Check if .devcontainer was created
