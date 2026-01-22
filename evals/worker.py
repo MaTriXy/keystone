@@ -133,7 +133,7 @@ def process_repo(
             "uvx",
             "--from", git_spec,
             "bootstrap-devcontainer",
-            str(actual_project_dir),
+            "--project_root", str(actual_project_dir),
             "--test_artifacts_dir", str(test_artifacts_dir),
             "--max_budget_usd", str(agent_config.max_budget_usd),
             "--output_file", str(result_file),
