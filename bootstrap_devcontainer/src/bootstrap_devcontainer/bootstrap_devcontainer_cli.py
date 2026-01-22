@@ -20,7 +20,11 @@ from bootstrap_devcontainer.agent_cache import (
     extract_devcontainer_tarball,
 )
 from bootstrap_devcontainer.process_runner import run_process
-from bootstrap_devcontainer.schema import BootstrapResult, TokenSpending
+from bootstrap_devcontainer.schema import (
+    BootstrapResult,
+    PythonTestSummary,
+    TokenSpending,
+)
 
 # Configure logging with detailed format
 logging.basicConfig(
@@ -92,6 +96,7 @@ Notes:
     docker:cli ps
   ```
 * If tests cannot be fixed by environment changes, disable them via command line args.
+* You can set file permissions directly in COPY commands: `COPY --chmod=0755 script.sh /usr/local/bin/script.sh`
 * Disable code coverage collection in run_all_tests.sh (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
 * Emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:
@@ -301,11 +306,13 @@ def bootstrap(
             cache.set(cache_key, cache_value)
             cache.close()
 
-    total_time = time.time() - start_time
+    agent_work_time = time.time() - start_time
 
     # Verification step
     print("Verifying agent's work...", file=sys.stderr)
     verification_success = False
+    verification_start_time = time.time()
+    python_test_summary: PythonTestSummary | None = None
     try:
         image_name = f"bootstrap-test-{project_root.name.lower()}"
 
@@ -353,13 +360,35 @@ def bootstrap(
     except Exception as e:
         print(f"Verification error: {e}", file=sys.stderr)
 
+    verification_wall_time = time.time() - verification_start_time
+
+    # Parse pytest JSON report if it exists
+    pytest_report_path = test_artifacts_dir / "pytest-json-report.json"
+    if pytest_report_path.exists():
+        try:
+            report_data = json.loads(pytest_report_path.read_text())
+            tests = report_data.get("tests", [])
+            passed_tests = [t["nodeid"] for t in tests if t.get("outcome") == "passed"]
+            failed_count = sum(1 for t in tests if t.get("outcome") == "failed")
+            skipped_count = sum(1 for t in tests if t.get("outcome") == "skipped")
+            python_test_summary = PythonTestSummary(
+                passed_count=len(passed_tests),
+                failed_count=failed_count,
+                skipped_count=skipped_count,
+                passed_tests=passed_tests,
+            )
+        except Exception as e:
+            print(f"Error parsing pytest report: {e}", file=sys.stderr)
+
     output = BootstrapResult(
         success=verification_success and exit_code == 0,
-        total_time=total_time,
+        agent_work_time=agent_work_time,
+        verification_wall_time=verification_wall_time,
         model=model_name,
         token_spending=TokenSpending(**token_spending),
         cost_usd=total_cost_usd,
         agent_exit_code=exit_code,
+        python_test_summary=python_test_summary,
     )
 
     if output_file:
