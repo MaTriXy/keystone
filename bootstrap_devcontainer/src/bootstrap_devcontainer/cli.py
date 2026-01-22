@@ -20,7 +20,7 @@ from bootstrap_devcontainer.agent_cache import (
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import BootstrapResult, TokenSpending
 
-DEFAULT_CACHE_PATH = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
+from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 
 app = typer.Typer()
 console = Console()

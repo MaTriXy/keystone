@@ -175,7 +175,8 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     shutil.copytree(original_project_root, project_root)
 
     test_artifacts_dir = tmp_path / "test_artifacts"
-    cache_file = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
+    from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
+    cache_file = DEFAULT_CACHE_PATH
 
     logger.info("=" * 60)
     logger.info("E2E Test Starting")

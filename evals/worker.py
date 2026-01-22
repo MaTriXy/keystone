@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
+from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 from bootstrap_devcontainer.process_runner import run_process
 from config import AgentConfig, WorkerResult
 
@@ -181,15 +182,10 @@ def process_repo(
             env["HOME"] = str(fake_home)
             env["ANTHROPIC_API_KEY"] = anthropic_api_key
             
-            if agent_config.use_cache:
-                cache_file = fake_home / ".cache" / "bootstrap_devcontainer.sqlite"
-                cache_file.parent.mkdir(parents=True, exist_ok=True)
-                cmd.extend(["--sqlite_cache_file", str(cache_file)])
-        elif agent_config.use_cache:
-            # Use real home cache location
-            cache_file = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
-            cache_file.parent.mkdir(parents=True, exist_ok=True)
-            cmd.extend(["--sqlite_cache_file", str(cache_file)])
+        if agent_config.use_cache:
+            # Always use shared cache location regardless of fake home
+            DEFAULT_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--sqlite_cache_file", str(DEFAULT_CACHE_PATH)])
         
         timeout_secs = agent_config.timeout_minutes * 60
         
