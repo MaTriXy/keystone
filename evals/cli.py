@@ -11,22 +11,28 @@ from rich.console import Console
 from config import AgentConfig, EvalConfig
 from flow import create_tarball_from_dir, eval_flow, eval_local_tarball_flow
 
-app = typer.Typer(help="Eval harness for bootstrap_devcontainer")
+app = typer.Typer(
+    help="Eval harness for bootstrap_devcontainer",
+)
 console = Console()
 
 
 @app.command()
 def run(
-    agent_config_path: Path = typer.Argument(..., help="Path to agent_config.json5"),
-    repo_list_path: Path = typer.Argument(..., help="Path to repo_list.jsonl"),
-    output_dir: Path = typer.Option(
+    agent_config_path: Optional[Path] = typer.Option(
+        ..., "--agent_config_path", help="Path to agent_config.json5"
+    ),
+    repo_list_path: Optional[Path] = typer.Option(
+        ..., "--repo_list_path", help="Path to repo_list.jsonl"
+    ),
+    output_dir: Optional[Path] = typer.Option(
         Path("./eval_output"),
-        "--output-dir", "-o",
+        "--output_dir",
         help="Output directory for results"
     ),
-    execution_mode: str = typer.Option(
+    execution_mode: Optional[str] = typer.Option(
         "local",
-        "--mode", "-m",
+        "--execution_mode",
         help="Execution mode: 'local' or 'modal'"
     ),
 ):
@@ -64,20 +70,22 @@ def run(
 
 @app.command()
 def test_local(
-    source_dir: Path = typer.Argument(..., help="Path to source directory to test"),
+    source_dir: Optional[Path] = typer.Option(
+        ..., "--source_dir", help="Path to source directory to test"
+    ),
     output_dir: Optional[Path] = typer.Option(
         None,
-        "--output-dir", "-o",
+        "--output_dir",
         help="Output directory for results"
     ),
-    max_budget_usd: float = typer.Option(
+    max_budget_usd: Optional[float] = typer.Option(
         1.0,
-        "--max-budget-usd",
+        "--max_budget_usd",
         help="Maximum budget in USD"
     ),
-    use_cache: bool = typer.Option(
+    use_cache: Optional[bool] = typer.Option(
         True,
-        "--use-cache/--no-cache",
+        "--use_cache/--no_cache",
         help="Whether to use result caching"
     ),
 ):

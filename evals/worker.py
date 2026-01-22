@@ -134,9 +134,9 @@ def process_repo(
             "--from", git_spec,
             "bootstrap-devcontainer",
             str(actual_project_dir),
-            "--test-artifacts-dir", str(test_artifacts_dir),
-            "--max-budget-usd", str(agent_config.max_budget_usd),
-            "--output-file", str(result_file),
+            "--test_artifacts_dir", str(test_artifacts_dir),
+            "--max_budget_usd", str(agent_config.max_budget_usd),
+            "--output_file", str(result_file),
         ]
         
         # Set up environment
@@ -169,12 +169,12 @@ def process_repo(
             if agent_config.use_cache:
                 cache_file = fake_home / ".cache" / "bootstrap_devcontainer.sqlite"
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
-                cmd.extend(["--sqlite-cache-file", str(cache_file)])
+                cmd.extend(["--sqlite_cache_file", str(cache_file)])
         elif agent_config.use_cache:
             # Use real home cache location
             cache_file = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
             cache_file.parent.mkdir(parents=True, exist_ok=True)
-            cmd.extend(["--sqlite-cache-file", str(cache_file)])
+            cmd.extend(["--sqlite_cache_file", str(cache_file)])
         
         timeout_secs = agent_config.timeout_minutes * 60
         

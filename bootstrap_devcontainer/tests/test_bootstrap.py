@@ -19,7 +19,8 @@ def test_cli_help() -> None:
         text=True,
     )
     assert result.returncode == 0
-    assert "[OPTIONS] PROJECT_ROOT" in result.stdout
+    assert "[OPTIONS]" in result.stdout
+    assert "--project_root" in result.stdout
 
 
 def test_e2e_with_fake_agent(tmp_path: Path) -> None:
@@ -46,9 +47,9 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     cmd = [
         "bootstrap-devcontainer",
         str(project_root),
-        "--test-artifacts-dir", str(test_artifacts_dir),
-        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite-cache-file", str(cache_file),
+        "--test_artifacts_dir", str(test_artifacts_dir),
+        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite_cache_file", str(cache_file),
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
@@ -96,9 +97,9 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     cmd2 = [
         "bootstrap-devcontainer",
         str(project_root2),
-        "--test-artifacts-dir", str(test_artifacts_dir2),
-        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite-cache-file", str(cache_file),
+        "--test_artifacts_dir", str(test_artifacts_dir2),
+        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite_cache_file", str(cache_file),
     ]
 
     result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
@@ -132,8 +133,8 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
     cmd = [
         "bootstrap-devcontainer",
         str(project_root),
-        "--test-artifacts-dir", str(test_artifacts_dir),
-        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--test_artifacts_dir", str(test_artifacts_dir),
+        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
@@ -186,9 +187,9 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     cmd = [
         "bootstrap-devcontainer",
         str(project_root),
-        "--test-artifacts-dir",
+        "--test_artifacts_dir",
         str(test_artifacts_dir),
-        "--sqlite-cache-file",
+        "--sqlite_cache_file",
         str(cache_file),
     ]
 
@@ -223,7 +224,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
 @pytest.mark.manual
 def test_max_budget_zero_fails(tmp_path: Path) -> None:
     """
-    Test that setting --max-budget-usd 0 causes the claude agent to fail
+    Test that setting --max_budget_usd 0 causes the claude agent to fail
     immediately since it cannot make any API calls.
     """
     # Copy sample project to tmp_path
@@ -241,8 +242,8 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
     cmd = [
         "bootstrap-devcontainer",
         str(project_root),
-        "--test-artifacts-dir", str(test_artifacts_dir),
-        "--max-budget-usd", "0",
+        "--test_artifacts_dir", str(test_artifacts_dir),
+        "--max_budget_usd", "0",
     ]
 
     logger.info("Running: %s", ' '.join(cmd))

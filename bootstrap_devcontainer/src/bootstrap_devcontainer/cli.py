@@ -110,19 +110,23 @@ To verify, use something like this (adding arguments as appropriate for permissi
 
 @app.command()
 def main(
-    project_root: Path = typer.Argument(..., help="Path to the source project"),
-    test_artifacts_dir: Path = typer.Option(
-        ..., "--test-artifacts-dir", help="Directory for test artifacts"
+    project_root: Optional[Path] = typer.Option(
+        ..., "--project_root", help="Path to the source project"
     ),
-    agent_cmd: str = typer.Option("claude", help="Agent command to run"),
-    max_budget_usd: float = typer.Option(
-        1.0, "--max-budget-usd", help="Maximum dollar amount to spend on agent inference"
+    test_artifacts_dir: Optional[Path] = typer.Option(
+        ..., "--test_artifacts_dir", help="Directory for test artifacts"
+    ),
+    agent_cmd: Optional[str] = typer.Option(
+        "claude", "--agent_cmd", help="Agent command to run"
+    ),
+    max_budget_usd: Optional[float] = typer.Option(
+        1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
     sqlite_cache_file: Optional[Path] = typer.Option(
-        None, "--sqlite-cache-file", help="SQLite cache file path (enables caching)"
+        None, "--sqlite_cache_file", help="SQLite cache file path (enables caching)"
     ),
     output_file: Optional[Path] = typer.Option(
-        None, "--output-file", help="Path to write JSON result (defaults to stdout)"
+        None, "--output_file", help="Path to write JSON result (defaults to stdout)"
     ),
 ):
     # Check Docker is available before proceeding
