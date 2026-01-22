@@ -31,7 +31,11 @@ uv run python -m evals.cli test_local --source_dir samples/python_project --max_
 
 ```bash
 # Local execution (ThreadPoolTaskRunner - default)
-uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode local
+uv run python -m evals.cli run \
+    --agent_config_path evals/examples/agent_config.json5 \
+    --repo_list_path evals/examples/repo_list.jsonl \
+    --execution_mode local \
+    --output_dir ~/bootstrap_devcontainer_eval_output
 
 # Parallel processes (ProcessPoolTaskRunner)
 uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode process
