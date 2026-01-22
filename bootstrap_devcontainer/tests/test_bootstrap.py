@@ -50,7 +50,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         "--project_root", str(project_root),
         "--test_artifacts_dir", str(test_artifacts_dir),
         "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite_cache_file", str(cache_file),
+        "--sqlite_cache_dir", str(cache_file),
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
@@ -100,7 +100,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         "--project_root", str(project_root2),
         "--test_artifacts_dir", str(test_artifacts_dir2),
         "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite_cache_file", str(cache_file),
+        "--sqlite_cache_dir", str(cache_file),
     ]
 
     result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
@@ -190,7 +190,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
         "--project_root", str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
-        "--sqlite_cache_file",
+        "--sqlite_cache_dir",
         str(cache_file),
     ]
 

@@ -185,7 +185,7 @@ def process_repo(
         if agent_config.use_cache:
             # Always use shared cache location regardless of fake home
             DEFAULT_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            cmd.extend(["--sqlite_cache_file", str(DEFAULT_CACHE_PATH)])
+            cmd.extend(["--sqlite_cache_dir", str(DEFAULT_CACHE_PATH)])
         
         timeout_secs = agent_config.timeout_minutes * 60
         
