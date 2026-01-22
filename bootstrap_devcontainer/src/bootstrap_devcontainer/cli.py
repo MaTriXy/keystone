@@ -122,8 +122,8 @@ def main(
     max_budget_usd: Optional[float] = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
-    sqlite_cache_file: Optional[Path] = typer.Option(
-        None, "--sqlite_cache_file", help="SQLite cache file path (enables caching)"
+    sqlite_cache_dir: Optional[Path] = typer.Option(
+        None, "--sqlite_cache_dir", help="SQLite cache file path (enables caching)"
     ),
     output_file: Optional[Path] = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
@@ -148,8 +148,8 @@ def main(
     # Set up cache if requested
     cache: Optional[AgentCache] = None
     cache_key: Optional[str] = None
-    if sqlite_cache_file is not None:
-        cache = AgentCache(sqlite_cache_file)
+    if sqlite_cache_dir is not None:
+        cache = AgentCache(sqlite_cache_dir)
         cache_key = compute_cache_key(prompt, project_root)
 
     token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
@@ -232,7 +232,7 @@ def main(
     else:
         # Cache miss - run agent
         if cache is not None:
-            print(f"CACHE MISS: Running agent (cache: {sqlite_cache_file})", file=sys.stderr)
+            print(f"CACHE MISS: Running agent (cache: {sqlite_cache_dir})", file=sys.stderr)
         else:
             print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 
