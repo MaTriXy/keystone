@@ -95,9 +95,9 @@ def test_eval_flow(repo_list_path: Path, tmp_path: Path, git_ref: str) -> None:
     # Configure with caching enabled, using current git commit
     agent_config = AgentConfig(
         max_budget_usd=1.0,
-        use_cache=True,
         timeout_minutes=30,
         bootstrap_git_ref=git_ref,
+        # Uses default sqlite_cache_dir="~/.cache/bootstrap_devcontainer"
     )
     
     eval_config = EvalConfig(

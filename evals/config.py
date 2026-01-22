@@ -1,4 +1,5 @@
 """Configuration schemas for the eval harness."""
+from pathlib import Path
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -25,7 +26,10 @@ class AgentConfig(BaseModel):
     timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
     
     # Cache settings
-    use_cache: bool = Field(default=True, description="Whether to use result caching")
+    sqlite_cache_dir: Optional[str] = Field(
+        default="~/.cache/bootstrap_devcontainer",
+        description="SQLite cache directory (None to disable caching)"
+    )
 
 
 class RepoEntry(BaseModel):
