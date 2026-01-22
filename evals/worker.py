@@ -126,23 +126,6 @@ def process_repo(
         test_artifacts_dir = work_dir / "test_artifacts"
         test_artifacts_dir.mkdir()
         
-        # Build the command using uvx with git spec
-        # Embed token in URL for private repo access
-        git_url = agent_config.bootstrap_git_url
-        if gh_token and "github.com" in git_url:
-            git_url = git_url.replace("https://github.com", f"https://x-access-token:{gh_token}@github.com")
-        git_spec = f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
-        result_file = work_dir / "bootstrap_result.json"
-        cmd = [
-            "uvx",
-            "--from", git_spec,
-            "bootstrap-devcontainer",
-            "--project_root", str(actual_project_dir),
-            "--test_artifacts_dir", str(test_artifacts_dir),
-            "--max_budget_usd", str(agent_config.max_budget_usd),
-            "--output_file", str(result_file),
-        ]
-        
         # Set up environment
         env = os.environ.copy()
         
@@ -160,6 +143,23 @@ def process_repo(
                     gh_token = gh_result.stdout.strip()
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass  # gh CLI not available
+        
+        # Build the command using uvx with git spec
+        # Embed token in URL for private repo access
+        git_url = agent_config.bootstrap_git_url
+        if gh_token and "github.com" in git_url:
+            git_url = git_url.replace("https://github.com", f"https://x-access-token:{gh_token}@github.com")
+        git_spec = f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
+        result_file = work_dir / "bootstrap_result.json"
+        cmd = [
+            "uvx",
+            "--from", git_spec,
+            "bootstrap-devcontainer",
+            "--project_root", str(actual_project_dir),
+            "--test_artifacts_dir", str(test_artifacts_dir),
+            "--max_budget_usd", str(agent_config.max_budget_usd),
+            "--output_file", str(result_file),
+        ]
         
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth
