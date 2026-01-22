@@ -1,6 +1,7 @@
 """Worker logic for processing a single repo."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -189,8 +190,6 @@ def process_repo(
         bootstrap_result = None
         # Look for JSON object in stdout first, then stderr
         for output in [result.stdout, result.stderr]:
-            # Find last occurrence of a JSON object
-            import re
             # Match a JSON object that starts with { and ends with }
             matches = list(re.finditer(r'\{[^{}]*"success"[^{}]*\}', output, re.DOTALL))
             if matches:
@@ -213,13 +212,6 @@ def process_repo(
                         pass
         
         success = result.returncode == 0
-        
-        # Debug: log if we couldn't parse result
-        if bootstrap_result is None and result.returncode == 0:
-            import sys
-            print(f"DEBUG: Could not parse bootstrap_result from output", file=sys.stderr)
-            print(f"DEBUG: stdout (last 1000)={result.stdout[-1000:]!r}", file=sys.stderr)
-            print(f"DEBUG: stderr (last 1000)={result.stderr[-1000:]!r}", file=sys.stderr)
         
         # Collect output artifacts
         output_dir.mkdir(parents=True, exist_ok=True)
