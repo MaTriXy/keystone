@@ -1,6 +1,7 @@
 """CLI for the eval harness."""
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -13,6 +14,13 @@ from rich.console import Console
 
 from config import AgentConfig, EvalConfig
 from flow import create_tarball_from_dir, eval_flow, process_repo_task
+
+# Configure logging with detailed format
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def ensure_github_token() -> None:

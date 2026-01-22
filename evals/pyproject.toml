@@ -21,7 +21,7 @@ bootstrap-devcontainer = { workspace = true }
 dask = ["prefect-dask>=0.3"]
 
 [project.scripts]
-eval-harness = "eval.cli:app"
+eval-harness = "eval_cli:app"
 
 [build-system]
 requires = ["hatchling"]

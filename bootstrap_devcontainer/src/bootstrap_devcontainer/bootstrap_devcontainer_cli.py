@@ -1,4 +1,5 @@
 import json
+import logging
 import shlex
 import subprocess
 import sys
@@ -8,6 +9,13 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+
+# Configure logging with detailed format
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 from bootstrap_devcontainer.agent_cache import (
     AgentCache,
