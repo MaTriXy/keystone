@@ -193,7 +193,8 @@ def process_repo(
                 tar.add(devcontainer_dir, arcname=".devcontainer")
         
         # Find and copy session file
-        session_file = find_session_file(actual_project_dir, fake_home)
+        home_dir = fake_home if anthropic_api_key else Path.home()
+        session_file = find_session_file(actual_project_dir, home_dir)
         session_output = None
         if session_file:
             session_output = output_dir / "session.jsonl"
