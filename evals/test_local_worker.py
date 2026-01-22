@@ -117,3 +117,14 @@ def test_eval_local_tarball_flow(samples_dir: Path, tmp_path: Path, git_ref: str
     # Verify output files exist
     result_dir = tmp_path / "result"
     assert result_dir.exists(), "Result directory not created"
+    
+    # Check bootstrap_result contents
+    assert result.bootstrap_result is not None, "bootstrap_result should be populated"
+    br = result.bootstrap_result
+    assert br.get("success") is True, f"bootstrap_result.success should be True: {br}"
+    assert "total_time" in br, "bootstrap_result should have total_time"
+    assert "cost_usd" in br, "bootstrap_result should have cost_usd"
+    assert "token_spending" in br, "bootstrap_result should have token_spending"
+    
+    # Verify devcontainer tarball was created
+    assert result.devcontainer_tarball_s3 is not None, "devcontainer tarball should exist"
