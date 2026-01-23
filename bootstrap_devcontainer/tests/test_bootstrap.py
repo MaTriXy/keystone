@@ -189,9 +189,19 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 
 
 @pytest.mark.manual
-def test_e2e_sample_project(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "sample_name",
+    [
+        "python_project",
+        "node_project",
+        "go_project",
+        "rust_project",
+        "fullstack_project",
+    ],
+)
+def test_e2e_sample_project(tmp_path: Path, sample_name: str) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
-    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
+    original_project_root = Path(__file__).parent.parent.parent / f"samples/{sample_name}"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
