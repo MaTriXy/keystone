@@ -14,8 +14,7 @@ import modal
 
 TEST_DOCKERFILE = """\
 FROM alpine:latest
-COPY hello.sh /hello.sh
-RUN chmod +x /hello.sh
+COPY --chmod=755 hello.sh /hello.sh
 CMD ["/hello.sh"]
 """
 
@@ -23,6 +22,41 @@ HELLO_SCRIPT = """\
 #!/bin/sh
 echo "Hello World from Docker!"
 echo "Build succeeded at $(date)"
+"""
+
+START_DOCKERD_SCRIPT = """\
+#!/bin/bash
+set -xe -o pipefail
+
+# Find default network device and IP
+dev=$(ip route show default | awk '/default/ {print $5}')
+if [ -z "$dev" ]; then
+    echo "Error: No default device found."
+    ip route show
+    exit 1
+else
+    echo "Default device: $dev"
+fi
+addr=$(ip addr show dev "$dev" | grep -w inet | awk '{print $2}' | cut -d/ -f1)
+if [ -z "$addr" ]; then
+    echo "Error: No IP address found for device $dev."
+    ip addr show dev "$dev"
+    exit 1
+else
+    echo "IP address for $dev: $addr"
+fi
+
+# Set up IP forwarding and NAT for container networking
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p tcp
+iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p udp
+
+# gVisor doesn't support nftables yet (https://github.com/google/gvisor/issues/10510)
+# Explicitly use iptables-legacy
+update-alternatives --set iptables /usr/sbin/iptables-legacy
+update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+
+exec /usr/bin/dockerd --iptables=false --ip6tables=false -D
 """
 
 # Image with Docker installed
@@ -35,6 +69,9 @@ image = (
         "lsb-release",
         "git",
         "vim",
+        "iptables",
+        "iproute2",
+        "wget",
     )
     # Install Docker
     .run_commands(
@@ -48,6 +85,19 @@ image = (
         "docker-ce-cli",
         "containerd.io",
         "docker-buildx-plugin",
+        "docker-compose-plugin",
+    )
+    # Fix runc for Modal/gVisor compatibility
+    .run_commands(
+        "rm -f $(which runc) || true",
+        "wget https://github.com/opencontainers/runc/releases/download/v1.3.0/runc.amd64",
+        "chmod +x runc.amd64",
+        "mv runc.amd64 /usr/local/bin/runc",
+    )
+    # Add start-dockerd script
+    .run_commands(
+        f"cat > /start-dockerd.sh << 'SCRIPT'\n{START_DOCKERD_SCRIPT}SCRIPT",
+        "chmod +x /start-dockerd.sh",
     )
 )
 
@@ -96,12 +146,11 @@ def main():
     print(f"\nSandbox tunnels: {tunnel}")
 
     print("\n" + "=" * 60)
-    print("Sandbox is running! You can interact via Modal CLI:")
-    print(f"  modal sandbox exec {sb.object_id} bash")
-    print("\nOr run commands directly:")
-    print(f"  modal sandbox exec {sb.object_id} docker build .")
-    print("\nTo terminate:")
-    print(f"  modal sandbox terminate {sb.object_id}")
+    print("Sandbox is running!")
+    print("\nIn another terminal, run:")
+    print(f"  modal shell {sb.object_id}")
+    print("\nThen test Docker with:")
+    print("  cd /root/test-build && docker build -t hello-test . && docker run hello-test")
     print("=" * 60)
 
     # Keep running - user can Ctrl+C to exit
@@ -110,9 +159,11 @@ def main():
         while True:
             time.sleep(60)
     except KeyboardInterrupt:
-        print("\nTerminating sandbox...")
-        sb.terminate()
-        print("Done!")
+        pass
+
+    print("\nTerminating sandbox...")
+    sb.terminate()
+    print("Done!")
 
 
 if __name__ == "__main__":
