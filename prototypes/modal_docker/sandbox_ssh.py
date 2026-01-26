@@ -14,8 +14,7 @@ import modal
 
 TEST_DOCKERFILE = """\
 FROM alpine:latest
-COPY hello.sh /hello.sh
-RUN chmod +x /hello.sh
+COPY --chmod=755 hello.sh /hello.sh
 CMD ["/hello.sh"]
 """
 
@@ -23,6 +22,33 @@ HELLO_SCRIPT = """\
 #!/bin/sh
 echo "Hello World from Docker!"
 echo "Build succeeded at $(date)"
+"""
+
+START_DOCKERD_SCRIPT = """\
+#!/bin/bash
+# Start Docker daemon on Modal (gVisor environment)
+
+# Set up IP forwarding for container networking
+echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+
+# Switch to iptables-legacy (gVisor doesn't support nftables)
+update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true
+update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
+
+# Start dockerd without iptables management (we handle it above)
+dockerd --iptables=false --ip6tables=false -D &
+
+# Wait for Docker to be ready
+for i in {1..30}; do
+    if docker info >/dev/null 2>&1; then
+        echo "Docker daemon is ready"
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Docker daemon failed to start"
+exit 1
 """
 
 # Image with Docker installed
@@ -35,6 +61,7 @@ image = (
         "lsb-release",
         "git",
         "vim",
+        "iptables",
     )
     # Install Docker
     .run_commands(
@@ -48,6 +75,11 @@ image = (
         "docker-ce-cli",
         "containerd.io",
         "docker-buildx-plugin",
+    )
+    # Add start-dockerd script
+    .run_commands(
+        f"cat > /start-dockerd.sh << 'SCRIPT'\n{START_DOCKERD_SCRIPT}SCRIPT",
+        "chmod +x /start-dockerd.sh",
     )
 )
 
