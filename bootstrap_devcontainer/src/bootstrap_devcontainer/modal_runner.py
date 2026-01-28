@@ -3,17 +3,69 @@
 import base64
 import io
 import os
+import queue
 import sys
 import tarfile
+import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 import modal
 
 from bootstrap_devcontainer.agent_runner import AgentRunner, StreamEvent
 
 # Script directory for bundled files
+
+
+def _stream_reader(
+    stream: Iterable[str],
+    stream_name: str,
+    output_queue: "queue.Queue[StreamEvent | None]",
+) -> None:
+    """Read lines from stream and put them on the queue."""
+    for line in stream:
+        output_queue.put(StreamEvent(stream=stream_name, line=line.rstrip("\n")))
+    output_queue.put(None)  # Signal this stream is done
+
+
+def stream_modal_process(proc: Any) -> Iterator[StreamEvent]:
+    """
+    Stream stdout and stderr from a Modal process using threads.
+
+    Similar to process_runner.run_process but for Modal sandbox exec results.
+    Uses a queue to interleave stdout and stderr as they arrive.
+    """
+    output_queue: queue.Queue[StreamEvent | None] = queue.Queue()
+
+    stdout_thread = threading.Thread(
+        target=_stream_reader,
+        args=(proc.stdout, "stdout", output_queue),
+        name="modal-stdout-reader",
+    )
+    stderr_thread = threading.Thread(
+        target=_stream_reader,
+        args=(proc.stderr, "stderr", output_queue),
+        name="modal-stderr-reader",
+    )
+
+    stdout_thread.start()
+    stderr_thread.start()
+
+    streams_done = 0
+    while streams_done < 2:
+        event = output_queue.get()
+        if event is None:
+            streams_done += 1
+        else:
+            yield event
+
+    stdout_thread.join()
+    stderr_thread.join()
+    proc.wait()
+
+
 _SCRIPT_DIR = Path(__file__).parent
 
 # start-dockerd.sh content (embedded to avoid file path issues at import time)
@@ -229,6 +281,14 @@ class ModalAgentRunner(AgentRunner):
         # 4. Run the agent
         yield StreamEvent(stream="stderr", line="Starting agent...")
 
+        # Debug: check what auth we have
+        if "CLAUDE_CONFIG_JSON" in auth_env:
+            yield StreamEvent(stream="stderr", line="Using ~/.claude.json for authentication")
+        elif "ANTHROPIC_API_KEY" in auth_env:
+            yield StreamEvent(stream="stderr", line="Using ANTHROPIC_API_KEY for authentication")
+        else:
+            yield StreamEvent(stream="stderr", line="WARNING: No Claude authentication found!")
+
         env_vars = {}
         if "ANTHROPIC_API_KEY" in auth_env:
             env_vars["ANTHROPIC_API_KEY"] = auth_env["ANTHROPIC_API_KEY"]
@@ -248,21 +308,22 @@ class ModalAgentRunner(AgentRunner):
         ]
 
         # Run agent in project directory
+        full_cmd = f"cd /project && {' '.join(cmd_parts)}"
+        # Log just the command without the full prompt
+        yield StreamEvent(
+            stream="stderr",
+            line=f"Executing: cd /project && {agent_cmd} --dangerously-skip-permissions -p '<prompt>' ...",
+        )
         agent_proc = sb.exec(
             "sh",
             "-c",
-            f"cd /project && {' '.join(cmd_parts)}",
+            full_cmd,
             env=env_vars if env_vars else None,
         )
 
-        # Stream output
-        for line in agent_proc.stdout:
-            yield StreamEvent(stream="stdout", line=line.rstrip("\n"))
-
-        for line in agent_proc.stderr:
-            yield StreamEvent(stream="stderr", line=line.rstrip("\n"))
-
-        agent_proc.wait()
+        yield StreamEvent(stream="stderr", line="Agent process started, streaming output...")
+        # Stream stdout and stderr using threaded reader (like process_runner.py)
+        yield from stream_modal_process(agent_proc)
         self._exit_code = agent_proc.returncode or 0
 
         # 5. Extract .devcontainer directory
