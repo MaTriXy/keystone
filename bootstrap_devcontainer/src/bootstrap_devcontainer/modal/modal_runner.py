@@ -9,7 +9,6 @@ import shlex
 import sys
 import tarfile
 import threading
-import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -194,7 +193,17 @@ class ModalAgentRunner(AgentRunner):
         # 1. Start Docker daemon
         # We start it in the background by not calling .wait() here
         run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
-        time.sleep(10)  # Give Docker time to start
+
+        # 2. Wait for Docker to be ready
+        yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
+        # Polling check is more robust and usually much faster than a fixed sleep
+        run_modal_command(
+            sb,
+            "sh",
+            "-c",
+            "for i in $(seq 1 30); do if docker info >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1",
+            prefix="docker-wait: ",
+        ).wait()
 
         # 2. Upload project
         yield StreamEvent(stream="stderr", line="Uploading project to sandbox...")
