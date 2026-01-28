@@ -57,6 +57,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         f"python3 {shlex.quote(str(fake_agent))}",
         "--sqlite_cache_dir",
         str(cache_file),
+        "--agent_local",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -139,6 +140,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         f"python3 {shlex.quote(str(fake_agent))}",
         "--sqlite_cache_dir",
         str(cache_file),
+        "--agent_local",  # Use local runner for fake agent tests
     ]
 
     result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
@@ -177,6 +179,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
         str(test_artifacts_dir),
         "--agent_cmd",
         f"python3 {shlex.quote(str(fake_agent))}",
+        "--agent_local",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -315,6 +318,7 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
         str(test_artifacts_dir),
         "--max_budget_usd",
         "0",
+        "--agent_local",  # Use local runner (budget test uses real claude locally)
     ]
 
     logger.info("Running: %s", " ".join(cmd))

@@ -16,10 +16,9 @@ from bootstrap_devcontainer.agent_cache import (
     EventCollector,
     compute_cache_key,
     compute_directory_hash,
-    create_devcontainer_tarball,
     extract_devcontainer_tarball,
 )
-from bootstrap_devcontainer.process_runner import run_process
+from bootstrap_devcontainer.agent_runner import LocalAgentRunner
 from bootstrap_devcontainer.schema import (
     BootstrapResult,
     TestSummary,
@@ -260,6 +259,11 @@ def bootstrap(
     output_file: Path | None = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
     ),
+    agent_in_modal: bool = typer.Option(
+        True,
+        "--agent_in_modal/--agent_local",
+        help="Run agent in Modal sandbox (default) or locally",
+    ),
 ):
     # Check Docker is available before proceeding
     if not check_docker_available():
@@ -275,7 +279,17 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Build prompt, adding Modal-specific guidance if needed
     prompt = AGENT_PROMPT_TEMPLATE
+    if agent_in_modal:
+        modal_addendum = """
+IMPORTANT: You are running in a Modal sandbox environment. When using `docker run`,
+you MUST use `--network host` for containers to have network access. Bridge networking
+does not work in this environment due to gVisor/veth restrictions.
+
+Example: `docker run --network host IMAGE CMD`
+"""
+        prompt = prompt + modal_addendum
 
     start_time = time.time()
 
@@ -379,45 +393,34 @@ def bootstrap(
         if cache is not None:
             event_collector = EventCollector()
 
-        def process_agent_stdout(line: str) -> None:
-            if event_collector is not None:
-                event_collector.add("stdout", line)
-            process_stdout_line(line)
+        # Select runner based on --agent_in_modal flag
+        if agent_in_modal:
+            from bootstrap_devcontainer.modal_runner import ModalAgentRunner
 
-        def process_agent_stderr(line: str) -> None:
-            if event_collector is not None:
-                event_collector.add("stderr", line)
-            process_stderr_line(line)
+            runner = ModalAgentRunner()
+        else:
+            runner = LocalAgentRunner()
 
         try:
-            # We use stream-json and verbose for progressive output and token tracking
             assert agent_cmd is not None
-            full_cmd = [
-                *shlex.split(agent_cmd),
-                "--dangerously-skip-permissions",
-                "-p",
-                prompt,
-                "--output-format",
-                "stream-json",
-                "--verbose",
-            ]
-            full_cmd.extend(["--max-budget-usd", str(max_budget_usd)])
+            assert max_budget_usd is not None
 
-            result = run_process(
-                full_cmd,
-                cwd=str(project_root),
-                stdout_callback=process_agent_stdout,
-                stderr_callback=process_agent_stderr,
-            )
+            for event in runner.run(prompt, project_root, max_budget_usd, agent_cmd):
+                if event_collector is not None:
+                    event_collector.add(event.stream, event.line)
+                if event.stream == "stdout":
+                    process_stdout_line(event.line)
+                else:
+                    process_stderr_line(event.line)
 
-            exit_code = result.returncode
+            exit_code = runner.exit_code
         except Exception as e:
             print(f"Error running agent: {e}", file=sys.stderr)
             exit_code = 1
 
         # Store in cache if caching is enabled
         if cache is not None and cache_key is not None and event_collector is not None:
-            tarball = create_devcontainer_tarball(project_root)
+            tarball = runner.get_devcontainer_tarball()
             cache_value = CacheValue(
                 events=event_collector.get_events(),
                 devcontainer_tarball=tarball,
