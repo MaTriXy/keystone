@@ -1,9 +1,0 @@
-{
-    "name": "Empty Amazon Linux",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "."
-    },
-    "workspaceFolder": "/workspace",
-    "remoteUser": "root"
-}

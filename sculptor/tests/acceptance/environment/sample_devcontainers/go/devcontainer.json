@@ -1,9 +1,0 @@
-{
-    "name": "Go Development",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "."
-    },
-    "workspaceFolder": "/workspace",
-    "remoteUser": "root"
-}

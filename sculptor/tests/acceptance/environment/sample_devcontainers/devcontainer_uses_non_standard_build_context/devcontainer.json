@@ -1,9 +1,0 @@
-{
-    "name": "Non-standard Build Context Test",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "./build_context"
-    },
-    "workspaceFolder": "/workspace",
-    "remoteUser": "root"
-}

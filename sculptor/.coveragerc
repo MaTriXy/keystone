@@ -1,3 +1,0 @@
-[html]
-# See: https://pytest-cov.readthedocs.io/en/latest/contexts.html
-show_contexts = True

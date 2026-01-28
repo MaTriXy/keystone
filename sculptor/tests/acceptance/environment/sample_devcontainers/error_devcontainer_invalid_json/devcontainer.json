@@ -1,9 +1,0 @@
-{
-    "name": "Invalid JSON Test",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "."
-    },
-    "workspaceFolder": "/workspace"
-    "remoteUser": "root"  // Missing comma - invalid JSON
-}

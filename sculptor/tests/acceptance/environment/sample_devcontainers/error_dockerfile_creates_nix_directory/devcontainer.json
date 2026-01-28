@@ -1,9 +1,0 @@
-{
-    "name": "Dockerfile Creates Nix Directory Test",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "."
-    },
-    "workspaceFolder": "/workspace",
-    "remoteUser": "root"
-}

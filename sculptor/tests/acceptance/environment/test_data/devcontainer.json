@@ -1,6 +1,0 @@
-{
-  "name": "Test Devcontainer",
-  "build": {
-    "dockerfile": "Dockerfile.test.docker"
-  }
-}
