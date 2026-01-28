@@ -1,7 +1,21 @@
+import logging
+
 import modal
 
 from bootstrap_devcontainer.modal.image import create_modal_image
 from bootstrap_devcontainer.modal.modal_runner import run_modal_command
+
+# Configure logging to silence noisy third-party libraries
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s",
+)
+# Enable DEBUG only for our project
+logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
+# Specifically silence known noisy hpack/http2 logs
+logging.getLogger("hpack").setLevel(logging.INFO)
+logging.getLogger("httpcore").setLevel(logging.INFO)
+logging.getLogger("httpx").setLevel(logging.INFO)
 
 
 def test_run_modal_command_interleaved_streaming():
