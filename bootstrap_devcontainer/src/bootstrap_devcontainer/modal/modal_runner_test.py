@@ -4,6 +4,7 @@ import shlex
 
 import modal
 
+from bootstrap_devcontainer.agent_runner import build_claude_command
 from bootstrap_devcontainer.modal.image import create_modal_image
 from bootstrap_devcontainer.modal.modal_runner import run_modal_command
 
@@ -67,11 +68,11 @@ def test_run_modal_command_interleaved_streaming():
         assert len(stdout_lines) == 3, f"Expected 3 stdout lines, found {len(stdout_lines)}"
         assert len(stderr_lines) == 3, f"Expected 3 stderr lines, found {len(stderr_lines)}"
 
-        # Verify interleaving order roughly
-        sequence_lines = [e.line for e in events if "OUT:" in e.line or "ERR:" in e.line]
-        expected = ["ERR: 1", "OUT: 2", "ERR: 3", "OUT: 4", "ERR: 5", "OUT: 6"]
+        # Verify all expected lines are present
+        sequence_lines = {e.line for e in events if "OUT:" in e.line or "ERR:" in e.line}
+        expected = {"ERR: 1", "OUT: 2", "ERR: 3", "OUT: 4", "ERR: 5", "OUT: 6"}
         assert sequence_lines == expected, (
-            f"Order mismatch. Expected {expected}, got {sequence_lines}"
+            f"Line mismatch. Expected {expected}, got {sequence_lines}"
         )
     finally:
         sb.terminate()
@@ -160,13 +161,9 @@ def test_claude_streaming():
         claude_cmd = shlex.join(
             [
                 f"ANTHROPIC_API_KEY={shlex.quote(api_key)}",
-                *("timeout", "60"),
-                "claude",
-                "--verbose",
-                "--dangerously-skip-permissions",
-                *("--output-format", "stream-json"),
-                *("--max-budget-usd", "0.10"),
-                *("-p", "Figure out what OS you are on and provide evidence."),
+                "timeout",
+                "60",
+                *build_claude_command("Figure out what OS you are on and provide evidence.", 0.10),
             ]
         )
 

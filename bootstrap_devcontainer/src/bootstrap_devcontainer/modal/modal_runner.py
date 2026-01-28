@@ -15,7 +15,12 @@ from typing import Any
 
 import modal
 
-from bootstrap_devcontainer.agent_runner import AgentRunner, StreamEvent
+from bootstrap_devcontainer.agent_runner import (
+    DEFAULT_AGENT_TIMEOUT,
+    AgentRunner,
+    StreamEvent,
+    build_claude_command,
+)
 from bootstrap_devcontainer.modal.image import create_modal_image
 
 # Script directory for bundled files
@@ -245,17 +250,7 @@ class ModalAgentRunner(AgentRunner):
 
         # Build agent command
         # Note: agent_cmd might be "claude" or a full path
-        cmd_parts = [
-            agent_cmd,
-            "--dangerously-skip-permissions",
-            "-p",
-            prompt,
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--max-budget-usd",
-            str(max_budget_usd),
-        ]
+        cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd)
 
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
@@ -263,7 +258,7 @@ class ModalAgentRunner(AgentRunner):
 set -e
 cd /project
 {f"export ANTHROPIC_API_KEY={shlex.quote(env_vars['ANTHROPIC_API_KEY'])}" if "ANTHROPIC_API_KEY" in env_vars else ""}
-exec {shlex.join(cmd_parts)}
+exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 """
         # Upload script
         # encode to base64 to avoid heredoc issues

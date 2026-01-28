@@ -1,6 +1,5 @@
 """Agent runner abstraction for local and Modal execution."""
 
-import shlex
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -11,6 +10,8 @@ from typing import Literal
 from bootstrap_devcontainer.agent_cache import create_devcontainer_tarball
 from bootstrap_devcontainer.process_runner import run_process
 
+DEFAULT_AGENT_TIMEOUT = 3600
+
 
 @dataclass
 class StreamEvent:
@@ -18,6 +19,23 @@ class StreamEvent:
 
     stream: Literal["stdout", "stderr"]
     line: str
+
+
+def build_claude_command(
+    prompt: str, max_budget_usd: float, agent_cmd: str = "claude"
+) -> list[str]:
+    """Build the command to run the Claude agent.
+
+    Uses the splat pattern for grouping arguments for better readability.
+    """
+    return [
+        agent_cmd,
+        "--dangerously-skip-permissions",
+        *("--output-format", "stream-json"),
+        "--verbose",
+        *("--max-budget-usd", str(max_budget_usd)),
+        *("-p", prompt),
+    ]
 
 
 class AgentRunner(ABC):
@@ -99,17 +117,14 @@ class LocalAgentRunner(AgentRunner):
         def collect_stderr(line: str) -> None:
             events.append(StreamEvent(stream="stderr", line=line))
 
-        full_cmd = [
-            *shlex.split(agent_cmd),
-            "--dangerously-skip-permissions",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--max-budget-usd",
-            str(max_budget_usd),
-            "-p",
-            prompt,
-        ]
+        full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd)
+
+        # Add timeout if available
+        try:
+            subprocess.run(["timeout", "--version"], capture_output=True)
+            full_cmd = ["timeout", str(DEFAULT_AGENT_TIMEOUT), *full_cmd]
+        except FileNotFoundError:
+            pass
 
         result = run_process(
             full_cmd,
