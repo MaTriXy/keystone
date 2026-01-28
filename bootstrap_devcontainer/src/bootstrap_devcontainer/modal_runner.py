@@ -178,6 +178,12 @@ class ModalAgentRunner(AgentRunner):
             experimental_options={"enable_docker": True},
         )
 
+        # Print sandbox info for debugging
+        sandbox_id = self._sandbox.object_id
+        print(f"Modal sandbox created: {sandbox_id}", file=sys.stderr)
+        print("  Dashboard: https://modal.com/apps/bootstrap-devcontainer-sandbox", file=sys.stderr)
+        print(f"  Shell:     modal shell {sandbox_id}", file=sys.stderr)
+
         try:
             yield from self._run_in_sandbox(prompt, project_root, max_budget_usd, agent_cmd)
         finally:

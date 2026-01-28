@@ -25,12 +25,15 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
 )
 
-# Configure logging with detailed format
+# Configure logging with detailed format for our modules only
+# Avoid DEBUG level for noisy third-party libs like hpack, httpcore, etc.
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S%z",
 )
+# Enable DEBUG for our own modules
+logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
 
 app = typer.Typer()
 console = Console(force_terminal=True)
@@ -352,6 +355,10 @@ Example: `docker run --network host IMAGE CMD`
                 token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
                 token_spending["output"] = usage.get("output_tokens", 0)
                 token_spending["cache_creation"] = usage.get("cache_creation_input_tokens", 0)
+
+            # Log other message types at debug level for visibility
+            elif msg_type:
+                logging.debug(f"Agent message type={msg_type}: {line[:200]}")
 
         except json.JSONDecodeError:
             # Not JSON or partial JSON, just ignore
