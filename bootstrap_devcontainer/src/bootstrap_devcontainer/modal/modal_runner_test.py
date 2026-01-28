@@ -1,7 +1,7 @@
 import modal
 
-from .image import create_modal_image
-from .modal_runner import run_modal_command
+from bootstrap_devcontainer.modal.image import create_modal_image
+from bootstrap_devcontainer.modal.modal_runner import run_modal_command
 
 
 def test_run_modal_command_interleaved_streaming():

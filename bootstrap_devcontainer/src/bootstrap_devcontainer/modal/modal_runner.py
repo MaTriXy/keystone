@@ -16,8 +16,7 @@ from typing import Any
 import modal
 
 from bootstrap_devcontainer.agent_runner import AgentRunner, StreamEvent
-
-from .image import create_modal_image
+from bootstrap_devcontainer.modal.image import create_modal_image
 
 # Script directory for bundled files
 
