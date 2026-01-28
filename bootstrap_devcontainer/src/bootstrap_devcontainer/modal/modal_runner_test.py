@@ -3,7 +3,7 @@ import logging
 import modal
 
 from bootstrap_devcontainer.modal.image import create_modal_image
-from bootstrap_devcontainer.modal.modal_runner import run_modal_command, wait_for_docker
+from bootstrap_devcontainer.modal.modal_runner import run_modal_command
 
 # Configure logging to silence noisy third-party libraries
 logging.basicConfig(
@@ -94,7 +94,7 @@ def test_docker_readiness_and_run():
         run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
 
         print("Waiting for Docker readiness...")
-        wait_for_docker(sb)
+        run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
         print("Docker is ready!")
 
         print("Running 'docker run --network host hello-world'...")

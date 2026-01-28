@@ -103,18 +103,6 @@ def run_modal_command(
     return ManagedProcess(proc, prefix=prefix, capture=capture)
 
 
-def wait_for_docker(sb: modal.Sandbox) -> None:
-    """Wait for the Docker daemon to be ready in the sandbox."""
-    # Polling check is more robust and usually much faster than a fixed sleep
-    run_modal_command(
-        sb,
-        "sh",
-        "-c",
-        "for i in $(seq 1 30); do if docker info >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1",
-        prefix="docker-wait: ",
-    ).wait()
-
-
 _SCRIPT_DIR = Path(__file__).parent
 
 
@@ -210,7 +198,7 @@ class ModalAgentRunner(AgentRunner):
 
         # 2. Wait for Docker to be ready
         yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
-        wait_for_docker(sb)
+        run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
 
         # 2. Upload project
         yield StreamEvent(stream="stderr", line="Uploading project to sandbox...")
