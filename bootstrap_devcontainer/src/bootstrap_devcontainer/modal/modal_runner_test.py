@@ -198,9 +198,3 @@ def test_claude_streaming():
 
     finally:
         sb.terminate()
-
-
-if __name__ == "__main__":
-    test_run_modal_command_interleaved_streaming()
-    test_docker_readiness_and_run()
-    test_claude_streaming()
