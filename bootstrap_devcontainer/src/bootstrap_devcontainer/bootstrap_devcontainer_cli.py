@@ -404,7 +404,7 @@ Example: `docker run --network host IMAGE CMD`
 
         # Select runner based on --agent_in_modal flag
         if agent_in_modal:
-            from bootstrap_devcontainer.modal_runner import ModalAgentRunner
+            from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
 
             runner = ModalAgentRunner()
         else:
