@@ -97,8 +97,22 @@ def run_modal_command(
     sb: modal.Sandbox, *args: str, capture: bool = False, prefix: str = "", **kwargs: Any
 ) -> ManagedProcess:
     """Helper to execute a command and return a ManagedProcess."""
+    logger = logging.getLogger("bootstrap_devcontainer.modal")
+    logger.info(f"{prefix}Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
     return ManagedProcess(proc, prefix=prefix, capture=capture)
+
+
+def _wait_for_docker(sb: modal.Sandbox) -> None:
+    """Wait for the Docker daemon to be ready in the sandbox."""
+    # Polling check is more robust and usually much faster than a fixed sleep
+    run_modal_command(
+        sb,
+        "sh",
+        "-c",
+        "for i in $(seq 1 30); do if docker info >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1",
+        prefix="docker-wait: ",
+    ).wait()
 
 
 _SCRIPT_DIR = Path(__file__).parent
@@ -196,14 +210,7 @@ class ModalAgentRunner(AgentRunner):
 
         # 2. Wait for Docker to be ready
         yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
-        # Polling check is more robust and usually much faster than a fixed sleep
-        run_modal_command(
-            sb,
-            "sh",
-            "-c",
-            "for i in $(seq 1 30); do if docker info >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1",
-            prefix="docker-wait: ",
-        ).wait()
+        _wait_for_docker(sb)
 
         # 2. Upload project
         yield StreamEvent(stream="stderr", line="Uploading project to sandbox...")
