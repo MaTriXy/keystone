@@ -192,6 +192,7 @@ class ModalAgentRunner(AgentRunner):
             app=app,
             image=image,
             timeout=self._timeout_seconds,
+            region="us-west-2",
             experimental_options={"enable_docker": True},
         )
 
