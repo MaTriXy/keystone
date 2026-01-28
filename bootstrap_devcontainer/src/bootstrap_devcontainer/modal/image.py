@@ -1,4 +1,3 @@
-import base64
 from pathlib import Path
 
 import modal
@@ -10,11 +9,6 @@ WAIT_FOR_DOCKER_SCRIPT_PATH = _MODAL_DIR / "wait_for_docker.sh"
 
 def create_modal_image() -> modal.Image:
     """Create the Modal image with Docker and Claude CLI installed."""
-    start_dockerd_content = START_DOCKERD_SCRIPT_PATH.read_text()
-    wait_for_docker_content = WAIT_FOR_DOCKER_SCRIPT_PATH.read_text()
-    # Base64 encode the scripts to avoid heredoc issues in Modal
-    start_dockerd_b64 = base64.b64encode(start_dockerd_content.encode()).decode()
-    wait_for_docker_b64 = base64.b64encode(wait_for_docker_content.encode()).decode()
 
     return (
         modal.Image.debian_slim(python_version="3.11")
@@ -74,11 +68,11 @@ def create_modal_image() -> modal.Image:
         .apt_install("nodejs")
         # Install devcontainer CLI and Claude CLI
         .run_commands("npm install -g @devcontainers/cli @anthropic-ai/claude-code")
-        # Add scripts via base64 (heredocs don't work in Modal)
+        # Add scripts natively
+        .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
+        .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)
         .run_commands(
-            f"echo '{start_dockerd_b64}' | base64 -d > /start-dockerd.sh",
             "chmod 4755 /start-dockerd.sh",
-            f"echo '{wait_for_docker_b64}' | base64 -d > /wait_for_docker.sh",
             "chmod +x /wait_for_docker.sh",
         )
         .run_commands(
