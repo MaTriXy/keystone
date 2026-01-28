@@ -67,6 +67,22 @@ def stream_modal_process(proc: Any) -> Iterator[StreamEvent]:
     proc.wait()
 
 
+def run_modal_command(sb: modal.Sandbox, *args: str, **kwargs: Any) -> Iterator[StreamEvent]:
+    """
+    Execute a command in a Modal sandbox and stream its output.
+
+    Args:
+        sb: The Modal sandbox instance.
+        *args: Command and arguments to execute.
+        **kwargs: Additional arguments for sb.exec() (e.g., pty, env).
+
+    Yields:
+        StreamEvent objects for each line of stdout and stderr.
+    """
+    proc = sb.exec(*args, **kwargs)
+    yield from stream_modal_process(proc)
+
+
 _SCRIPT_DIR = Path(__file__).parent
 
 # start-dockerd.sh content (embedded to avoid file path issues at import time)
@@ -278,8 +294,7 @@ class ModalAgentRunner(AgentRunner):
         sb = self._sandbox
 
         # 1. Start Docker daemon
-        yield StreamEvent(stream="stderr", line="Starting Docker daemon in sandbox...")
-        sb.exec("/start-dockerd.sh")
+        yield from run_modal_command(sb, "/start-dockerd.sh")
         time.sleep(10)  # Give Docker time to start
 
         # 2. Upload project
@@ -361,11 +376,8 @@ exec {shlex.join(cmd_parts)}
             "-c",
             "/run_agent.sh",
             env=None,
-            pty=True,
+            pty=False,
         )
-
-        yield StreamEvent(stream="stderr", line="Agent process started, streaming output...")
-        # Stream stdout and stderr using threaded reader (like process_runner.py)
         yield from stream_modal_process(agent_proc)
         self._exit_code = agent_proc.returncode or 0
 
