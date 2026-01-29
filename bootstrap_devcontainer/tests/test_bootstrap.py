@@ -288,7 +288,8 @@ def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
 def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     """
     Test that setting --max_budget_usd 0 causes the claude agent to fail
-    immediately since it cannot make any API calls.
+    immediately since it cannot make any API calls. The CLI should return
+    a non-zero exit code and include an error_message in the JSON output.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
 
@@ -314,7 +315,10 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
     logger.info("Return code: %s", result.returncode)
 
-    # Parse JSON output if present
+    # CLI should return non-zero exit code on failure
+    assert result.returncode != 0, "Expected non-zero exit code with zero budget"
+
+    # Parse JSON output - should still be present even on failure
     stdout_lines = result.stdout.strip().split("\n")
     json_start = None
     for i, line in enumerate(stdout_lines):
@@ -322,10 +326,13 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
             json_start = i
             break
 
-    if json_start is not None:
-        json_str = "\n".join(stdout_lines[json_start:])
-        output = json.loads(json_str)
-        assert not output.get("success", True), "Expected failure with zero budget"
-    else:
-        # If no JSON output, process should have failed
-        assert result.returncode != 0, "Expected failure with zero budget"
+    assert json_start is not None, "Expected JSON output even on failure"
+    json_str = "\n".join(stdout_lines[json_start:])
+    output = json.loads(json_str)
+
+    assert not output.get("success", True), "Expected success=false with zero budget"
+    assert output.get("error_message"), "Expected error_message in output"
+    assert (
+        "devcontainer" in output["error_message"].lower()
+        or "agent" in output["error_message"].lower()
+    ), f"Expected error message about devcontainer or agent, got: {output['error_message']}"

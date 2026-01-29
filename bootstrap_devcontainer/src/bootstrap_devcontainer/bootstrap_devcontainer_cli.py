@@ -403,6 +403,7 @@ def bootstrap(
         # Verification step
         print("Verifying agent's work...", file=sys.stderr)
         verification_start_time = time.time()
+        verification_error: str | None = None
         try:
             # Success is determined by the runner.verify() call
             # We assume success unless an error occurs or the test script fails
@@ -415,11 +416,13 @@ def bootstrap(
                     print(f"Verification stderr: {event.line}", file=sys.stderr, flush=True)
                     if "Test run failed" in event.line or "Build failed" in event.line:
                         verification_failed = True
+                        verification_error = event.line
 
             verification_success = not verification_failed
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
             verification_success = False
+            verification_error = str(e)
 
         verification_seconds = time.time() - verification_start_time
 
@@ -429,8 +432,17 @@ def bootstrap(
     # Parse test reports from various formats
     test_reports = parse_test_reports(test_artifacts_dir)
 
+    overall_success = verification_success and exit_code == 0
+    error_message: str | None = None
+    if not overall_success:
+        if verification_error:
+            error_message = verification_error
+        elif exit_code != 0:
+            error_message = f"Agent exited with code {exit_code}"
+
     output = BootstrapResult(
-        success=verification_success and exit_code == 0,
+        success=overall_success,
+        error_message=error_message,
         agent_work_seconds=agent_work_seconds,
         verification_seconds=verification_seconds,
         model=model_name,
@@ -449,6 +461,9 @@ def bootstrap(
         print(f"Result written to {output_file}", file=sys.stderr)
     else:
         print(output.model_dump_json(indent=2))
+
+    if not overall_success:
+        raise typer.Exit(code=1)
 
 
 def main():

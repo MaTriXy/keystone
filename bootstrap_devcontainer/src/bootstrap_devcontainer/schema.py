@@ -21,6 +21,7 @@ class TestSummary(BaseModel):
 
 class BootstrapResult(BaseModel):
     success: bool
+    error_message: str | None = None
 
     model: str = ""
     agent_exit_code: int
