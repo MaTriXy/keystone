@@ -1,5 +1,6 @@
 """Agent runner abstraction for local and Modal execution."""
 
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from bootstrap_devcontainer.agent_cache import create_devcontainer_tarball
+from bootstrap_devcontainer.git_utils import extract_git_archive_to_temp
 from bootstrap_devcontainer.process_runner import run_process
 
 DEFAULT_AGENT_TIMEOUT = 3600
@@ -97,11 +99,16 @@ class AgentRunner(ABC):
 
 
 class LocalAgentRunner(AgentRunner):
-    """Run agent locally using subprocess."""
+    """Run agent locally using subprocess.
+
+    The agent runs in a clean directory extracted from git archive, ensuring
+    repeatability and better Docker build caching.
+    """
 
     def __init__(self) -> None:
         self._exit_code: int = 1
-        self._project_root: Path | None = None
+        self._source_project_root: Path | None = None  # Original git repo
+        self._work_dir: Path | None = None  # Temp dir from git archive
 
     def _check_docker_available(self) -> bool:
         """Check if Docker is available locally."""
@@ -130,7 +137,15 @@ class LocalAgentRunner(AgentRunner):
             self._exit_code = 1
             return
 
-        self._project_root = project_root
+        self._source_project_root = project_root
+
+        # Extract git archive to clean temp directory
+        yield StreamEvent(
+            stream="stderr",
+            line="Extracting git archive to clean working directory...",
+        )
+        self._work_dir = extract_git_archive_to_temp(project_root)
+
         events: list[StreamEvent] = []
 
         def collect_stdout(line: str) -> None:
@@ -150,7 +165,7 @@ class LocalAgentRunner(AgentRunner):
 
         result = run_process(
             full_cmd,
-            cwd=str(project_root),
+            cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,
         )
@@ -165,16 +180,20 @@ class LocalAgentRunner(AgentRunner):
         return self._exit_code
 
     def get_devcontainer_tarball(self) -> bytes:
-        if self._project_root is None:
+        if self._work_dir is None:
             raise RuntimeError("run() must be called before get_devcontainer_tarball()")
-        return create_devcontainer_tarball(self._project_root)
+        return create_devcontainer_tarball(self._work_dir)
 
     def verify(
         self,
         project_root: Path,
         test_artifacts_dir: Path,
     ) -> Iterator[StreamEvent]:
-        """Run verification tests locally using Docker."""
+        """Run verification tests locally using Docker.
+
+        Uses the work_dir (from git archive) which contains the .devcontainer
+        created by the agent.
+        """
         import shlex
 
         if not self._check_docker_available():
@@ -184,6 +203,9 @@ class LocalAgentRunner(AgentRunner):
             )
             return
 
+        # Use work_dir if available (agent was run), otherwise fall back to project_root
+        work_dir = self._work_dir if self._work_dir is not None else project_root
+
         image_name = f"bootstrap-test-{project_root.name.lower()}"
         container_name = f"bootstrap-test-{project_root.name.lower()}-container"
 
@@ -192,7 +214,7 @@ class LocalAgentRunner(AgentRunner):
             "devcontainer",
             "build",
             "--workspace-folder",
-            str(project_root),
+            str(work_dir),
             "--image-name",
             image_name,
         ]
@@ -254,5 +276,7 @@ class LocalAgentRunner(AgentRunner):
             )
 
     def cleanup(self) -> None:
-        """Nothing to clean up for local runner."""
-        pass
+        """Clean up the temporary work directory."""
+        if self._work_dir is not None and self._work_dir.exists():
+            shutil.rmtree(self._work_dir, ignore_errors=True)
+            self._work_dir = None

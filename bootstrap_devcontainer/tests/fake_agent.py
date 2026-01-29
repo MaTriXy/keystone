@@ -10,7 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
-# The devcontainer files to generate
+# The devcontainer files to generate (following the format required by prompts.py)
 DEVCONTAINER_JSON = """{
     "name": "Python Test Environment",
     "build": {
@@ -25,19 +25,22 @@ DOCKERFILE = """FROM python:3.12-slim
 # Install uv for fast dependency management
 RUN pip install uv
 
-# Set up working directory
+# Install dependencies that are unlikely to change
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Create test artifacts directory.
+RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+
+# Copy the entire source tree into the image.
 WORKDIR /project_src
+COPY . .
 
-# Copy project files
-COPY . /project_src/
-
-# Install dependencies
-RUN uv pip install --system -e ".[dev]" || uv pip install --system pytest pytest-json-report
-
-# Make test script executable
+# Make the test script executable.
 RUN chmod +x .devcontainer/run_all_tests.sh
 
-WORKDIR /project_src
+# Install project dependencies
+RUN uv pip install --system -e ".[dev]" || uv pip install --system pytest pytest-json-report
 """
 
 RUN_ALL_TESTS_SH = """#!/bin/bash

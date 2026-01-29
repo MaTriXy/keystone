@@ -8,18 +8,18 @@ You should only make changes in the .devcontainer/... subtree.
 
 You are currently at a clean copy of the root of the project's code tree,
 without any build artifacts or git history.
-This copy was created using `git archive --recursive`.
+This copy was created using `git archive`.
 
 Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
+   Note: devcontainer.json uses JSON5 format, so comments are allowed.
    This file MUST include these lines, specifying exactly where the Dockerfile should be
    and that the build context is the entire source tree:
 ```
   "build": {{
     "dockerfile": "Dockerfile",
-    "context": "..",
-    // ...
+    "context": ".."
   }}
 ```
 
@@ -31,12 +31,15 @@ The Dockerfile MUST contain these lines, to create a writable test artifacts dir
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
 
-The Dockerfile MUST end with these lines, specifying where the input source tree should be copied into the image:
+The Dockerfile MUST end with these lines, specifying where the input source tree should be copied into the image.
 You do not have to worry about .dockerignore files right now because your copy of the source tree is pristine.
 ```
 # Copy the entire source tree into the image.
 WORKDIR /project_src
 COPY . .
+
+# Make the test script executable.
+RUN chmod +x .devcontainer/run_all_tests.sh
 ```
 
 Optimize the Dockerfile layer ordering for faster rebuilds as you experiment,
@@ -60,8 +63,8 @@ so that the image can execute its own tests.
           - Go: /test_artifacts/go-test-report.json (use `go test -json ./...`)
           - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=json`)
           - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
-      v. A file called /test_artifacts/run_all_tests_result.json stating success/failure.
-   d. If run_all_tests.sh is going to fail, it may fail early, before running all tests.
+      v. A file called /test_artifacts/final_result.json stating success/failure.
+   d. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    e. run_all_tests.sh should return 0 (success) IFF all tests pass,
       and should forward enough information to stdout/stderr to enable debugging failing tests.
 
@@ -88,6 +91,15 @@ Tips and Notes:
     docker:cli ps
   ```
 
+* For polyglot projects (e.g., Python backend + Node frontend), ensure ALL test suites are run.
+  This may require installing multiple runtimes (Python, Node, Go, etc.) in the Dockerfile.
+  Frontend projects may need Xvfb or Playwright dependencies for browser-based tests.
+
+* Beware of stuck tests. Test suites often hang waiting for conditions that will never occur.
+  Use the `timeout` command to limit execution time of test commands.
+  Find a balance: too short causes churn, too long wastes time on stuck tests.
+  Example: `timeout 300 pytest tests/` limits pytest to 5 minutes.
+
 * As you work, emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:
   {STATUS_MARKER} Exploring repository structure to identify file types and test locations.
@@ -110,9 +122,9 @@ Please don't forget to emit the summary at the end.
 To verify your work, use something like this (adding arguments as appropriate for permissions, etc.)
 1. Build with `devcontainer build --workspace-folder .`
 2. To test your work, run this command and check the return code:
-   `docker run IMAGE ./.devcontainer/run_all_tests.sh`
+   `docker run --rm IMAGE ./.devcontainer/run_all_tests.sh`
    This command should work straight from the image, without any of the devcontainer lifecycle hooks.
-3. If needed, extract and examine the test artifacts with from the image with:
+3. If needed, extract and examine the test artifacts from the image with:
    `docker cp CONTAINER:/test_artifacts /tmp/test_artifacts_RUN_NAME`.
 """
 

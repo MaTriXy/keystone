@@ -14,11 +14,11 @@ from bootstrap_devcontainer.agent_cache import (
     CacheValue,
     EventCollector,
     compute_cache_key,
-    compute_directory_hash,
     extract_devcontainer_tarball,
 )
 from bootstrap_devcontainer.agent_runner import LocalAgentRunner
 from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+from bootstrap_devcontainer.git_utils import get_git_tree_hash, is_git_dirty, is_git_repo
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
     BootstrapResult,
@@ -194,6 +194,28 @@ def bootstrap(
 ):
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
+
+    # Verify project_root is a git repository
+    if not is_git_repo(project_root):
+        console.print(
+            f"[red]Error:[/red] {project_root} is not a git repository.\n"
+            "The project must be versioned with git. To initialize:\n"
+            f"  cd {project_root}\n"
+            "  git init && git add -A && git commit -m 'Initial commit'",
+        )
+        raise typer.Exit(1)
+
+    # Warn if working directory is dirty
+    if is_git_dirty(project_root):
+        console.print(
+            f"[yellow]Warning:[/yellow] {project_root} has uncommitted changes. "
+            "Only committed files will be processed.",
+        )
+
+    # Log the git tree hash we're working from
+    tree_hash = get_git_tree_hash(project_root)
+    console.print(f"Working from git tree: [cyan]{tree_hash}[/cyan]")
+
     if test_artifacts_dir is not None:
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -294,10 +316,10 @@ def bootstrap(
         cached_value: CacheValue | None = None
         if cache is not None and cache_key is not None:
             # Print cache key components
-            dir_hash = compute_directory_hash(project_root)
+            tree_hash = get_git_tree_hash(project_root)
             prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
             print(
-                f"Cache lookup - filesystem MD5: {dir_hash}, prompt MD5: {prompt_hash}",
+                f"Cache lookup - git tree: {tree_hash}, prompt MD5: {prompt_hash}",
                 file=sys.stderr,
             )
             cached_value = cache.get(cache_key)

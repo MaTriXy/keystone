@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
 
 from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
@@ -26,17 +27,11 @@ def test_cli_help() -> None:
     assert "--project_root" in result.stdout
 
 
-def test_e2e_with_fake_agent(tmp_path: Path) -> None:
+def test_e2e_with_fake_agent(tmp_path: Path, project_root: Path) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
     """
-
-    # Copy sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
-    project_root = tmp_path / "project"
-    shutil.copytree(original_project_root, project_root)
-
     test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
     cache_file = tmp_path / "cache.sqlite"
@@ -130,7 +125,8 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     logger.info("=" * 60)
 
     project_root2 = tmp_path / "project2"
-    shutil.copytree(original_project_root, project_root2)
+    shutil.copytree(SAMPLES_DIR / "python_project", project_root2)
+    init_git_repo(project_root2)
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
@@ -154,17 +150,12 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 
 
-def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
+@pytest.mark.parametrize("project_root", ["rust_project"], indirect=True)
+def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path) -> None:
     """
     Test that the fake agent (which generates Python devcontainer) fails
     when used against a Rust project, demonstrating proper failure detection.
     """
-
-    # Copy Rust sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent.parent / "samples/rust_project"
-    project_root = tmp_path / "project"
-    shutil.copytree(original_project_root, project_root)
-
     test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
 
@@ -217,7 +208,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 
 @pytest.mark.manual
 @pytest.mark.parametrize(
-    "sample_name",
+    "project_root",
     [
         "python_project",
         "node_project",
@@ -226,13 +217,11 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
         "fullstack_project",
         "python_with_failing_test",
     ],
+    indirect=True,
 )
-def test_e2e_sample_project(tmp_path: Path, sample_name: str, snapshot: SnapshotAssertion) -> None:
-    # Copy sample project to tmp_path to avoid modifying the original source tree
-    original_project_root = Path(__file__).parent.parent.parent / f"samples/{sample_name}"
-    project_root = tmp_path / "project"
-    shutil.copytree(original_project_root, project_root)
-
+def test_e2e_sample_project(
+    tmp_path: Path, project_root: Path, snapshot: SnapshotAssertion
+) -> None:
     test_artifacts_dir = tmp_path / "test_artifacts"
     cache_file = DEFAULT_CACHE_PATH
 
@@ -296,16 +285,11 @@ def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def test_max_budget_zero_fails(tmp_path: Path) -> None:
+def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     """
     Test that setting --max_budget_usd 0 causes the claude agent to fail
     immediately since it cannot make any API calls.
     """
-    # Copy sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
-    project_root = tmp_path / "project"
-    shutil.copytree(original_project_root, project_root)
-
     test_artifacts_dir = tmp_path / "test_artifacts"
 
     logger.info("=" * 60)

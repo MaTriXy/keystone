@@ -11,6 +11,8 @@ from typing import Literal
 import diskcache
 from pydantic import BaseModel, field_serializer, field_validator
 
+from bootstrap_devcontainer.git_utils import get_git_tree_hash
+
 
 class StreamEvent(BaseModel):
     """A single event from the agent's output stream."""
@@ -38,26 +40,15 @@ class CacheValue(BaseModel):
         return v
 
 
-def compute_directory_hash(directory: Path) -> str:
-    """Compute MD5 hash of all files in a directory (sorted by path)."""
-    h = hashlib.md5()
+def compute_cache_key(prompt: str, repo_path: Path) -> str:
+    """Compute cache key from prompt and git tree hash.
 
-    all_files = sorted(directory.rglob("*"))
-    for file_path in all_files:
-        if file_path.is_file():
-            rel_path = file_path.relative_to(directory)
-            h.update(str(rel_path).encode("utf-8"))
-            h.update(file_path.read_bytes())
-
-    return h.hexdigest()
-
-
-def compute_cache_key(prompt: str, directory: Path) -> str:
-    """Compute cache key from prompt and directory contents."""
-    dir_hash = compute_directory_hash(directory)
+    Uses the git tree hash (not commit hash) so it only depends on file contents.
+    """
+    tree_hash = get_git_tree_hash(repo_path)
     h = hashlib.md5()
     h.update(prompt.encode("utf-8"))
-    h.update(dir_hash.encode("utf-8"))
+    h.update(tree_hash.encode("utf-8"))
     return h.hexdigest()
 
 

@@ -21,6 +21,7 @@ from bootstrap_devcontainer.agent_runner import (
     StreamEvent,
     build_claude_command,
 )
+from bootstrap_devcontainer.git_utils import create_git_archive_bytes
 from bootstrap_devcontainer.modal.image import create_modal_image
 
 # Script directory for bundled files
@@ -111,14 +112,6 @@ def run_modal_command(
 _SCRIPT_DIR = Path(__file__).parent
 
 
-def _create_project_tarball(project_root: Path) -> bytes:
-    """Create a tarball of the project directory."""
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        tar.add(project_root, arcname=".")
-    return buf.getvalue()
-
-
 def _read_claude_auth() -> dict[str, str]:
     """Read Claude authentication from ~/.claude.json or environment."""
     auth_env: dict[str, str] = {}
@@ -206,9 +199,9 @@ class ModalAgentRunner(AgentRunner):
         yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
         run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
 
-        # 2. Upload project
-        yield StreamEvent(stream="stderr", line="Uploading project to sandbox...")
-        project_tarball = _create_project_tarball(project_root)
+        # 2. Upload project (using git archive for clean, reproducible content)
+        yield StreamEvent(stream="stderr", line="Uploading project to sandbox via git archive...")
+        project_tarball = create_git_archive_bytes(project_root)
         run_modal_command(sb, "mkdir", "-p", "/project").wait()
 
         # Write tarball via base64 encoding (Modal stdin API uses bytes differently)
