@@ -364,7 +364,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             if test_exit_code == 0:
                 logger.info("Verification successful!")
             else:
-                logger.error("Test run failed with return code %d", test_exit_code)
+                logger.error(f"Test run failed with return code {test_exit_code}")
         finally:
             sandbox.terminate()
 
