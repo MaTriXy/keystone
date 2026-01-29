@@ -1,5 +1,6 @@
 """Agent runner abstraction for local and Modal execution."""
 
+import shlex
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -31,7 +32,7 @@ def build_claude_command(
     Uses the splat pattern for grouping arguments for better readability.
     """
     return [
-        agent_cmd,
+        *shlex.split(agent_cmd),
         "--dangerously-skip-permissions",
         *("--output-format", "stream-json"),
         "--verbose",
