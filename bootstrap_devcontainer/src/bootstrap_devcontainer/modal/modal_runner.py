@@ -11,7 +11,7 @@ import tarfile
 import threading
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import modal
 
@@ -61,12 +61,18 @@ class ManagedProcess:
         self._stdout_thread.start()
         self._stderr_thread.start()
 
-    def _stream_reader(self, stream: Iterable[str], stream_name: str) -> None:
+    def _stream_reader(
+        self, stream: Iterable[str], stream_name: Literal["stdout", "stderr"]
+    ) -> None:
         logger = logging.getLogger("bootstrap_devcontainer.modal")
         for line in stream:
             clean_line = line.rstrip("\n")
             # Log immediately to Python's logging system
-            logger.info(f"{self.prefix}[{stream_name}] {clean_line}")
+            # Format: [prefix] stream: line (or just [prefix] line for stdout)
+            if stream_name == "stderr":
+                logger.info(f"[{self.prefix}] STDERR: {clean_line}")
+            else:
+                logger.info(f"[{self.prefix}] STDOUT: {clean_line}")
             if self._queue is not None:
                 self._queue.put(StreamEvent(stream=stream_name, line=clean_line))
 
@@ -100,32 +106,34 @@ class ManagedProcess:
 
 
 def run_modal_command(
-    sb: modal.Sandbox, *args: str, capture: bool = False, prefix: str = "", **kwargs: Any
+    sb: modal.Sandbox, *args: str, capture: bool = False, name: str, **kwargs: Any
 ) -> ManagedProcess:
-    """Helper to execute a command and return a ManagedProcess."""
+    """Helper to execute a command and return a ManagedProcess.
+
+    Args:
+        sb: Modal sandbox to run command in
+        args: Command and arguments
+        capture: Whether to capture output for streaming
+        name: Short name for this process (required, used in log prefix)
+        **kwargs: Additional arguments passed to sb.exec()
+    """
+
     logger = logging.getLogger("bootstrap_devcontainer.modal")
-    logger.info(f"{prefix}Running: {shlex.join(args)}")
+    logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
-    return ManagedProcess(proc, prefix=prefix, capture=capture)
+    return ManagedProcess(proc, prefix=name, capture=capture)
 
 
 _SCRIPT_DIR = Path(__file__).parent
 
 
 def _read_claude_auth() -> dict[str, str]:
-    """Read Claude authentication from ~/.claude.json or environment."""
+    """Read Claude authentication from environment."""
     auth_env: dict[str, str] = {}
 
-    # Check for API key in environment first
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if api_key:
         auth_env["ANTHROPIC_API_KEY"] = api_key
-        return auth_env
-
-    # Try ~/.claude.json
-    claude_config = Path.home() / ".claude.json"
-    if claude_config.exists():
-        auth_env["CLAUDE_CONFIG_JSON"] = claude_config.read_text()
 
     return auth_env
 
@@ -193,50 +201,40 @@ class ModalAgentRunner(AgentRunner):
 
         # 1. Start Docker daemon
         # We start it in the background by not calling .wait() here
-        run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
+        run_modal_command(sb, "/start-dockerd.sh", name="dockerd")
 
         # 2. Wait for Docker to be ready
         yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
-        run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
+        run_modal_command(sb, "/wait_for_docker.sh", name="docker-wait").wait()
 
         # 2. Upload project (using git archive for clean, reproducible content)
         yield StreamEvent(stream="stderr", line="Uploading project to sandbox via git archive...")
         project_tarball = create_git_archive_bytes(project_root)
-        run_modal_command(sb, "mkdir", "-p", "/project").wait()
+        run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
 
         # Write tarball via base64 encoding (Modal stdin API uses bytes differently)
         tarball_b64 = base64.b64encode(project_tarball).decode("ascii")
         run_modal_command(
-            sb, "sh", "-c", f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project"
+            sb,
+            "sh",
+            "-c",
+            f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project",
+            name="upload",
         ).wait()
-        run_modal_command(sb, "chown", "-R", "agent:agent", "/project").wait()
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
 
         # 3. Set up Claude auth
         yield StreamEvent(stream="stderr", line="Setting up Claude authentication...")
         auth_env = _read_claude_auth()
 
-        if "CLAUDE_CONFIG_JSON" in auth_env:
-            # Write config file
-            config_content = auth_env["CLAUDE_CONFIG_JSON"]
-            run_modal_command(sb, "mkdir", "-p", "/home/agent").wait()
-            run_modal_command(
-                sb,
-                "sh",
-                "-c",
-                f"cat > /home/agent/.claude.json << 'EOF'\n{config_content}\nEOF",
-            ).wait()
-            run_modal_command(sb, "chown", "agent:agent", "/home/agent/.claude.json").wait()
-
         # 4. Run the agent
         yield StreamEvent(stream="stderr", line="Starting agent...")
 
         # Debug: check what auth we have
-        if "CLAUDE_CONFIG_JSON" in auth_env:
-            yield StreamEvent(stream="stderr", line="Using ~/.claude.json for authentication")
-        elif "ANTHROPIC_API_KEY" in auth_env:
+        if "ANTHROPIC_API_KEY" in auth_env:
             yield StreamEvent(stream="stderr", line="Using ANTHROPIC_API_KEY for authentication")
         else:
-            yield StreamEvent(stream="stderr", line="WARNING: No Claude authentication found!")
+            yield StreamEvent(stream="stderr", line="WARNING: No ANTHROPIC_API_KEY found!")
 
         env_vars = {}
         if "ANTHROPIC_API_KEY" in auth_env:
@@ -257,9 +255,11 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         # Upload script
         # encode to base64 to avoid heredoc issues
         script_b64 = base64.b64encode(agent_script_content.encode()).decode()
-        run_modal_command(sb, "sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh").wait()
-        run_modal_command(sb, "chmod", "+x", "/run_agent.sh").wait()
-        run_modal_command(sb, "chown", "agent:agent", "/run_agent.sh").wait()
+        run_modal_command(
+            sb, "sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh", name="setup"
+        ).wait()
+        run_modal_command(sb, "chmod", "+x", "/run_agent.sh", name="setup").wait()
+        run_modal_command(sb, "chown", "agent:agent", "/run_agent.sh", name="setup").wait()
 
         yield StreamEvent(
             stream="stderr",
@@ -273,7 +273,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             "/run_agent.sh",
             env=None,
             pty=True,
-            prefix="agent: ",
+            name="agent",
             capture=True,
         )
         yield from agent.stream()
@@ -287,7 +287,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             "sh",
             "-c",
             "tar -czf - -C /project .devcontainer | base64",
-            prefix="tar: ",
+            name="extract",
             capture=True,
         )
         tar_lines = []

@@ -17,7 +17,7 @@ from bootstrap_devcontainer.agent_cache import (
     extract_devcontainer_tarball,
 )
 from bootstrap_devcontainer.agent_runner import LocalAgentRunner
-from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+from bootstrap_devcontainer.constants import ANSI_BLUE, ANSI_RESET, STATUS_MARKER, SUMMARY_MARKER
 from bootstrap_devcontainer.git_utils import get_git_tree_hash, is_git_dirty, is_git_repo
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
@@ -26,12 +26,10 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
 )
 
-# Configure logging with detailed format for our modules only
-# Avoid DEBUG level for noisy third-party libs like hpack, httpcore, etc.
+# Configure logging - simple format since process names are in the message prefix
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    format="%(message)s",
 )
 # Enable DEBUG for our own modules
 logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
@@ -240,21 +238,25 @@ def bootstrap(
     verification_success = False
     verification_seconds = 0.0
     agent_summary: str | None = None
+    status_messages: list[str] = []
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
 
         Returns True if a marker was found.
         """
-        nonlocal agent_summary
+        nonlocal agent_summary, status_messages
         found = False
         for line in text.split("\n"):
             if STATUS_MARKER in line:
                 # Extract the status message after the marker
                 idx = line.find(STATUS_MARKER)
                 status_msg = line[idx:].strip()
+                # Extract just the message part after the marker
+                msg_content = status_msg[len(STATUS_MARKER) :].strip()
+                status_messages.append(msg_content)
                 logging.debug(f"Found status marker, printing: {status_msg}")
-                print(status_msg, flush=True)
+                print(f"{ANSI_BLUE}{status_msg}{ANSI_RESET}", flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
                 # Extract the summary message after the marker
@@ -262,7 +264,7 @@ def bootstrap(
                 full_marker = line[idx:].strip()
                 # Extract just the message part after the marker
                 agent_summary = full_marker[len(SUMMARY_MARKER) :].strip()
-                print(full_marker, flush=True)
+                print(f"{ANSI_BLUE}{full_marker}{ANSI_RESET}", flush=True)
                 found = True
         return found
 
@@ -448,6 +450,7 @@ def bootstrap(
         success=overall_success,
         error_message=error_message,
         agent_summary=agent_summary,
+        status_messages=status_messages,
         agent_work_seconds=agent_work_seconds,
         verification_seconds=verification_seconds,
         model=model_name,

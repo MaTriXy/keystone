@@ -49,7 +49,9 @@ def test_run_modal_command_interleaved_streaming():
         """
 
         logger.info("\nExecuting command...")
-        proc = run_modal_command(sb, "bash", "-c", bash_script, pty=False, capture=True)
+        proc = run_modal_command(
+            sb, "bash", "-c", bash_script, pty=False, capture=True, name="test"
+        )
         events = list(proc.stream())
 
         # Log events for inspection
@@ -98,10 +100,10 @@ def test_docker_readiness_and_run():
         logger.info(f"Sandbox created: {sb.object_id}")
 
         logger.info("Starting Docker daemon...")
-        run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
+        run_modal_command(sb, "/start-dockerd.sh", name="dockerd")
 
         logger.info("Waiting for Docker readiness...")
-        run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
+        run_modal_command(sb, "/wait_for_docker.sh", name="docker-wait").wait()
         logger.info("Docker is ready!")
 
         logger.info("Running 'docker run --network host hello-world'...")
@@ -114,7 +116,7 @@ def test_docker_readiness_and_run():
             "--network",
             "host",
             "hello-world",
-            prefix="docker-run: ",
+            name="docker-run",
             capture=True,
         )
         events = list(proc.stream())
@@ -173,7 +175,7 @@ def test_claude_streaming():
             "agent",
             "-c",
             claude_cmd,
-            prefix="claude: ",
+            name="claude",
             capture=True,
             # Claude just plain doesn't work with pty=False
             pty=True,
