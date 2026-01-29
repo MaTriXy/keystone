@@ -26,10 +26,11 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
 )
 
-# Configure logging - simple format since process names are in the message prefix
+# Configure logging with standard format including timestamp, thread, and source location
 logging.basicConfig(
     level=logging.INFO,
-    format="%(message)s",
+    format="%(asctime)s %(thread)d %(name)s %(filename)s:%(lineno)d %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
 )
 # Enable DEBUG for our own modules
 logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
