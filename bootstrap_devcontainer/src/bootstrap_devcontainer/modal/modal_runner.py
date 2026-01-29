@@ -207,11 +207,11 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(sb, "/start-dockerd.sh", name="dockerd")
 
         # 2. Wait for Docker to be ready
-        yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
+        yield StreamEvent(stream="stderr", line="[modal] Waiting for Docker daemon to be ready...")
         run_modal_command(sb, "/wait_for_docker.sh", name="docker-wait").wait()
 
         # 2. Upload project (using git archive for clean, reproducible content)
-        yield StreamEvent(stream="stderr", line="Uploading project to sandbox via git archive...")
+        yield StreamEvent(stream="stderr", line="[modal] Uploading project to sandbox...")
         project_tarball = create_git_archive_bytes(project_root)
         run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
 
@@ -230,17 +230,19 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
 
         # 3. Set up Claude auth
-        yield StreamEvent(stream="stderr", line="Setting up Claude authentication...")
+        yield StreamEvent(stream="stderr", line="[modal] Setting up Claude authentication...")
         auth_env = _read_claude_auth()
 
         # 4. Run the agent
-        yield StreamEvent(stream="stderr", line="Starting agent...")
+        yield StreamEvent(stream="stderr", line="[modal] Starting agent...")
 
         # Debug: check what auth we have
         if "ANTHROPIC_API_KEY" in auth_env:
-            yield StreamEvent(stream="stderr", line="Using ANTHROPIC_API_KEY for authentication")
+            yield StreamEvent(
+                stream="stderr", line="[modal] Using ANTHROPIC_API_KEY for authentication"
+            )
         else:
-            yield StreamEvent(stream="stderr", line="WARNING: No ANTHROPIC_API_KEY found!")
+            yield StreamEvent(stream="stderr", line="[modal] WARNING: No ANTHROPIC_API_KEY found!")
 
         env_vars = {}
         if "ANTHROPIC_API_KEY" in auth_env:
@@ -266,7 +268,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
         yield StreamEvent(
             stream="stderr",
-            line="Executing: su agent -c /run_agent.sh",
+            line="[modal] Executing: su agent -c /run_agent.sh",
         )
         agent = run_modal_command(
             sb,
@@ -283,7 +285,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         self._exit_code = agent.wait()
 
         # 5. Extract .devcontainer directory
-        yield StreamEvent(stream="stderr", line="Extracting .devcontainer from sandbox...")
+        yield StreamEvent(stream="stderr", line="[modal] Extracting .devcontainer from sandbox...")
         # Create tarball in sandbox, then read it using Modal's native filesystem API
         run_modal_command(
             sb,
@@ -314,10 +316,12 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
 
         if not dockerfile_path.exists():
-            yield StreamEvent(stream="stderr", line=f"Dockerfile not found at {dockerfile_path}")
+            yield StreamEvent(
+                stream="stderr", line=f"[modal] Dockerfile not found at {dockerfile_path}"
+            )
             return
 
-        yield StreamEvent(stream="stderr", line="Building devcontainer image via Modal...")
+        yield StreamEvent(stream="stderr", line="[modal] Building devcontainer image...")
 
         # Build image using Modal's cached from_dockerfile
         image = modal.Image.from_dockerfile(
@@ -327,7 +331,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
         app = modal.App.lookup("bootstrap-devcontainer-verify", create_if_missing=True)
 
-        yield StreamEvent(stream="stderr", line="Running tests in Modal sandbox...")
+        yield StreamEvent(stream="stderr", line="[modal] Running tests in sandbox...")
 
         sandbox = modal.Sandbox.create(
             app=app,
@@ -348,7 +352,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             test_exit_code = proc.returncode
 
             # Extract test artifacts using Modal's native filesystem API
-            yield StreamEvent(stream="stderr", line="Extracting test artifacts...")
+            yield StreamEvent(stream="stderr", line="[modal] Extracting test artifacts...")
             tar_proc = sandbox.exec(
                 "tar", "-czf", "/tmp/test_artifacts.tar.gz", "-C", "/test_artifacts", "."
             )
@@ -360,12 +364,12 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
                 test_artifacts_dir.mkdir(parents=True, exist_ok=True)
                 with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
                     tar.extractall(test_artifacts_dir)
-                yield StreamEvent(stream="stderr", line="Test artifacts extracted.")
+                yield StreamEvent(stream="stderr", line="[modal] Test artifacts extracted.")
             except Exception as e:
-                yield StreamEvent(stream="stderr", line=f"Error extracting artifacts: {e}")
+                yield StreamEvent(stream="stderr", line=f"[modal] Error extracting artifacts: {e}")
 
             if test_exit_code == 0:
-                yield StreamEvent(stream="stderr", line="Verification successful!")
+                yield StreamEvent(stream="stderr", line="[modal] Verification successful!")
             else:
                 yield StreamEvent(
                     stream="stderr", line=f"Test run failed with return code {test_exit_code}"
