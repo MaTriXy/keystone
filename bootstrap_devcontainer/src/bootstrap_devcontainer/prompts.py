@@ -6,6 +6,13 @@ We need to build an appropriate dev container and Dockerfile in which this proje
 Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
+   a. This file should include these lines, specifying where the Dockerfile should be and that the build context includes the entire source tree:
+```
+  "build": {"dockerfile": "Dockerfile",
+    "context": "..",
+    // ...
+  }
+```
 2. Create a .devcontainer/Dockerfile alongside that.
 3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile (don't forget to make it executable!)
    a. run_all_tests.sh takes no arguments. It always writes test artifacts to /test_artifacts.
@@ -54,13 +61,15 @@ When finished, emit a final summary as plain text (not via tool calls):
 {SUMMARY_MARKER} <One-line summary of what worked, what didn't, and any tips for future runs.>
 Include anything you wish you had been told at the start. Examples:
 - {SUMMARY_MARKER} Everything worked. Tip: this project needed uv installed in the container.
-- {SUMMARY_MARKER} Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
+- {
+    SUMMARY_MARKER
+} Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
 
 Please don't forget to emit the summary at the end.
 
 To verify, use something like this (adding arguments as appropriate for permissions, etc.)
 1. Build with `devcontainer build --workspace-folder .`
-2. Run `docker run IMAGE ./.devcontainer/run_all_tests.sh` and check return code.
+2. Run `docker run IMAGE ./.devcontainer/run_all_tests.sh` and check return code.  This should work straight from the image, without the devcontainer lifecycle hooks.
 3. If needed, extract artifacts with `docker cp CONTAINER:/test_artifacts ./test_artifacts`.
 """
 
