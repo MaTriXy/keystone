@@ -11,7 +11,7 @@ from pathlib import Path
 import modal
 
 # Path to the sample project (relative to this file)
-SAMPLE_PROJECT = Path(__file__).parent.parent.parent / "samples" / "node_project"
+SAMPLE_PROJECT = Path(__file__).parent / "node_project"
 
 
 def run_verification():
