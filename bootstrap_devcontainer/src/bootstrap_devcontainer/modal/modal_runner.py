@@ -113,19 +113,12 @@ _SCRIPT_DIR = Path(__file__).parent
 
 
 def _read_claude_auth() -> dict[str, str]:
-    """Read Claude authentication from ~/.claude.json or environment."""
+    """Read Claude authentication from environment."""
     auth_env: dict[str, str] = {}
 
-    # Check for API key in environment first
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if api_key:
         auth_env["ANTHROPIC_API_KEY"] = api_key
-        return auth_env
-
-    # Try ~/.claude.json
-    claude_config = Path.home() / ".claude.json"
-    if claude_config.exists():
-        auth_env["CLAUDE_CONFIG_JSON"] = claude_config.read_text()
 
     return auth_env
 
@@ -215,28 +208,14 @@ class ModalAgentRunner(AgentRunner):
         yield StreamEvent(stream="stderr", line="Setting up Claude authentication...")
         auth_env = _read_claude_auth()
 
-        if "CLAUDE_CONFIG_JSON" in auth_env:
-            # Write config file
-            config_content = auth_env["CLAUDE_CONFIG_JSON"]
-            run_modal_command(sb, "mkdir", "-p", "/home/agent").wait()
-            run_modal_command(
-                sb,
-                "sh",
-                "-c",
-                f"cat > /home/agent/.claude.json << 'EOF'\n{config_content}\nEOF",
-            ).wait()
-            run_modal_command(sb, "chown", "agent:agent", "/home/agent/.claude.json").wait()
-
         # 4. Run the agent
         yield StreamEvent(stream="stderr", line="Starting agent...")
 
         # Debug: check what auth we have
-        if "CLAUDE_CONFIG_JSON" in auth_env:
-            yield StreamEvent(stream="stderr", line="Using ~/.claude.json for authentication")
-        elif "ANTHROPIC_API_KEY" in auth_env:
+        if "ANTHROPIC_API_KEY" in auth_env:
             yield StreamEvent(stream="stderr", line="Using ANTHROPIC_API_KEY for authentication")
         else:
-            yield StreamEvent(stream="stderr", line="WARNING: No Claude authentication found!")
+            yield StreamEvent(stream="stderr", line="WARNING: No ANTHROPIC_API_KEY found!")
 
         env_vars = {}
         if "ANTHROPIC_API_KEY" in auth_env:
