@@ -26,12 +26,10 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
 )
 
-# Configure logging with detailed format for our modules only
-# Avoid DEBUG level for noisy third-party libs like hpack, httpcore, etc.
+# Configure logging - simple format since process names are in the message prefix
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    format="%(message)s",
 )
 # Enable DEBUG for our own modules
 logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
