@@ -4,6 +4,7 @@ import logging
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -26,12 +27,22 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
 )
 
+
+class ISOFormatter(logging.Formatter):
+    """Log formatter with ISO 8601 timestamps including milliseconds and timezone."""
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: ARG002
+        dt = datetime.fromtimestamp(record.created, tz=UTC).astimezone()
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{int(record.msecs):03d}{dt.strftime('%z')}"
+
+
 # Configure logging with standard format including timestamp, thread, and source location
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(thread)d %(name)s %(filename)s:%(lineno)d %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
+_handler = logging.StreamHandler()
+_handler.setFormatter(
+    ISOFormatter("%(asctime)s %(thread)d %(name)s %(filename)s:%(lineno)d %(message)s")
 )
+logging.root.addHandler(_handler)
+logging.root.setLevel(logging.INFO)
 # Enable DEBUG for our own modules
 logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
 
