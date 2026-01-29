@@ -256,7 +256,7 @@ def bootstrap(
                 msg_content = status_msg[len(STATUS_MARKER) :].strip()
                 status_messages.append(msg_content)
                 logging.debug(f"Found status marker, printing: {status_msg}")
-                print(status_msg, flush=True)
+                print(f"\033[34m{status_msg}\033[0m", flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
                 # Extract the summary message after the marker
@@ -264,7 +264,7 @@ def bootstrap(
                 full_marker = line[idx:].strip()
                 # Extract just the message part after the marker
                 agent_summary = full_marker[len(SUMMARY_MARKER) :].strip()
-                print(full_marker, flush=True)
+                print(f"\033[34m{full_marker}\033[0m", flush=True)
                 found = True
         return found
 
