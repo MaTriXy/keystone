@@ -238,9 +238,13 @@ class AgentLog:
             LIMIT 1
         """)
 
-        with self._engine.connect() as conn:
-            result = conn.execute(query, {"cache_hash": cache_hash})
-            row = result.fetchone()
+        try:
+            with self._engine.connect() as conn:
+                result = conn.execute(query, {"cache_hash": cache_hash})
+                row = result.fetchone()
+        except Exception:
+            # Table may not exist yet (first run)
+            return None
 
         if row is None:
             return None

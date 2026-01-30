@@ -122,39 +122,3 @@
     'success': False,
   })
 # ---
-# name: test_e2e_sample_projects[python_project]
-  dict({
-    'agent_exit_code': 0,
-    'agent_summary': "All tests pass successfully. The dev container uses UV for fast Python dependency management with optimized layer caching. The setup properly handles Modal's snapshot mechanism with UV_LINK_MODE=copy and uses --network=host for network access in the gVisor environment.",
-    'cargo_test_summary': None,
-    'error_message': None,
-    'go_test_summary': None,
-    'model': '',
-    'node_test_summary': None,
-    'pytest_summary': dict({
-      'failed_count': 0,
-      'failed_tests': list([
-      ]),
-      'passed_count': 2,
-      'passed_tests': list([
-        'tests/test_app.py::test_add',
-        'tests/test_app.py::test_multiply',
-      ]),
-      'skipped_count': 0,
-      'skipped_tests': list([
-      ]),
-    }),
-    'status_messages': list([
-      'Exploring repository structure to identify file types and test locations.',
-      'Creating devcontainer.json, Dockerfile, and run_all_tests.sh for Python project.',
-      'Building dev container image to verify setup.',
-      'Running tests in the dev container.',
-      'Fixing run_all_tests.sh to remove --no-cov flag.',
-      'Rebuilding dev container with updated test script.',
-      'Running tests in the updated container.',
-      'Verifying test artifacts were created correctly.',
-      'Verification complete. All tests pass successfully.',
-    ]),
-    'success': True,
-  })
-# ---

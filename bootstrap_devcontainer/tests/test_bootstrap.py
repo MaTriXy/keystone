@@ -51,7 +51,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         str(test_artifacts_dir),
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
-        "--sqlite_cache_dir",
+        "--log_db",
         str(cache_file),
         "--agent_local",  # Use local runner for fake agent tests
     ]
@@ -85,12 +85,13 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     assert output.success, f"Test failed: {output}"
 
     # Verify agent_summary was captured
-    assert output.agent_summary == "Created Python devcontainer with pytest support.", (
+    assert output.agent_summary is not None, "Expected agent_summary to be set"
+    assert output.agent_summary.message == "Created Python devcontainer with pytest support.", (
         f"Expected agent_summary to be captured, got: {output.agent_summary}"
     )
 
     # Verify status_messages were captured in order
-    assert output.status_messages == [
+    assert [m.message for m in output.status_messages] == [
         "Exploring repository structure.",
         "Creating devcontainer.json and Dockerfile.",
         "Completed setup of devcontainer files.",
@@ -152,7 +153,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         str(test_artifacts_dir2),
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
-        "--sqlite_cache_dir",
+        "--log_db",
         str(cache_file),
         "--agent_local",  # Use local runner for fake agent tests
     ]
@@ -253,7 +254,7 @@ def test_e2e_sample_projects(
         str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
-        "--sqlite_cache_dir",
+        "--log_db",
         str(cache_file),
     ]
 
