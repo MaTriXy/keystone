@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -13,6 +15,21 @@ class TokenSpending(BaseModel):
     cached: int = 0
     output: int = 0
     cache_creation: int = 0
+
+
+class InferenceCost(BaseModel):
+    """Cumulative inference cost at a point in time."""
+
+    cost_usd: float = 0.0
+    token_spending: TokenSpending = TokenSpending()
+
+
+class AgentStatusMessage(BaseModel):
+    """A status message from the agent with timestamp and cumulative cost."""
+
+    timestamp: datetime
+    message: str
+    cumulative_cost: InferenceCost | None = None
 
 
 class TestSummary(BaseModel):
@@ -33,10 +50,9 @@ class BootstrapResult(BaseModel):
     model: str = ""
     agent_exit_code: int
     agent_work_seconds: float
-    agent_summary: str | None = None
-    status_messages: list[str] = []
-    cost_usd: float
-    token_spending: TokenSpending
+    agent_summary: AgentStatusMessage | None = None
+    status_messages: list[AgentStatusMessage] = []
+    cost: InferenceCost
 
     verification_seconds: float | None = None
     # Per-language test summaries - each is populated only if that report format was found

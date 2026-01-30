@@ -289,9 +289,8 @@ def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
     # Remove timing fields
     result.pop("agent_work_seconds", None)
     result.pop("verification_seconds", None)
-    result.pop("cost_usd", None)
-    # Token counts vary, but success/model/test results should be stable
-    result.pop("token_spending", None)
+    # Cost and token counts vary, but success/model/test results should be stable
+    result.pop("cost", None)
     return result
 
 

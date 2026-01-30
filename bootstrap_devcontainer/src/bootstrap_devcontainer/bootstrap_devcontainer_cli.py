@@ -27,7 +27,9 @@ from bootstrap_devcontainer.git_utils import (
 )
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
+    AgentStatusMessage,
     BootstrapResult,
+    InferenceCost,
     TestSummary,
     TokenSpending,
 )
@@ -254,8 +256,19 @@ def bootstrap(
     exit_code = 1
     verification_success = False
     verification_seconds = 0.0
-    agent_summary: str | None = None
-    status_messages: list[str] = []
+    agent_summary: AgentStatusMessage | None = None
+    status_messages: list[AgentStatusMessage] = []
+
+    def _make_status_message(message: str) -> AgentStatusMessage:
+        """Create an AgentStatusMessage with current timestamp and cumulative cost."""
+        return AgentStatusMessage(
+            timestamp=datetime.now(UTC),
+            message=message,
+            cumulative_cost=InferenceCost(
+                cost_usd=total_cost_usd,
+                token_spending=TokenSpending(**token_spending),
+            ),
+        )
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
@@ -271,7 +284,7 @@ def bootstrap(
                 status_msg = line[idx:].strip()
                 # Extract just the message part after the marker
                 msg_content = status_msg[len(STATUS_MARKER) :].strip()
-                status_messages.append(msg_content)
+                status_messages.append(_make_status_message(msg_content))
                 logging.debug(f"Found status marker, printing: {status_msg}")
                 print(f"{ANSI_BLUE}{status_msg}{ANSI_RESET}", flush=True)
                 found = True
@@ -280,7 +293,8 @@ def bootstrap(
                 idx = line.find(SUMMARY_MARKER)
                 full_marker = line[idx:].strip()
                 # Extract just the message part after the marker
-                agent_summary = full_marker[len(SUMMARY_MARKER) :].strip()
+                msg_content = full_marker[len(SUMMARY_MARKER) :].strip()
+                agent_summary = _make_status_message(msg_content)
                 print(f"{ANSI_BLUE}{full_marker}{ANSI_RESET}", flush=True)
                 found = True
         return found
@@ -482,8 +496,10 @@ def bootstrap(
         agent_work_seconds=agent_work_seconds,
         verification_seconds=verification_seconds,
         model=model_name,
-        token_spending=TokenSpending(**token_spending),
-        cost_usd=total_cost_usd,
+        cost=InferenceCost(
+            cost_usd=total_cost_usd,
+            token_spending=TokenSpending(**token_spending),
+        ),
         agent_exit_code=exit_code,
         pytest_summary=test_reports.pytest_summary,
         go_test_summary=test_reports.go_test_summary,
