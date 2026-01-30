@@ -322,9 +322,36 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         Uses docker commands directly instead of Modal's from_dockerfile, which:
         - Avoids 20-30s cold start for a new sandbox
         - Benefits from Docker's build cache already in this sandbox
+
+        Re-uploads fresh project source to ensure agent didn't corrupt the tree,
+        then overlays the .devcontainer from project_root (which has the agent's output).
         """
         sb = self.ensure_sandbox()
-        self.upload_project(project_root)
+
+        # Re-upload fresh project source (agent may have modified files)
+        logger.info("Uploading fresh project source for verification...")
+        project_tarball = create_git_archive_bytes(project_root)
+        run_modal_command(sb, "rm", "-rf", "/project", name="verify-setup").wait()
+        run_modal_command(sb, "mkdir", "-p", "/project", name="verify-setup").wait()
+        with sb.open("/tmp/project.tar.gz", "wb") as f:
+            f.write(project_tarball)
+        run_modal_command(
+            sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="verify-setup"
+        ).wait()
+
+        # Now overlay the .devcontainer from project_root (contains agent's output)
+        devcontainer_dir = project_root / ".devcontainer"
+        if devcontainer_dir.exists():
+            logger.info("Uploading .devcontainer for verification...")
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                tar.add(str(devcontainer_dir), arcname=".devcontainer")
+            buf.seek(0)
+            with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
+                f.write(buf.read())
+            run_modal_command(
+                sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
+            ).wait()
 
         # Check Dockerfile exists in sandbox
         check_proc = run_modal_command(
