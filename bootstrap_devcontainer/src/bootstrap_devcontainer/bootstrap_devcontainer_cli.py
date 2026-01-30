@@ -142,20 +142,23 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
         except Exception as e:
             print(f"Error parsing Go test report: {e}", file=sys.stderr)
 
-    # Try Node test JSON report
+    # Try Node test JSON report (newline-delimited JSON format)
     node_report = test_artifacts_dir / "node-test-report.json"
     if node_report.exists():
         try:
-            report_data = json.loads(node_report.read_text())
             passed, failed, skipped = [], [], []
-            for test in report_data.get("tests", []):
-                name = test.get("name", "")
-                status = test.get("status", "")
-                if status == "passed":
+            for line in node_report.read_text().strip().split("\n"):
+                if not line:
+                    continue
+                event = json.loads(line)
+                event_type = event.get("type", "")
+                # Node test runner uses test:pass, test:fail, test:skip event types
+                name = event.get("data", {}).get("name", "")
+                if event_type == "test:pass":
                     passed.append(name)
-                elif status == "failed":
+                elif event_type == "test:fail":
                     failed.append(name)
-                elif status == "skipped":
+                elif event_type == "test:skip":
                     skipped.append(name)
             reports.node_test_summary = TestSummary(
                 passed_count=len(passed),

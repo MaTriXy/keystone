@@ -90,7 +90,9 @@ so that the image can execute its own tests.
       iv. Create language-specific JSON test reports in /test_artifacts:
           - Python: /test_artifacts/pytest-json-report.json (use pytest-json-report plugin)
           - Go: /test_artifacts/go-test-report.json (use `go test -json ./...`)
-          - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=json`)
+          - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`)
+            IMPORTANT: Node's JSON reporter outputs newline-delimited JSON. Each line is an event object with "type" field.
+            Look for events with type="test:pass", type="test:fail", or type="test:skip" to count test results.
           - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
       v. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
