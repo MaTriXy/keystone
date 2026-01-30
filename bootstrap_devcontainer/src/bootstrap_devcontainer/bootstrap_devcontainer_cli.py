@@ -445,9 +445,7 @@ def bootstrap(
             # The runner's verify method should yield events we can display
             verification_failed = False
             for event in runner.verify(project_root, test_artifacts_dir):
-                timestamp = datetime.now(UTC).strftime("%H:%M:%S")
-                stream_label = "stdout" if event.stream == "stdout" else "stderr"
-                print(f"[{timestamp}] [{stream_label}] {event.line}", file=sys.stderr, flush=True)
+                # ManagedProcess already logs the output; just check for failures
                 if "Test run failed" in event.line or "Build failed" in event.line:
                     verification_failed = True
                     verification_error = event.line
