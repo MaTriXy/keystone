@@ -621,6 +621,11 @@ def bootstrap(
     if not overall_success:
         raise typer.Exit(code=1)
 
+    # Log the output location
+    devcontainer_dir = project_root / ".devcontainer"
+    if devcontainer_dir.exists():
+        logging.info(f"{ANSI_BLUE}Wrote devcontainer to: {devcontainer_dir}{ANSI_RESET}")
+
 
 def main():
     """Entry point for the CLI."""
