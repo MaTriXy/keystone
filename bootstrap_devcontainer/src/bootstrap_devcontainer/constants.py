@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-DEFAULT_CACHE_PATH = Path.home() / ".cache" / "bootstrap_devcontainer_log.db"
+DEFAULT_LOG_PATH = Path.home() / ".bootstrap_devcontainer" / "log.sqlite"
+DEFAULT_TESTING_LOG_PATH = Path.home() / ".bootstrap_devcontainer" / "testing_log.sqlite"
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"

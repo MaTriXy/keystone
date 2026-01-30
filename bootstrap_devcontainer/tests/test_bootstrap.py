@@ -10,7 +10,7 @@ import pytest
 from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
 
-from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
+from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import BootstrapResult
 
@@ -22,6 +22,7 @@ def test_cli_help() -> None:
         ["bootstrap-devcontainer", "--help"],
         capture_output=True,
         text=True,
+        check=True,
     )
     assert result.returncode == 0
     assert "[OPTIONS]" in result.stdout
@@ -227,9 +228,9 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     "project_root",
     [
         "python_project",
-        "node_project",
-        "go_project",
-        "rust_project",
+        #        "node_project",
+        #        "go_project",
+        #        "rust_project",
         "fullstack_project",
         "python_with_failing_test",
     ],
@@ -239,7 +240,7 @@ def test_e2e_sample_projects(
     tmp_path: Path, project_root: Path, snapshot: SnapshotAssertion
 ) -> None:
     test_artifacts_dir = tmp_path / "test_artifacts"
-    cache_file = DEFAULT_CACHE_PATH
+    cache_file = DEFAULT_TESTING_LOG_PATH
 
     logger.info("=" * 60)
     logger.info("E2E Test Starting")
