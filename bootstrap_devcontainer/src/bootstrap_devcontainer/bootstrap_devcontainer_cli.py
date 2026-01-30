@@ -420,6 +420,23 @@ def bootstrap(
 
         # Verification step
         print("Verifying agent's work...", file=sys.stderr)
+
+        # Print Dockerfile and test script for visibility
+        dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
+        test_script_path = project_root / ".devcontainer" / "run_all_tests.sh"
+
+        if dockerfile_path.exists():
+            print("=" * 60, file=sys.stderr)
+            print(f"Dockerfile: {dockerfile_path}", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            print(dockerfile_path.read_text(), file=sys.stderr)
+
+        if test_script_path.exists():
+            print("=" * 60, file=sys.stderr)
+            print(f"Test script: {test_script_path}", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            print(test_script_path.read_text(), file=sys.stderr)
+
         verification_start_time = time.time()
         verification_error: str | None = None
         try:
