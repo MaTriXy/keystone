@@ -25,8 +25,8 @@ from bootstrap_devcontainer.agent_runner import (
     StreamEvent,
     build_claude_command,
 )
-from bootstrap_devcontainer.git_utils import create_git_archive_bytes
 from bootstrap_devcontainer.modal.image import create_modal_image
+from bootstrap_devcontainer.schema import VerifyResult
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,6 @@ class ModalAgentRunner(AgentRunner):
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
-        self._project_uploaded: bool = False
 
     def ensure_sandbox(self) -> modal.Sandbox:
         """Create sandbox if not already created. Returns the sandbox."""
@@ -192,34 +191,30 @@ class ModalAgentRunner(AgentRunner):
 
         return self._sandbox
 
-    def upload_project(self, project_root: Path) -> None:
-        """Upload project to sandbox. Idempotent - only uploads once."""
-        if self._project_uploaded:
-            return
-
+    def upload_project(self, project_archive: bytes) -> None:
+        """Upload project archive to sandbox."""
         sb = self.ensure_sandbox()
         logger.info("Uploading project to sandbox...")
-        project_tarball = create_git_archive_bytes(project_root)
+        run_modal_command(sb, "rm", "-rf", "/project", name="upload").wait()
         run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
 
         with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(project_tarball)
+            f.write(project_archive)
         run_modal_command(
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="upload"
         ).wait()
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
-        self._project_uploaded = True
 
     def run(
         self,
         prompt: str,
-        project_root: Path,
+        project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
-        self.upload_project(project_root)
+        self.upload_project(project_archive)
 
         try:
             yield from self._run_agent(prompt, max_budget_usd, agent_cmd)
@@ -314,61 +309,50 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
     def verify(
         self,
-        project_root: Path,
+        project_archive: bytes,
+        devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-    ) -> Iterator[StreamEvent]:
+    ) -> VerifyResult:
         """Run verification by building and running docker in the existing sandbox.
 
         Uses docker commands directly instead of Modal's from_dockerfile, which:
         - Avoids 20-30s cold start for a new sandbox
         - Benefits from Docker's build cache already in this sandbox
-
-        Re-uploads fresh project source to ensure agent didn't corrupt the tree,
-        then overlays the .devcontainer from project_root (which has the agent's output).
         """
         sb = self.ensure_sandbox()
 
-        # Re-upload fresh project source (agent may have modified files)
-        logger.info("Uploading fresh project source for verification...")
-        project_tarball = create_git_archive_bytes(project_root)
+        # Upload fresh project source
+        logger.info("Uploading project source for verification...")
         run_modal_command(sb, "rm", "-rf", "/project", name="verify-setup").wait()
         run_modal_command(sb, "mkdir", "-p", "/project", name="verify-setup").wait()
         with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(project_tarball)
+            f.write(project_archive)
         run_modal_command(
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="verify-setup"
         ).wait()
 
-        # Now overlay the .devcontainer from project_root (contains agent's output)
-        devcontainer_dir = project_root / ".devcontainer"
-        if devcontainer_dir.exists():
-            logger.info("Uploading .devcontainer for verification...")
-            buf = io.BytesIO()
-            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-                tar.add(str(devcontainer_dir), arcname=".devcontainer")
-            buf.seek(0)
-            with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
-                f.write(buf.read())
-            run_modal_command(
-                sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
-            ).wait()
+        # Overlay devcontainer
+        logger.info("Uploading .devcontainer for verification...")
+        with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
+            f.write(devcontainer_tarball)
+        run_modal_command(
+            sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
+        ).wait()
 
-        # Check Dockerfile exists in sandbox
+        # Check Dockerfile exists
         check_proc = run_modal_command(
             sb, "test", "-f", "/project/.devcontainer/Dockerfile", name="verify"
         )
         if check_proc.wait() != 0:
-            logger.error("Dockerfile not found at /project/.devcontainer/Dockerfile")
-            yield StreamEvent(
-                stream="stderr",
-                line="Build failed: .devcontainer/Dockerfile not found in sandbox.",
+            return VerifyResult(
+                success=False,
+                error_message="Build failed: .devcontainer/Dockerfile not found.",
             )
-            return
 
         image_name = "bootstrap-verify"
         container_name = "bootstrap-verify-container"
 
-        # 1. Build the image using docker
+        # 1. Build the image
         logger.info("Building devcontainer image with docker...")
         build_proc = run_modal_command(
             sb,
@@ -380,19 +364,16 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             "/project/.devcontainer/Dockerfile",
             "/project",
             name="docker-build",
-            capture=True,
         )
-        yield from build_proc.stream()
         build_exit = build_proc.wait()
         if build_exit != 0:
-            yield StreamEvent(stream="stderr", line=f"Build failed with exit code {build_exit}")
-            return
+            return VerifyResult(
+                success=False, error_message=f"Build failed with exit code {build_exit}"
+            )
 
-        # 2. Run the test script in a container
+        # 2. Run tests
         logger.info("Running tests in container...")
-        # Remove any existing container with that name
         run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
-
         test_proc = run_modal_command(
             sb,
             "docker",
@@ -402,12 +383,10 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             image_name,
             "./.devcontainer/run_all_tests.sh",
             name="docker-test",
-            capture=True,
         )
-        yield from test_proc.stream()
         test_exit_code = test_proc.wait()
 
-        # 3. Extract test artifacts from container
+        # 3. Extract test artifacts
         logger.info("Extracting test artifacts...")
         run_modal_command(
             sb,
@@ -417,8 +396,6 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             "/tmp/test_artifacts",
             name="extract",
         ).wait()
-
-        # Tar and download artifacts
         run_modal_command(
             sb,
             "tar",
@@ -445,11 +422,11 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
         if test_exit_code == 0:
             logger.info("Verification successful!")
-            yield StreamEvent(stream="stderr", line="Verification successful!")
+            return VerifyResult(success=True)
         else:
             logger.error(f"Test run failed with return code {test_exit_code}")
-            yield StreamEvent(
-                stream="stderr", line=f"Test run failed with return code {test_exit_code}"
+            return VerifyResult(
+                success=False, error_message=f"Test run failed with return code {test_exit_code}"
             )
 
     def cleanup(self) -> None:

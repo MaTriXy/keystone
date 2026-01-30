@@ -1,6 +1,13 @@
 from pydantic import BaseModel
 
 
+class VerifyResult(BaseModel):
+    """Result of running verification tests."""
+
+    success: bool
+    error_message: str | None = None
+
+
 class TokenSpending(BaseModel):
     input: int = 0
     cached: int = 0

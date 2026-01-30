@@ -1,8 +1,10 @@
 """Agent runner abstraction for local and Modal execution."""
 
+import io
 import shlex
 import shutil
 import subprocess
+import tarfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -10,8 +12,8 @@ from pathlib import Path
 from typing import Literal
 
 from bootstrap_devcontainer.agent_cache import create_devcontainer_tarball
-from bootstrap_devcontainer.git_utils import extract_git_archive_to_temp
 from bootstrap_devcontainer.process_runner import run_process
+from bootstrap_devcontainer.schema import VerifyResult
 
 DEFAULT_AGENT_TIMEOUT = 3600
 
@@ -48,7 +50,7 @@ class AgentRunner(ABC):
     def run(
         self,
         prompt: str,
-        project_root: Path,
+        project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
     ) -> Iterator[StreamEvent]:
@@ -56,7 +58,7 @@ class AgentRunner(ABC):
 
         Args:
             prompt: The prompt to send to the agent.
-            project_root: Path to the project being bootstrapped.
+            project_archive: Git archive tarball of the project.
             max_budget_usd: Maximum budget for agent inference.
             agent_cmd: Base command to run the agent (e.g., "claude").
 
@@ -79,17 +81,19 @@ class AgentRunner(ABC):
     @abstractmethod
     def verify(
         self,
-        project_root: Path,
+        project_archive: bytes,
+        devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-    ) -> Iterator[StreamEvent]:
-        """Run verification tests and yield output events.
+    ) -> VerifyResult:
+        """Run verification tests on pristine source + agent's devcontainer.
 
         Args:
-            project_root: Path to the project.
+            project_archive: Git archive tarball of the original project source.
+            devcontainer_tarball: Tarball of .devcontainer/ created by agent.
             test_artifacts_dir: Directory to store test artifacts.
 
-        Yields:
-            StreamEvent for each line of stdout/stderr.
+        Returns:
+            VerifyResult with success status and optional error message.
         """
         ...
 
@@ -108,7 +112,6 @@ class LocalAgentRunner(AgentRunner):
 
     def __init__(self) -> None:
         self._exit_code: int = 1
-        self._source_project_root: Path | None = None  # Original git repo
         self._work_dir: Path | None = None  # Temp dir from git archive
 
     def _check_docker_available(self) -> bool:
@@ -126,7 +129,7 @@ class LocalAgentRunner(AgentRunner):
     def run(
         self,
         prompt: str,
-        project_root: Path,
+        project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
     ) -> Iterator[StreamEvent]:
@@ -138,14 +141,16 @@ class LocalAgentRunner(AgentRunner):
             self._exit_code = 1
             return
 
-        self._source_project_root = project_root
-
-        # Extract git archive to clean temp directory
+        # Extract archive to temp directory
         yield StreamEvent(
             stream="stderr",
-            line="Extracting git archive to clean working directory...",
+            line="Extracting project archive to working directory...",
         )
-        self._work_dir = extract_git_archive_to_temp(project_root)
+        import tempfile
+
+        self._work_dir = Path(tempfile.mkdtemp(prefix="bootstrap-agent-"))
+        with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
+            tar.extractall(self._work_dir)
 
         events: list[StreamEvent] = []
 
@@ -187,104 +192,92 @@ class LocalAgentRunner(AgentRunner):
 
     def verify(
         self,
-        project_root: Path,
+        project_archive: bytes,
+        devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-    ) -> Iterator[StreamEvent]:
+    ) -> VerifyResult:
         """Run verification tests locally using Docker.
 
-        Uses the work_dir (from git archive) which contains the .devcontainer
-        created by the agent.
+        Extracts pristine project source + agent's devcontainer to a temp dir,
+        then builds and runs tests.
         """
-        import shlex
+        import tempfile
 
         if not self._check_docker_available():
-            yield StreamEvent(
-                stream="stderr",
-                line="Error: Docker is required for local verification but not available.",
-            )
-            return
-
-        # Use work_dir if available (agent was run), otherwise fall back to project_root
-        work_dir = self._work_dir if self._work_dir is not None else project_root
-
-        # Check if devcontainer.json exists before attempting build
-        devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"
-        if not devcontainer_json.exists():
-            yield StreamEvent(
-                stream="stderr",
-                line="Build failed: .devcontainer/devcontainer.json not found. "
-                "The agent did not create a valid devcontainer configuration.",
-            )
-            return
-
-        image_name = f"bootstrap-test-{project_root.name.lower()}"
-        container_name = f"bootstrap-test-{project_root.name.lower()}-container"
-
-        # 1. Build the image
-        build_cmd = [
-            "devcontainer",
-            "build",
-            "--workspace-folder",
-            str(work_dir),
-            "--image-name",
-            image_name,
-        ]
-        yield StreamEvent(stream="stderr", line=f"Building image: {shlex.join(build_cmd)}")
-
-        def build_stdout(line: str) -> None:
-            pass  # We could yield these if we want more verbose output
-
-        def build_stderr(line: str) -> None:
-            pass
-
-        # For now, let's just use subprocess directly or run_process
-        build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
-        if build_proc.returncode != 0:
-            yield StreamEvent(stream="stderr", line=f"Build failed:\n{build_proc.stderr}")
-            return
-
-        # 2. Run tests (no --rm so we can extract artifacts)
-        test_cmd = [
-            "docker",
-            "run",
-            "--name",
-            container_name,
-            image_name,
-            "./.devcontainer/run_all_tests.sh",
-        ]
-        yield StreamEvent(stream="stderr", line=f"Running tests: {shlex.join(test_cmd)}")
-
-        test_run = subprocess.run(test_cmd, capture_output=True, text=True)
-        if test_run.stdout:
-            for line in test_run.stdout.splitlines():
-                yield StreamEvent(stream="stdout", line=line)
-        if test_run.stderr:
-            for line in test_run.stderr.splitlines():
-                yield StreamEvent(stream="stderr", line=line)
-
-        # 3. Extract artifacts
-        cp_cmd = [
-            "docker",
-            "cp",
-            f"{container_name}:/test_artifacts/.",
-            str(test_artifacts_dir),
-        ]
-        yield StreamEvent(stream="stderr", line=f"Extracting artifacts: {shlex.join(cp_cmd)}")
-        cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
-        if cp_result.returncode != 0:
-            yield StreamEvent(
-                stream="stderr", line=f"Warning: artifact extraction failed: {cp_result.stderr}"
+            return VerifyResult(
+                success=False,
+                error_message="Docker is required for local verification but not available.",
             )
 
-        # 4. Clean up container
-        subprocess.run(["docker", "rm", container_name], capture_output=True)
+        # Extract to fresh temp directory
+        work_dir = Path(tempfile.mkdtemp(prefix="bootstrap-verify-"))
+        try:
+            # Extract project archive
+            with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
+                tar.extractall(work_dir)
 
-        if test_run.returncode == 0:
-            yield StreamEvent(stream="stderr", line="Verification successful!")
-        else:
-            yield StreamEvent(
-                stream="stderr", line=f"Test run failed with return code {test_run.returncode}"
+            # Overlay devcontainer
+            with tarfile.open(fileobj=io.BytesIO(devcontainer_tarball), mode="r:gz") as tar:
+                tar.extractall(work_dir)
+
+            # Check if devcontainer.json exists
+            devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"
+            if not devcontainer_json.exists():
+                return VerifyResult(
+                    success=False,
+                    error_message="Build failed: .devcontainer/devcontainer.json not found.",
+                )
+
+            image_name = "bootstrap-verify-local"
+            container_name = "bootstrap-verify-local-container"
+
+            # 1. Build the image
+            build_cmd = [
+                "devcontainer",
+                "build",
+                "--workspace-folder",
+                str(work_dir),
+                "--image-name",
+                image_name,
+            ]
+            build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
+            if build_proc.returncode != 0:
+                return VerifyResult(
+                    success=False, error_message=f"Build failed:\n{build_proc.stderr}"
+                )
+
+            # 2. Run tests
+            # Remove any existing container
+            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+            test_cmd = [
+                "docker",
+                "run",
+                "--name",
+                container_name,
+                image_name,
+                "./.devcontainer/run_all_tests.sh",
+            ]
+            test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+
+            # 3. Extract artifacts
+            test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["docker", "cp", f"{container_name}:/test_artifacts/.", str(test_artifacts_dir)],
+                capture_output=True,
             )
+
+            # 4. Clean up container
+            subprocess.run(["docker", "rm", container_name], capture_output=True)
+
+            if test_run.returncode == 0:
+                return VerifyResult(success=True)
+            else:
+                return VerifyResult(
+                    success=False,
+                    error_message=f"Test run failed with return code {test_run.returncode}",
+                )
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     def cleanup(self) -> None:
         """Clean up the temporary work directory."""

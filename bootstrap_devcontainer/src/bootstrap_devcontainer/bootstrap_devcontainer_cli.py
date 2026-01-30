@@ -19,7 +19,12 @@ from bootstrap_devcontainer.agent_cache import (
 )
 from bootstrap_devcontainer.agent_runner import LocalAgentRunner
 from bootstrap_devcontainer.constants import ANSI_BLUE, ANSI_RESET, STATUS_MARKER, SUMMARY_MARKER
-from bootstrap_devcontainer.git_utils import get_git_tree_hash, is_git_dirty, is_git_repo
+from bootstrap_devcontainer.git_utils import (
+    create_git_archive_bytes,
+    get_git_tree_hash,
+    is_git_dirty,
+    is_git_repo,
+)
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
     BootstrapResult,
@@ -342,6 +347,10 @@ def bootstrap(
             )
             cached_value = cache.get(cache_key)
 
+        # Create project archive once - used for both agent run and verification
+        project_archive = create_git_archive_bytes(project_root)
+
+        devcontainer_tarball: bytes = b""
         if cached_value is not None:
             # Cache hit - replay events and restore .devcontainer
             print(
@@ -360,6 +369,7 @@ def bootstrap(
                     process_stderr_line(event.line)
             extract_devcontainer_tarball(cached_value.devcontainer_tarball, project_root)
             exit_code = cached_value.return_code
+            devcontainer_tarball = cached_value.devcontainer_tarball
         else:
             # Cache miss - run agent
             if cache is not None:
@@ -375,7 +385,7 @@ def bootstrap(
                 assert agent_cmd is not None
                 assert max_budget_usd is not None
 
-                for event in runner.run(prompt, project_root, max_budget_usd, agent_cmd):
+                for event in runner.run(prompt, project_archive, max_budget_usd, agent_cmd):
                     if event_collector is not None:
                         event_collector.add(event.stream, event.line)
                     if event.stream == "stdout":
@@ -388,8 +398,8 @@ def bootstrap(
                 # If the agent succeeded (or at least finished), extract the .devcontainer
                 # so it's available for local use and for the next verification step
                 try:
-                    tarball = runner.get_devcontainer_tarball()
-                    extract_devcontainer_tarball(tarball, project_root)
+                    devcontainer_tarball = runner.get_devcontainer_tarball()
+                    extract_devcontainer_tarball(devcontainer_tarball, project_root)
 
                     # Store in cache if caching is enabled and agent succeeded
                     if (
@@ -400,7 +410,7 @@ def bootstrap(
                     ):
                         cache_value = CacheValue(
                             events=event_collector.get_events(),
-                            devcontainer_tarball=tarball,
+                            devcontainer_tarball=devcontainer_tarball,
                             return_code=exit_code,
                         )
                         cache.set(cache_key, cache_value)
@@ -440,17 +450,9 @@ def bootstrap(
         verification_start_time = time.time()
         verification_error: str | None = None
         try:
-            # Success is determined by the runner.verify() call
-            # We assume success unless an error occurs or the test script fails
-            # The runner's verify method should yield events we can display
-            verification_failed = False
-            for event in runner.verify(project_root, test_artifacts_dir):
-                # ManagedProcess already logs the output; just check for failures
-                if "Test run failed" in event.line or "Build failed" in event.line:
-                    verification_failed = True
-                    verification_error = event.line
-
-            verification_success = not verification_failed
+            verify_result = runner.verify(project_archive, devcontainer_tarball, test_artifacts_dir)
+            verification_success = verify_result.success
+            verification_error = verify_result.error_message
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
             verification_success = False
