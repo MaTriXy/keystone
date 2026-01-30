@@ -87,6 +87,8 @@ class AgentRunner(ABC):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
+        image_build_timeout_secs: int,
+        test_timeout_secs: int,
     ) -> VerifyResult:
         """Run verification tests on pristine source + agent's devcontainer.
 
@@ -94,6 +96,8 @@ class AgentRunner(ABC):
             project_archive: Git archive tarball of the original project source.
             devcontainer_tarball: Tarball of .devcontainer/ created by agent.
             test_artifacts_dir: Directory to store test artifacts.
+            image_build_timeout_secs: Timeout for building the devcontainer image.
+            test_timeout_secs: Timeout for running tests.
 
         Returns:
             VerifyResult with success status and optional error message.
@@ -199,6 +203,8 @@ class LocalAgentRunner(AgentRunner):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
+        image_build_timeout_secs: int,
+        test_timeout_secs: int,
     ) -> VerifyResult:
         """Run verification tests locally using Docker.
 
@@ -240,6 +246,8 @@ class LocalAgentRunner(AgentRunner):
             # 1. Build the image
             build_start = time.time()
             build_cmd = [
+                "timeout",
+                str(image_build_timeout_secs),
                 "devcontainer",
                 "build",
                 "--workspace-folder",
@@ -249,6 +257,12 @@ class LocalAgentRunner(AgentRunner):
             ]
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
             image_build_seconds = time.time() - build_start
+            if build_proc.returncode == TIMEOUT_EXIT_CODE:
+                return VerifyResult(
+                    success=False,
+                    error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                    image_build_seconds=image_build_seconds,
+                )
             if build_proc.returncode != 0:
                 return VerifyResult(
                     success=False,
@@ -261,6 +275,8 @@ class LocalAgentRunner(AgentRunner):
             # Remove any existing container
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             test_cmd = [
+                "timeout",
+                str(test_timeout_secs),
                 "docker",
                 "run",
                 "--name",
@@ -281,6 +297,13 @@ class LocalAgentRunner(AgentRunner):
             # 4. Clean up container
             subprocess.run(["docker", "rm", container_name], capture_output=True)
 
+            if test_run.returncode == TIMEOUT_EXIT_CODE:
+                return VerifyResult(
+                    success=False,
+                    error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                    image_build_seconds=image_build_seconds,
+                    test_execution_seconds=test_execution_seconds,
+                )
             if test_run.returncode == 0:
                 return VerifyResult(
                     success=True,

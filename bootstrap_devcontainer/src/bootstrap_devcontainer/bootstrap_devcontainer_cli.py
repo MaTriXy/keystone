@@ -223,6 +223,16 @@ def bootstrap(
         "--agent_time_limit_secs",
         help="Maximum seconds for agent execution (uses timeout command)",
     ),
+    image_build_timeout_secs: int = typer.Option(
+        600,
+        "--image_build_timeout_secs",
+        help="Maximum seconds for building the devcontainer image",
+    ),
+    test_timeout_secs: int = typer.Option(
+        300,
+        "--test_timeout_secs",
+        help="Maximum seconds for running tests",
+    ),
 ):
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
@@ -487,7 +497,13 @@ def bootstrap(
         image_build_seconds: float | None = None
         test_execution_seconds: float | None = None
         try:
-            verify_result = runner.verify(project_archive, devcontainer_tarball, test_artifacts_dir)
+            verify_result = runner.verify(
+                project_archive,
+                devcontainer_tarball,
+                test_artifacts_dir,
+                image_build_timeout_secs,
+                test_timeout_secs,
+            )
             verification_success = verify_result.success
             verification_error = verify_result.error_message
             image_build_seconds = verify_result.image_build_seconds

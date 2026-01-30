@@ -20,6 +20,7 @@ from typing import Any, Literal
 import modal
 
 from bootstrap_devcontainer.agent_runner import (
+    TIMEOUT_EXIT_CODE,
     AgentRunner,
     StreamEvent,
     build_claude_command,
@@ -317,12 +318,16 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
+        image_build_timeout_secs: int,
+        test_timeout_secs: int,
     ) -> VerifyResult:
         """Run verification by building and running docker in the existing sandbox.
 
         Uses docker commands directly instead of Modal's from_dockerfile, which:
         - Avoids 20-30s cold start for a new sandbox
         - Benefits from Docker's build cache already in this sandbox
+
+        Note: Timeouts are enforced via the timeout command wrapper.
         """
         sb = self.ensure_sandbox()
 
@@ -359,8 +364,13 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
 
         # 1. Build the image
         logger.info("Building devcontainer image with docker...")
+        import time
+
+        build_start = time.time()
         build_proc = run_modal_command(
             sb,
+            "timeout",
+            str(image_build_timeout_secs),
             "docker",
             "build",
             "--network=host",
@@ -372,16 +382,28 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             name="docker-build",
         )
         build_exit = build_proc.wait()
+        image_build_seconds = time.time() - build_start
+        if build_exit == TIMEOUT_EXIT_CODE:
+            return VerifyResult(
+                success=False,
+                error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                image_build_seconds=image_build_seconds,
+            )
         if build_exit != 0:
             return VerifyResult(
-                success=False, error_message=f"Build failed with exit code {build_exit}"
+                success=False,
+                error_message=f"Build failed with exit code {build_exit}",
+                image_build_seconds=image_build_seconds,
             )
 
         # 2. Run tests
         logger.info("Running tests in container...")
+        test_start = time.time()
         run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
         test_proc = run_modal_command(
             sb,
+            "timeout",
+            str(test_timeout_secs),
             "docker",
             "run",
             "--network=host",
@@ -392,6 +414,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             name="docker-test",
         )
         test_exit_code = test_proc.wait()
+        test_execution_seconds = time.time() - test_start
 
         # 3. Extract test artifacts
         logger.info("Extracting test artifacts...")
@@ -427,13 +450,27 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         # 4. Clean up container
         run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
 
+        if test_exit_code == TIMEOUT_EXIT_CODE:
+            return VerifyResult(
+                success=False,
+                error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
         if test_exit_code == 0:
             logger.info("Verification successful!")
-            return VerifyResult(success=True)
+            return VerifyResult(
+                success=True,
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
         else:
             logger.error(f"Test run failed with return code {test_exit_code}")
             return VerifyResult(
-                success=False, error_message=f"Test run failed with return code {test_exit_code}"
+                success=False,
+                error_message=f"Test run failed with return code {test_exit_code}",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
             )
 
     def cleanup(self) -> None:
