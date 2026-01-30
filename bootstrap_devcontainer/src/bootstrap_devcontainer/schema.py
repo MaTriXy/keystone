@@ -25,11 +25,10 @@ class InferenceCost(BaseModel):
 
 
 class AgentStatusMessage(BaseModel):
-    """A status message from the agent with timestamp and cumulative cost."""
+    """A status message from the agent with timestamp."""
 
     timestamp: datetime
     message: str
-    cumulative_cost: InferenceCost | None = None
 
 
 class TestSummary(BaseModel):

@@ -270,14 +270,10 @@ def bootstrap(
     status_messages: list[AgentStatusMessage] = []
 
     def _make_status_message(message: str) -> AgentStatusMessage:
-        """Create an AgentStatusMessage with current timestamp and cumulative cost."""
+        """Create an AgentStatusMessage with current timestamp."""
         return AgentStatusMessage(
             timestamp=datetime.now(UTC),
             message=message,
-            cumulative_cost=InferenceCost(
-                cost_usd=total_cost_usd,
-                token_spending=TokenSpending(**token_spending),
-            ),
         )
 
     def check_and_print_status(text: str) -> bool:

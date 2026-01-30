@@ -300,15 +300,11 @@ def _validate_status_messages(output: BootstrapResult) -> None:
             )
         prev_ts = msg.timestamp
 
-    # Verify final status message has non-zero cost (agent did work)
-    final_msg = output.status_messages[-1]
-    if final_msg.cumulative_cost is not None:
-        assert final_msg.cumulative_cost.cost_usd > 0, (
-            f"Final status message should have non-zero cost: {final_msg.cumulative_cost}"
-        )
-        ts = final_msg.cumulative_cost.token_spending
-        assert ts.input > 0 or ts.cached > 0, f"Final status should have some input tokens: {ts}"
-        assert ts.output > 0, f"Final status should have output tokens: {ts}"
+    # Verify final cost on the result (not on status messages)
+    assert output.cost.cost_usd > 0, f"Result should have non-zero cost: {output.cost}"
+    ts = output.cost.token_spending
+    assert ts.input > 0 or ts.cached > 0, f"Result should have some input tokens: {ts}"
+    assert ts.output > 0, f"Result should have output tokens: {ts}"
 
 
 def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
