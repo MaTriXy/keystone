@@ -20,9 +20,9 @@ from bootstrap_devcontainer.agent_log import (
 from bootstrap_devcontainer.agent_runner import TIMEOUT_EXIT_CODE, LocalAgentRunner
 from bootstrap_devcontainer.constants import (
     ANSI_BLUE,
-    ANSI_CYAN,
     ANSI_GREEN,
     ANSI_MAGENTA,
+    ANSI_RED,
     ANSI_RESET,
     STATUS_MARKER,
     SUMMARY_MARKER,
@@ -515,7 +515,7 @@ def bootstrap(
         agent_work_seconds = time.time() - start_time
 
         # Verification step
-        logging.info(f"{ANSI_CYAN}Verifying agent's work...{ANSI_RESET}")
+        logging.info(f"{ANSI_BLUE}Verifying agent's work...{ANSI_RESET}")
 
         # Print Dockerfile and test script for visibility
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
@@ -614,9 +614,9 @@ def bootstrap(
     if output_file:
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text(output.model_dump_json(indent=2))
-        print(f"Result written to {output_file}", file=sys.stderr)
+        logging.info(f"Result written to {output_file}")
     else:
-        print(output.model_dump_json(indent=2))
+        print(output.model_dump_json(indent=2), flush=True)
 
     if not overall_success:
         raise typer.Exit(code=1)
@@ -625,6 +625,11 @@ def bootstrap(
     devcontainer_dir = project_root / ".devcontainer"
     if devcontainer_dir.exists():
         logging.info(f"{ANSI_BLUE}Wrote devcontainer to: {devcontainer_dir}{ANSI_RESET}")
+    else:
+        logging.error(
+            f"{ANSI_RED}Devcontainer directory does not exist: {devcontainer_dir}{ANSI_RESET}"
+        )
+        raise typer.Exit(code=1)
 
 
 def main():
