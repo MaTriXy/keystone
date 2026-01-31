@@ -40,7 +40,7 @@ COPY . .
 RUN chmod +x .devcontainer/run_all_tests.sh
 
 # Install project dependencies
-RUN uv pip install --system -e ".[dev]" || uv pip install --system pytest pytest-json-report
+RUN uv pip install --system -e ".[dev]" || uv pip install --system pytest
 """
 
 RUN_ALL_TESTS_SH = """#!/bin/bash
@@ -50,11 +50,10 @@ set -e
 TEST_ARTIFACT_DIR="/test_artifacts"
 mkdir -p "$TEST_ARTIFACT_DIR/pytest"
 
-# Run pytest with json report
+# Run pytest with JUnit XML report
 cd /project_src
 python -m pytest tests/ \\
-    --json-report \\
-    --json-report-file="$TEST_ARTIFACT_DIR/pytest-json-report.json" \\
+    --junitxml="$TEST_ARTIFACT_DIR/pytest-report.xml" \\
     -v 2>&1 | tee "$TEST_ARTIFACT_DIR/pytest/stdout.txt"
 
 PYTEST_EXIT_CODE=${PIPESTATUS[0]}
