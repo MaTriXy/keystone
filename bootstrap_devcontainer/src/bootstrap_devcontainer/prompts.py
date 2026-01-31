@@ -95,8 +95,10 @@ so that the image can execute its own tests.
           - Go: /test_artifacts/go-test-report.json
             Command: `go test -json ./... > /test_artifacts/go-test-report.json`
           - Node.js: /test_artifacts/node-test-report.json
-            Command: `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`
-            NOTE: This uses dual reporters - spec for human-readable stdout, json for the report file.
+            Preferred: Use Jest with json reporter: `npx jest --json --outputFile=/test_artifacts/node-test-report.json`
+            If using Node's built-in test runner, you MUST use dual reporters (the syntax is tricky):
+            `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`
+            Do NOT parse spec/tap output to create fake JSON - use the actual JSON reporter.
           - Rust: /test_artifacts/cargo-test-report.json
             Command: `cargo test -- -Z unstable-options --format json > /test_artifacts/cargo-test-report.json`
       v. A file called /test_artifacts/final_result.json stating success/failure.

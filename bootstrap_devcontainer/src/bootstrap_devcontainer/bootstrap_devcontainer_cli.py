@@ -142,24 +142,46 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
         except Exception as e:
             print(f"Error parsing Go test report: {e}", file=sys.stderr)
 
-    # Try Node test JSON report (newline-delimited JSON format)
+    # Try Node test JSON report (supports Jest format or Node's NDJSON format)
     node_report = test_artifacts_dir / "node-test-report.json"
     if node_report.exists():
         try:
             passed, failed, skipped = [], [], []
-            for line in node_report.read_text().strip().split("\n"):
-                if not line:
-                    continue
-                event = json.loads(line)
-                event_type = event.get("type", "")
-                # Node test runner uses test:pass, test:fail, test:skip event types
-                name = event.get("data", {}).get("name", "")
-                if event_type == "test:pass":
-                    passed.append(name)
-                elif event_type == "test:fail":
-                    failed.append(name)
-                elif event_type == "test:skip":
-                    skipped.append(name)
+            content = node_report.read_text().strip()
+
+            # Try Jest format first (single JSON object with testResults array)
+            try:
+                report_data = json.loads(content)
+                if "testResults" in report_data:
+                    # Jest format
+                    for test_file in report_data.get("testResults", []):
+                        for assertion in test_file.get("assertionResults", []):
+                            name = assertion.get("fullName") or assertion.get("title", "")
+                            status = assertion.get("status", "")
+                            if status == "passed":
+                                passed.append(name)
+                            elif status == "failed":
+                                failed.append(name)
+                            elif status in ("pending", "skipped"):
+                                skipped.append(name)
+                else:
+                    # Unknown single-object format, skip
+                    raise ValueError("Unknown JSON format, trying NDJSON")
+            except (json.JSONDecodeError, ValueError):
+                # Try Node's built-in test runner NDJSON format
+                for line in content.split("\n"):
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    event_type = event.get("type", "")
+                    name = event.get("data", {}).get("name", "")
+                    if event_type == "test:pass":
+                        passed.append(name)
+                    elif event_type == "test:fail":
+                        failed.append(name)
+                    elif event_type == "test:skip":
+                        skipped.append(name)
+
             reports.node_test_summary = TestSummary(
                 passed_count=len(passed),
                 failed_count=len(failed),
