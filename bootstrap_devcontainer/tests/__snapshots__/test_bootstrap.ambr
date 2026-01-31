@@ -122,6 +122,58 @@
     'success': False,
   })
 # ---
+# name: test_e2e_sample_projects[fullstack_project]
+  dict({
+    'agent': dict({
+      'exit_code': 0,
+      'model': '',
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Creating devcontainer.json, Dockerfile, and run_all_tests.sh for Python + Node.js polyglot project.',
+        'Building the dev container image to verify the setup.',
+        'Build failed due to uv venv/pip command issue. Fixing Dockerfile to use proper uv syntax.',
+        'Image built successfully. Running tests to verify functionality.',
+        'Running final verification test to ensure repeatability.',
+        'Successfully created and verified dev container setup for polyglot Python+Node.js project.',
+      ]),
+      'summary': 'All tests pass successfully. This polyglot project required both Python and Node.js runtimes. The frontend tests spawn the Flask backend server and make API calls to test integration. Key tip: Using uv with `--python /venv` flag and UV_LINK_MODE=copy for Modal compatibility was essential for fast, reliable Python dependency installation.',
+      'timed_out': False,
+    }),
+    'error_message': None,
+    'success': True,
+    'verification': dict({
+      'error_message': None,
+      'success': True,
+      'test_results': list([
+        dict({
+          'name': 'server_test::test_server_is_running',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test_simple::test_pass',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test_simple::test_also_passes',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test::add via API',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test::multiply via API',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
+    }),
+  })
+# ---
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent': dict({
