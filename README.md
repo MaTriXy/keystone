@@ -15,10 +15,9 @@ IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-
 ```bash
 uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirectory=bootstrap_devcontainer' \
   bootstrap-devcontainer \
-  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
+  --project_root ./samples/python_project \
   --test_artifacts_dir /tmp/test_artifacts \
-  --max_budget_usd 2.0 \
-  --project_root ./samples/python_project
+  --max_budget_usd 2.0
 ```
 
 Not currently supported:
@@ -30,8 +29,15 @@ Not currently supported:
 - `--test_artifacts_dir` - Directory for test artifacts (required)
 - `--agent_cmd` - Agent command to run (default: `claude`)
 - `--max_budget_usd` - Maximum budget for agent inference (default: 1.0)
-- `--sqlite_cache_file` - SQLite cache file path (enables caching)
+- `--log_db` - Database for logging/caching. SQLite path or postgresql:// URL (default: `~/.bootstrap_devcontainer/log.sqlite`)
+- `--require_cache_hit` - Fail immediately if cache miss (useful for CI/testing)
+- `--no_cache_replay` - Skip cache lookup but still log the run (force fresh execution)
+- `--cache_version` - String appended to cache key to invalidate old entries
 - `--output_file` - Path to write JSON result (defaults to stdout)
+- `--agent_in_modal/--agent_local` - Run agent in Modal sandbox (default) or locally
+- `--agent_time_limit_secs` - Maximum seconds for agent execution (default: 3600)
+- `--image_build_timeout_secs` - Maximum seconds for building devcontainer image (default: 600)
+- `--test_timeout_secs` - Maximum seconds for running tests (default: 300)
 
 ---
 
@@ -42,8 +48,7 @@ Not currently supported:
 ```bash
 # Run local code tree on a project.
 uv run bootstrap-devcontainer \
-  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
+  --project_root ./samples/python_project \
   --test_artifacts_dir /tmp/test_artifacts \
-  --max_budget_usd 2.0 \
-  --project_root ./samples/python_project
+  --max_budget_usd 2.0
 ```
