@@ -1,39 +1,49 @@
-"""Test report parsers for various languages and test frameworks."""
+"""Parse JUnit XML test reports.
+
+JUnit XML is the standard CI/CD test report format. Generate with:
+- pytest: `pytest --junitxml=report.xml`
+- Node.js: `node --test --test-reporter=junit > report.xml`
+- Go: `go test -v ./... 2>&1 | go-junit-report > report.xml`
+- Cargo: `cargo nextest run` (writes to target/nextest/default/junit.xml)
+"""
 
 from pathlib import Path
 
-from bootstrap_devcontainer.report_parsers.cargo import parse_cargo_report
-from bootstrap_devcontainer.report_parsers.go import parse_go_report
-from bootstrap_devcontainer.report_parsers.node import parse_node_report
-from bootstrap_devcontainer.report_parsers.pytest import parse_pytest_report
-from bootstrap_devcontainer.report_parsers.types import TestReports
+from junitparser import JUnitXml, TestCase
 
-__all__ = [
-    "TestReports",
-    "parse_cargo_report",
-    "parse_go_report",
-    "parse_node_report",
-    "parse_pytest_report",
-    "parse_test_reports",
-]
+from bootstrap_devcontainer.schema import TestResult
+
+__all__ = ["TestResult", "parse_junit_xml"]
 
 
-def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
-    """Parse test reports from various formats (pytest, go, node, cargo)."""
+def parse_junit_xml(report_path: Path) -> list[TestResult]:
+    """Parse JUnit XML report and return list of test results."""
+    if not report_path.exists():
+        return []
 
-    test_artifacts_dir = Path(test_artifacts_dir)
-    reports = TestReports()
+    xml = JUnitXml.fromfile(str(report_path))
+    results = []
 
-    reports.pytest_summary = parse_pytest_report(test_artifacts_dir / "pytest-json-report.json")
-    reports.go_test_summary = parse_go_report(test_artifacts_dir / "go-test-report.json")
-    reports.cargo_test_summary = parse_cargo_report(test_artifacts_dir / "cargo-test-report.json")
+    def process_case(case: TestCase) -> None:
+        classname = case.classname or ""
+        name = case.name or ""
+        full_name = f"{classname}::{name}" if classname else name
 
-    # Node has multiple possible file formats
-    node_json = test_artifacts_dir / "node-test-report.json"
-    node_tap = test_artifacts_dir / "node-test-report.tap"
-    if node_json.exists():
-        reports.node_test_summary = parse_node_report(node_json)
-    elif node_tap.exists():
-        reports.node_test_summary = parse_node_report(node_tap)
+        results.append(
+            TestResult(
+                name=full_name,
+                passed=case.is_passed,
+                skipped=case.is_skipped,
+            )
+        )
 
-    return reports
+    # Handle testcases directly under root (Node.js style)
+    for case in xml.iterchildren(TestCase):
+        process_case(case)
+
+    # Handle testcases under testsuites (standard style)
+    for suite in xml:
+        for case in suite:
+            process_case(case)
+
+    return results

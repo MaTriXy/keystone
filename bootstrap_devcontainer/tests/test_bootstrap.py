@@ -98,19 +98,17 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "Completed setup of devcontainer files.",
     ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
 
-    # Verify pytest_summary contents (now nested in verification)
+    # Verify test_results contents (now nested in verification)
     assert output.verification is not None
-    assert output.verification.pytest_summary is not None
-    summary = output.verification.pytest_summary
-    assert summary.passed_count == 2, f"Expected 2 passed tests: {summary}"
-    assert summary.failed_count == 0, f"Expected 0 failed tests: {summary}"
-    assert summary.skipped_count == 0, f"Expected 0 skipped tests: {summary}"
-    assert summary.passed_tests == [
-        "tests/test_app.py::test_add",
-        "tests/test_app.py::test_multiply",
-    ], f"Expected sorted passed_tests list: {summary}"
-    assert summary.failed_tests == [], f"Expected no failed tests: {summary}"
-    assert summary.skipped_tests == [], f"Expected no skipped tests: {summary}"
+    results = output.verification.test_results
+    passed = [r for r in results if r.passed and not r.skipped]
+    failed = [r for r in results if not r.passed]
+    assert len(passed) == 2, f"Expected 2 passed tests: {results}"
+    assert len(failed) == 0, f"Expected 0 failed tests: {results}"
+    assert any("test_add" in r.name for r in passed), f"Expected test_add in passed: {results}"
+    assert any("test_multiply" in r.name for r in passed), (
+        f"Expected test_multiply in passed: {results}"
+    )
 
     # Check devcontainer files were created
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()

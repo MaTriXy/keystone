@@ -1,8 +1,11 @@
 #!/bin/bash
-# Generate test report fixtures from sample projects.
-# Run this script to update the fixture files when report formats change.
+# Generate JUnit XML test report fixtures from sample projects.
+# Run this script to update the fixture files when sample projects change.
 #
-# Prerequisites: brew install go rust node
+# Prerequisites:
+#   brew install go rust node
+#   go install github.com/jstemmer/go-junit-report/v2@latest
+#   cargo install cargo-nextest --locked
 #
 # Usage: ./generate_fixtures.sh
 
@@ -13,7 +16,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 SAMPLES_DIR="$REPO_ROOT/samples"
 OUTPUT_DIR="$SCRIPT_DIR"
 
-echo "Generating test report fixtures..."
+echo "Generating JUnit XML test report fixtures..."
 echo "Samples dir: $SAMPLES_DIR"
 echo "Output dir: $OUTPUT_DIR"
 
@@ -22,82 +25,69 @@ mkdir -p "$OUTPUT_DIR"
 
 # --- Pytest reports ---
 echo ""
-echo "=== Generating pytest reports ==="
+echo "=== Generating pytest JUnit XML reports ==="
 
 # Passing tests
 cd "$SAMPLES_DIR/python_project"
-PYTHONPATH=. uv run --with pytest-json-report --isolated pytest \
-    --json-report --json-report-file="$OUTPUT_DIR/pytest-passing.json" \
-    tests/ -q || true
-echo "Generated pytest-passing.json"
+PYTHONPATH=. uv run --isolated pytest --junitxml="$OUTPUT_DIR/pytest-passing.xml" tests/ -q || true
+echo "Generated pytest-passing.xml"
 
 # Failing tests
 cd "$SAMPLES_DIR/python_with_failing_test"
-PYTHONPATH=. uv run --with pytest-json-report --isolated pytest \
-    --json-report --json-report-file="$OUTPUT_DIR/pytest-failing.json" \
-    tests/ -q || true
-echo "Generated pytest-failing.json"
+PYTHONPATH=. uv run --isolated pytest --junitxml="$OUTPUT_DIR/pytest-failing.xml" tests/ -q || true
+echo "Generated pytest-failing.xml"
 
 # --- Go test reports ---
 echo ""
-echo "=== Generating Go test reports ==="
+echo "=== Generating Go JUnit XML reports ==="
 
 if command -v go &> /dev/null; then
+    GO_JUNIT_REPORT="${HOME}/go/bin/go-junit-report"
+    if [ ! -x "$GO_JUNIT_REPORT" ]; then
+        echo "Installing go-junit-report..."
+        go install github.com/jstemmer/go-junit-report/v2@latest
+    fi
     cd "$SAMPLES_DIR/go_project"
-    go test -json ./... > "$OUTPUT_DIR/go-test-passing.json" 2>&1 || true
-    echo "Generated go-test-passing.json"
+    go test -v ./... 2>&1 | "$GO_JUNIT_REPORT" > "$OUTPUT_DIR/go-passing.xml" || true
+    echo "Generated go-passing.xml"
 else
     echo "SKIP: Go not installed (brew install go)"
 fi
 
 # --- Node.js test reports ---
 echo ""
-echo "=== Generating Node.js test reports ==="
+echo "=== Generating Node.js JUnit XML reports ==="
 
 if command -v node &> /dev/null; then
     cd "$SAMPLES_DIR/node_project"
-    
-    # TAP format (Node built-in)
-    node --test --test-reporter=tap app.test.js > "$OUTPUT_DIR/node-tap.tap" 2>&1 || true
-    echo "Generated node-tap.tap"
-    
-    # Jest format (if jest available)
-    if [ -f package-lock.json ] || npm install --save-dev jest 2>/dev/null; then
-        npx jest --json --outputFile="$OUTPUT_DIR/node-jest.json" app.test.js 2>/dev/null || true
-        if [ -f "$OUTPUT_DIR/node-jest.json" ]; then
-            echo "Generated node-jest.json"
-        fi
-    fi
-    
-    # Mocha format (if mocha available)
-    if npm install --save-dev mocha 2>/dev/null; then
-        npx mocha --reporter json app.test.js > "$OUTPUT_DIR/node-mocha.json" 2>/dev/null || true
-        if [ -f "$OUTPUT_DIR/node-mocha.json" ] && [ -s "$OUTPUT_DIR/node-mocha.json" ]; then
-            echo "Generated node-mocha.json"
-        else
-            rm -f "$OUTPUT_DIR/node-mocha.json"
-        fi
-    fi
-    
-    # Clean up node_modules
-    rm -rf node_modules package-lock.json 2>/dev/null || true
+    node --test --test-reporter=junit app.test.js > "$OUTPUT_DIR/node-passing.xml" 2>&1 || true
+    echo "Generated node-passing.xml"
 else
     echo "SKIP: Node not installed (brew install node)"
 fi
 
 # --- Cargo test reports ---
 echo ""
-echo "=== Generating Cargo test reports ==="
+echo "=== Generating Cargo JUnit XML reports ==="
 
 if command -v cargo &> /dev/null; then
+    if ! cargo nextest --version &> /dev/null; then
+        echo "Installing cargo-nextest..."
+        cargo install cargo-nextest --locked
+    fi
     cd "$SAMPLES_DIR/rust_project"
-    # JSON format requires nightly or recent stable
-    cargo test -- -Z unstable-options --format json > "$OUTPUT_DIR/cargo-test-passing.json" 2>&1 || true
-    if [ -s "$OUTPUT_DIR/cargo-test-passing.json" ]; then
-        echo "Generated cargo-test-passing.json"
+    # Ensure nextest config exists for JUnit output
+    mkdir -p .config
+    cat > .config/nextest.toml << 'NEXTEST_EOF'
+[profile.default]
+junit.path = "junit.xml"
+NEXTEST_EOF
+    cargo nextest run 2>&1 || true
+    if [ -f "target/nextest/default/junit.xml" ]; then
+        cp target/nextest/default/junit.xml "$OUTPUT_DIR/cargo-passing.xml"
+        echo "Generated cargo-passing.xml"
     else
-        echo "SKIP: Cargo JSON output not available (may need nightly)"
-        rm -f "$OUTPUT_DIR/cargo-test-passing.json"
+        echo "SKIP: cargo-nextest didn't produce junit.xml"
     fi
 else
     echo "SKIP: Cargo not installed (brew install rust)"
@@ -105,4 +95,4 @@ fi
 
 echo ""
 echo "=== Done ==="
-ls -la "$OUTPUT_DIR"/*.json "$OUTPUT_DIR"/*.tap 2>/dev/null || true
+ls -la "$OUTPUT_DIR"/*.xml 2>/dev/null || true

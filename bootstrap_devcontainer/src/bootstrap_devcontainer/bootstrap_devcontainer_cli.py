@@ -34,7 +34,7 @@ from bootstrap_devcontainer.git_utils import (
     is_git_repo,
 )
 from bootstrap_devcontainer.prompts import build_agent_prompt
-from bootstrap_devcontainer.report_parsers import parse_test_reports
+from bootstrap_devcontainer.report_parsers import parse_junit_xml
 from bootstrap_devcontainer.schema import (
     AgentConfig,
     AgentExecution,
@@ -441,8 +441,10 @@ def bootstrap(
     finally:
         runner.cleanup()
 
-    # Parse test reports from various formats
-    test_reports = parse_test_reports(test_artifacts_dir)
+    # Parse all JUnit XML test reports
+    test_results = []
+    for xml_file in test_artifacts_dir.glob("*.xml"):
+        test_results.extend(parse_junit_xml(xml_file))
 
     # Build verification result
     verification = VerificationResult(
@@ -450,10 +452,7 @@ def bootstrap(
         error_message=verification_error,
         image_build_seconds=image_build_seconds,
         test_execution_seconds=test_execution_seconds,
-        pytest_summary=test_reports.pytest_summary,
-        go_test_summary=test_reports.go_test_summary,
-        node_test_summary=test_reports.node_test_summary,
-        cargo_test_summary=test_reports.cargo_test_summary,
+        test_results=test_results,
     )
 
     overall_success = verification_success and exit_code == 0

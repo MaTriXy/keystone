@@ -4,7 +4,13 @@ AGENT_PROMPT_TEMPLATE = f"""
 We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
 
 Your task is to create and populate a .devcontainer/... folder at the root of the project's code tree.
-You should only make changes in the .devcontainer/... subtree.
+
+IMPORTANT: Only changes inside .devcontainer/... will be preserved. When we capture your work, we extract
+only the .devcontainer/ directory and reapply it to the original repo. Any changes you make outside
+.devcontainer/ (e.g., fixing source files, adding config files) will be lost.
+
+If the project needs modifications to run tests (e.g., creating config files, setting up fixtures),
+implement those modifications in run_all_tests.sh so they happen at test runtime inside the container.
 
 You are currently at a clean copy of the root of the project's code tree,
 without any build artifacts or git history.
@@ -87,20 +93,17 @@ so that the image can execute its own tests.
       i. For each command run, create a subdirectory with an identifying “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. Create language-specific JSON test reports in /test_artifacts.
-          CRITICAL: Use the EXACT arguments below to generate reports. Do NOT use TAP format. Do NOT write fake/placeholder JSON -- only produce real JSON reports.
-          - Python: /test_artifacts/pytest-json-report.json
-            Command: `pytest --json-report --json-report-file=/test_artifacts/pytest-json-report.json`
-            (requires pytest-json-report plugin - add to requirements or install via pip)
-          - Go: /test_artifacts/go-test-report.json
-            Command: `go test -json ./... > /test_artifacts/go-test-report.json`
-          - Node.js: /test_artifacts/node-test-report.json OR /test_artifacts/node-test-report.tap
-            Option 1 (Jest): `npx jest --json --outputFile=/test_artifacts/node-test-report.json`
-            Option 2 (Mocha): `npx mocha --reporter json > /test_artifacts/node-test-report.json`
-            Option 3 (Node built-in): `node --test --test-reporter=tap > /test_artifacts/node-test-report.tap`
-            NOTE: Node's built-in test runner only supports spec, dot, tap, junit - NOT json.
-          - Rust: /test_artifacts/cargo-test-report.json
-            Command: `cargo test -- -Z unstable-options --format json > /test_artifacts/cargo-test-report.json`
+      iv. Create JUnit XML test reports in /test_artifacts.
+          CRITICAL: All test reports MUST be JUnit XML format. Use these EXACT commands:
+          - Python: `pytest --junitxml=/test_artifacts/pytest-report.xml`
+          - Go: `go test -v ./... 2>&1 | go-junit-report > /test_artifacts/go-report.xml`
+            (install go-junit-report: `go install github.com/jstemmer/go-junit-report/v2@latest`)
+          - Node.js: `node --test --test-reporter=junit > /test_artifacts/node-report.xml`
+            For Jest: `npx jest --reporters=jest-junit` (install jest-junit, outputs junit.xml)
+            For Mocha: `npx mocha --reporter mocha-junit-reporter` (install mocha-junit-reporter)
+          - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
+            Command: `cargo nextest run --profile default`
+            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/cargo-report.xml`
       v. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.

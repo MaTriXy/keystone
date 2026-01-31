@@ -49,15 +49,12 @@ class AgentStatusMessage(BaseModel):
     message: str
 
 
-class TestSummary(BaseModel):
-    """Test summary for a single test framework."""
+class TestResult(BaseModel):
+    """Result of a single test case."""
 
-    passed_count: int = 0
-    failed_count: int = 0
-    skipped_count: int = 0
-    passed_tests: list[str] = []
-    failed_tests: list[str] = []
-    skipped_tests: list[str] = []
+    name: str  # Full test name (e.g., "classname::test_name")
+    passed: bool
+    skipped: bool = False
 
 
 class VerificationResult(BaseModel):
@@ -69,11 +66,8 @@ class VerificationResult(BaseModel):
     image_build_seconds: float | None = None
     test_execution_seconds: float | None = None
 
-    # Per-language test summaries - each is populated only if that report format was found
-    pytest_summary: TestSummary | None = None
-    go_test_summary: TestSummary | None = None
-    node_test_summary: TestSummary | None = None
-    cargo_test_summary: TestSummary | None = None
+    # All test results from JUnit XML reports
+    test_results: list[TestResult] = []
 
 
 class AgentExecution(BaseModel):
