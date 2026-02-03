@@ -110,7 +110,8 @@ so that the image can execute its own tests.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
       You can use `set -euo pipefail` to exit the script if any test fails.
    g. There's no need to branch in this file, because the code tree that you see now will always be the code tree that this script runs against.
-   g. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
+   h. If the project uses some framework to run tests (e.g., bazel, buck, CMake, pytest, Jest, Mocha, cargo-nextest), use that framework's built-in reporting capabilities to generate JUnit XML reports.
+   i. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
 
 Tips and Notes:
 
