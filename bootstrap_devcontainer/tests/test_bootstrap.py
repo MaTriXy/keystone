@@ -227,6 +227,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         #        "rust_project",
         "fullstack_project",
         "python_with_failing_test",
+        "cmake_vcpkg_project",
     ],
     indirect=True,
 )

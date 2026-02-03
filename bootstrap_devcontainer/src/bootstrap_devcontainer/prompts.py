@@ -108,12 +108,70 @@ If you use this trick, please also add this environment variable to the Dockerfi
 ENV UV_LINK_MODE=copy
 ```
 
-The Dockerfile MUST end with these lines, specifying where the input source tree should be copied into the image.
-You do not have to worry about .dockerignore files right now because your copy of the source tree is pristine.
-```
-# Copy the entire source tree into the image.
+For compiled languages (C++, Rust, Go) or build systems like Bazel, run the build step in a Dockerfile layer
+so that build artifacts are cached. This avoids rebuilding every time you run the tests.
+Examples:
+
+For Rust projects:
+```dockerfile
+# Copy Cargo manifests and source, then build
+COPY Cargo.toml Cargo.lock /project_src/
+COPY src/ /project_src/src/
 WORKDIR /project_src
-COPY . .
+RUN cargo build --release
+# Tests will use the cached build artifacts
+```
+
+For C++/CMake projects:
+```dockerfile
+COPY CMakeLists.txt /project_src/
+COPY src/ /project_src/src/
+WORKDIR /project_src
+RUN mkdir build && cd build && cmake .. && make -j$(nproc)
+```
+
+For Bazel projects:
+```dockerfile
+COPY WORKSPACE BUILD.bazel /project_src/
+COPY src/ /project_src/src/
+WORKDIR /project_src
+RUN bazel build //...
+# Bazel cache will be preserved in the layer
+```
+
+IMPORTANT: Do NOT use `COPY . .` to copy the entire source tree, because you are working inside
+the .devcontainer/ directory. Any changes you make there will invalidate the Docker layer cache,
+causing unnecessary rebuilds of all subsequent layers.
+
+Instead, identify the specific source directories and files needed to build and test the project,
+and copy them explicitly early in the Dockerfile. These files won't change during your work.
+Example:
+```dockerfile
+# Copy source code (these won't change during agent work)
+WORKDIR /project_src
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY pyproject.toml uv.lock ./
+```
+
+You may also want to create a .devcontainer/.dockerignore file to exclude common build artifacts
+and unnecessary files from the build context:
+```
+# .devcontainer/.dockerignore
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/.git
+**/target
+**/build
+```
+
+The Dockerfile MUST end with these lines, copying the test runner script last since it changes frequently:
+```dockerfile
+# Copy the test runner script last (this changes often during development)
+COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+RUN chmod +x /run_all_tests.sh
 ```
 
 Optimize the Dockerfile layer ordering for faster rebuilds as you experiment,
@@ -123,8 +181,7 @@ and have subsequent layers of `RUN apt-get install` for dependencies you later d
 This way, the layer caching for the early `RUN apt-get install` will be reused when you later add dependencies.
 
 4. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
-Note that this will be copied into the image by the `COPY . .` line,
-so that the image can execute its own tests.
+This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
    a. run_all_tests.sh takes no arguments.
    b. It always writes test artifacts to /test_artifacts inside the container filesystem.
@@ -224,7 +281,7 @@ CONTAINER_NAME="project_container-$(date +%Y%m%d-%H%M%S)"
 docker run --network host \
   --name "$CONTAINER_NAME" \
   "$IMAGE_NAME" \
-  ./.devcontainer/run_all_tests.sh
+  /run_all_tests.sh
 
 # If you want access to the detailed test artifacts from a completed container, you can extract them with:
 docker cp "$CONTAINER_NAME:/test_artifacts" /tmp/test_artifacts.$CONTAINER_NAME"

@@ -293,7 +293,7 @@ class LocalAgentRunner(AgentRunner):
                 "--name",
                 container_name,
                 image_name,
-                "./.devcontainer/run_all_tests.sh",
+                "/run_all_tests.sh",
             ]
             test_run = subprocess.run(test_cmd, capture_output=True, text=True)
             test_execution_seconds = time.time() - test_start

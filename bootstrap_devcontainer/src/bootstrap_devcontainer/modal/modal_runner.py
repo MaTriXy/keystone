@@ -410,7 +410,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             "--name",
             container_name,
             image_name,
-            "./.devcontainer/run_all_tests.sh",
+            "/run_all_tests.sh",
             name="docker-test",
         )
         test_exit_code = test_proc.wait()

@@ -32,12 +32,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 
-# Copy the entire source tree into the image.
+# Copy source tree (excluding .devcontainer which changes frequently).
 WORKDIR /project_src
-COPY . .
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY pyproject.toml ./
 
-# Make the test script executable.
-RUN chmod +x .devcontainer/run_all_tests.sh
+# Copy the test runner script last (changes frequently during development).
+COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+RUN chmod +x /run_all_tests.sh
 
 # Install project dependencies
 RUN uv pip install --system -e ".[dev]" || uv pip install --system pytest
