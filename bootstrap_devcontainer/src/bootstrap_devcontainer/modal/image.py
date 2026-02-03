@@ -3,8 +3,10 @@ from pathlib import Path
 import modal
 
 _MODAL_DIR = Path(__file__).parent
+_PROJECT_ROOT = _MODAL_DIR.parent.parent.parent.parent.parent
 START_DOCKERD_SCRIPT_PATH = _MODAL_DIR / "start_dockerd.sh"
 WAIT_FOR_DOCKER_SCRIPT_PATH = _MODAL_DIR / "wait_for_docker.sh"
+TIMESTAMP_SCRIPT_PATH = _PROJECT_ROOT / "timestamp_process_output" / "timestamp_process_output.pl"
 
 
 def create_modal_image() -> modal.Image:
@@ -71,9 +73,11 @@ def create_modal_image() -> modal.Image:
         # Add scripts natively
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
         .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)
+        .add_local_file(TIMESTAMP_SCRIPT_PATH, "/timestamp_process_output.pl", copy=True)
         .run_commands(
             "chmod 4755 /start-dockerd.sh",
             "chmod +x /wait_for_docker.sh",
+            "chmod +x /timestamp_process_output.pl",
         )
         .run_commands(
             "useradd -m -s /bin/bash agent",

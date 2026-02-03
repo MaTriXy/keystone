@@ -442,9 +442,9 @@ def bootstrap(
     finally:
         runner.cleanup()
 
-    # Parse all JUnit XML test reports
+    # Parse all JUnit XML test reports from junit/ subdirectory
     test_results = []
-    for xml_file in test_artifacts_dir.glob("*.xml"):
+    for xml_file in test_artifacts_dir.glob("junit/*.xml"):
         test_results.extend(parse_junit_xml(xml_file))
 
     # Build verification result

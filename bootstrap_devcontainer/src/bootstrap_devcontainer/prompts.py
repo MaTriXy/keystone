@@ -93,18 +93,20 @@ so that the image can execute its own tests.
       i. For each command run, create a subdirectory with an identifying “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. Create JUnit XML test reports in /test_artifacts.
-          CRITICAL: All test reports MUST be JUnit XML format. Use these EXACT commands:
-          - Python: `pytest --junitxml=/test_artifacts/pytest-report.xml`
-          - Go: `go test -v ./... 2>&1 | go-junit-report > /test_artifacts/go-report.xml`
+      iv. Create JUnit XML test reports in /test_artifacts/junit/.
+          All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
+          Create the directory first: `mkdir -p /test_artifacts/junit`
+          Examples for common frameworks:
+          - Python: `pytest --junitxml=/test_artifacts/junit/pytest.xml`
+          - Go: `go test -v ./... 2>&1 | go-junit-report > /test_artifacts/junit/go.xml`
             (install go-junit-report: `go install github.com/jstemmer/go-junit-report/v2@latest`)
-          - Node.js: `node --test --test-reporter=junit > /test_artifacts/node-report.xml`
-            For Jest: `npx jest --reporters=jest-junit` (install jest-junit, outputs junit.xml)
-            For Mocha: `npx mocha --reporter mocha-junit-reporter` (install mocha-junit-reporter)
+          - Node.js: `node --test --test-reporter=junit > /test_artifacts/junit/node.xml`
+            For Jest: `npx jest --reporters=jest-junit` then `mv junit.xml /test_artifacts/junit/`
+            For Mocha: `npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=/test_artifacts/junit/mocha.xml`
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
             Command: `cargo nextest run --profile default`
-            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/cargo-report.xml`
-      v. A file called /test_artifacts/final_result.json stating success/failure.
+            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
+      iii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
@@ -112,6 +114,35 @@ so that the image can execute its own tests.
    g. There's no need to branch in this file, because the code tree that you see now will always be the code tree that this script runs against.
    h. If the project uses some framework to run tests (e.g., bazel, buck, CMake, pytest, Jest, Mocha, cargo-nextest), use that framework's built-in reporting capabilities to generate JUnit XML reports.
    i. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
+
+4. Copy the timestamp helper script into .devcontainer/:
+   ```bash
+   cp /timestamp_process_output.pl .devcontainer/
+   ```
+
+   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
+   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] command [args...]`
+
+   Example output:
+   ```
+   2026-02-02T17:28:47-0800	STDOUT	Running tests...
+   2026-02-02T17:28:47-0800	STDERR	Warning: deprecated function
+   2026-02-02T17:28:48-0800	STDOUT	Tests passed!
+   ```
+
+   The format is: `ISO_TIMESTAMP<tab>STDOUT|STDERR<tab>original_line`
+   This makes it trivial to filter/parse with grep, cut, awk, etc.
+
+   Use it in run_all_tests.sh like this:
+   ```bash
+   ./.devcontainer/timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
+   ```
+
+   IMPORTANT: Your Dockerfile must include perl for this script to work:
+   ```dockerfile
+   RUN apt-get update && apt-get install -y perl
+   ```
 
 Tips and Notes:
 
