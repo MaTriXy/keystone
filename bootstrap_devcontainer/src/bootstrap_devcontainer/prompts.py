@@ -106,13 +106,42 @@ so that the image can execute its own tests.
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
             Command: `cargo nextest run --profile default`
             Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
-      v. A file called /test_artifacts/final_result.json stating success/failure.
+      iii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
       You can use `set -euo pipefail` to exit the script if any test fails.
    g. There's no need to branch in this file, because the code tree that you see now will always be the code tree that this script runs against.
    g. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
+
+4. Copy the timestamp helper script into .devcontainer/:
+   ```bash
+   cp /timestamp_process_output.pl .devcontainer/
+   ```
+
+   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
+   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] command [args...]`
+
+   Example output:
+   ```
+   2026-02-02T17:28:47-0800	STDOUT	Running tests...
+   2026-02-02T17:28:47-0800	STDERR	Warning: deprecated function
+   2026-02-02T17:28:48-0800	STDOUT	Tests passed!
+   ```
+
+   The format is: `ISO_TIMESTAMP<tab>STDOUT|STDERR<tab>original_line`
+   This makes it trivial to filter/parse with grep, cut, awk, etc.
+
+   Use it in run_all_tests.sh like this:
+   ```bash
+   ./.devcontainer/timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
+   ```
+
+   IMPORTANT: Your Dockerfile must include perl for this script to work:
+   ```dockerfile
+   RUN apt-get update && apt-get install -y perl
+   ```
 
 Tips and Notes:
 
