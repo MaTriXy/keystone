@@ -13,6 +13,8 @@ import pytest
 from config import AgentConfig, EvalConfig
 from flow import eval_flow
 
+from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
+
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 FAKE_AGENT = Path(__file__).parent.parent / "bootstrap_devcontainer" / "tests" / "fake_agent.py"
 
@@ -139,3 +141,95 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     # At least check we got results (soft assertion - infra may be flaky)
     success_count = sum(1 for r in output.results if r.success)
     print(f"\nTotal: {success_count}/{len(output.results)} succeeded")
+
+
+@pytest.mark.slow
+@pytest.mark.modal
+def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
+    """End-to-end test with real agent on Modal.
+
+    This test:
+    1. Creates local git repos from samples (python_project, go_project)
+    2. Runs eval flow with real Claude agent on Modal in parallel
+    3. Writes output report to tmp_path for inspection
+
+    Expects both repos to succeed with the real agent.
+    """
+    repo_list_path, _repo_paths = sample_repos
+    clone_dir = tmp_path / "clones"
+    worktree_dir = tmp_path / "worktrees"
+    output_path = tmp_path / "output.json"
+
+    agent_config = AgentConfig(
+        max_budget_usd=1.0,
+        timeout_minutes=10,
+        agent_cmd="claude",
+        agent_in_modal=True,
+        log_db=str(DEFAULT_TESTING_LOG_PATH),
+    )
+
+    eval_config = EvalConfig(
+        agent_config=agent_config,
+        max_workers=2,  # Run both repos in parallel
+    )
+
+    output = eval_flow(
+        repo_list_path=str(repo_list_path),
+        clone_dir=str(clone_dir),
+        worktree_dir=str(worktree_dir),
+        eval_config=eval_config,
+        output_path=str(output_path),
+    )
+
+    # Verify output structure
+    assert output.bootstrap_devcontainer_version is not None
+    assert "git_hash" in output.bootstrap_devcontainer_version
+    assert len(output.repos) == 2
+    assert len(output.results) == 2
+
+    # Verify repos are pinned
+    for repo in output.repos:
+        assert repo.commit_hash is not None
+        assert len(repo.commit_hash) == 40
+
+    # Log full output report
+    print("\n" + "=" * 60)
+    print("EVAL OUTPUT REPORT")
+    print("=" * 60)
+    print(f"\nOutput file: {output_path}")
+    print("\nbootstrap_devcontainer version:")
+    for k, v in output.bootstrap_devcontainer_version.items():
+        print(f"  {k}: {v}")
+
+    print("\n" + "-" * 60)
+    print("RESULTS:")
+    print("-" * 60)
+    for i, result in enumerate(output.results):
+        repo_name = result.repo_entry.repo.split("/")[-1]
+        status = "✓ SUCCESS" if result.success else "✗ FAILED"
+        print(f"\n[{i + 1}] {repo_name}: {status}")
+        print(
+            f"    commit: {result.repo_entry.commit_hash[:12] if result.repo_entry.commit_hash else 'N/A'}"
+        )
+        if result.error_message:
+            print(f"    error: {result.error_message[:300]}")
+        if result.bootstrap_result:
+            print(f"    bootstrap_result keys: {list(result.bootstrap_result.keys())}")
+            if "tests_passed" in result.bootstrap_result:
+                print(f"    tests_passed: {result.bootstrap_result['tests_passed']}")
+            if "devcontainer_created" in result.bootstrap_result:
+                print(
+                    f"    devcontainer_created: {result.bootstrap_result['devcontainer_created']}"
+                )
+
+    success_count = sum(1 for r in output.results if r.success)
+    print("\n" + "=" * 60)
+    print(f"TOTAL: {success_count}/{len(output.results)} succeeded")
+    print("=" * 60)
+
+    # Print the full JSON for inspection
+    print(f"\nFull output JSON written to: {output_path}")
+    print("\nJSON contents:")
+    print(json.dumps(output.model_dump(), indent=2, default=str)[:2000])
+    if len(json.dumps(output.model_dump(), default=str)) > 2000:
+        print("... (truncated)")
