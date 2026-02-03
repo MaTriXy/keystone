@@ -49,11 +49,12 @@ set -e
 # Test artifacts are always written to /test_artifacts
 TEST_ARTIFACT_DIR="/test_artifacts"
 mkdir -p "$TEST_ARTIFACT_DIR/pytest"
+mkdir -p "$TEST_ARTIFACT_DIR/junit"
 
 # Run pytest with JUnit XML report
 cd /project_src
 python -m pytest tests/ \\
-    --junitxml="$TEST_ARTIFACT_DIR/pytest-report.xml" \\
+    --junitxml="$TEST_ARTIFACT_DIR/junit/pytest.xml" \\
     -v 2>&1 | tee "$TEST_ARTIFACT_DIR/pytest/stdout.txt"
 
 PYTEST_EXIT_CODE=${PIPESTATUS[0]}

@@ -93,17 +93,19 @@ so that the image can execute its own tests.
       i. For each command run, create a subdirectory with an identifying “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. Create JUnit XML test reports in /test_artifacts.
-          CRITICAL: All test reports MUST be JUnit XML format. Use these EXACT commands:
-          - Python: `pytest --junitxml=/test_artifacts/pytest-report.xml`
-          - Go: `go test -v ./... 2>&1 | go-junit-report > /test_artifacts/go-report.xml`
+      iv. Create JUnit XML test reports in /test_artifacts/junit/.
+          All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
+          Create the directory first: `mkdir -p /test_artifacts/junit`
+          Examples for common frameworks:
+          - Python: `pytest --junitxml=/test_artifacts/junit/pytest.xml`
+          - Go: `go test -v ./... 2>&1 | go-junit-report > /test_artifacts/junit/go.xml`
             (install go-junit-report: `go install github.com/jstemmer/go-junit-report/v2@latest`)
-          - Node.js: `node --test --test-reporter=junit > /test_artifacts/node-report.xml`
-            For Jest: `npx jest --reporters=jest-junit` (install jest-junit, outputs junit.xml)
-            For Mocha: `npx mocha --reporter mocha-junit-reporter` (install mocha-junit-reporter)
+          - Node.js: `node --test --test-reporter=junit > /test_artifacts/junit/node.xml`
+            For Jest: `npx jest --reporters=jest-junit` then `mv junit.xml /test_artifacts/junit/`
+            For Mocha: `npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=/test_artifacts/junit/mocha.xml`
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
             Command: `cargo nextest run --profile default`
-            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/cargo-report.xml`
+            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
       v. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
