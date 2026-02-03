@@ -1,107 +1,84 @@
 # Eval Harness for bootstrap_devcontainer
 
-MapReduce-style evaluation harness that runs `bootstrap_devcontainer` on many code repositories.
-
-Uses Prefect for flow orchestration with pluggable task runners - the same task code
-runs identically whether executing locally or distributed.
+Runs `bootstrap_devcontainer` on many git repositories and collects results.
 
 ## Installation
 
 ```bash
-# From repo root - installs both bootstrap_devcontainer and evals
+# From repo root
 uv sync
-
-# For distributed execution with Dask:
-uv sync --extra dask
 ```
 
 ## Usage
 
-### Test with a local directory
-
 ```bash
-# Test with samples/python_project
-uv run python -m evals.cli test_local --source_dir samples/python_project --output_dir ./test_output
-
-# With custom budget
-uv run python -m evals.cli test_local --source_dir samples/python_project --max_budget_usd 2.0
-```
-
-### Run on a list of repos
-
-```bash
-# Local execution (ThreadPoolTaskRunner - default)
+# Run on a list of repos
 uv run python -m evals.eval_cli run \
-    --agent_config_path evals/examples/agent_config.json5 \
-    --repo_list_path evals/examples/repo_list.jsonl \
-    --execution_mode local \
-    --output_dir ~/bootstrap_devcontainer_eval_output.1
+    --repo_list_path evals/examples/repos.jsonl \
+    --clone_dir ~/.cache/bootstrap_eval/repos \
+    --worktree_dir ~/.cache/bootstrap_eval/worktrees \
+    --output_path ./eval_output.json \
+    --max_budget_usd 1.0
 
-# Parallel processes (ProcessPoolTaskRunner)
-uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode process
-
-# Distributed with Dask (requires prefect-dask)
-uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode dask
+# With caching database
+uv run python -m evals.eval_cli run \
+    --repo_list_path evals/examples/repos.jsonl \
+    --log_db ~/.bootstrap_devcontainer/eval.sqlite \
+    --output_path ./eval_output.json
 ```
 
 ## Configuration
 
-### agent_config.json5
-
-```json5
-{
-    // Model configuration
-    "model": "claude-sonnet-4-20250514",
-    "max_budget_usd": 1.0,
-    
-    // Git source for bootstrap_devcontainer
-    "bootstrap_git_url": "https://github.com/imbue-ai/bootstrap_devcontainer",
-    "bootstrap_git_ref": "prod",  // or a specific commit hash
-    
-    // Execution settings
-    "timeout_minutes": 30,
-    
-    // Cache settings
-    "use_cache": true,
-}
-```
-
 ### repo_list.jsonl
 
-Each line is a JSON object with `s3_repo_tarball`:
+Each line is a JSON object with at minimum a `repo` field:
 
 ```jsonl
-{"s3_repo_tarball": "s3://bucket/path/to/repo.tar.gz"}
-{"s3_repo_tarball": "s3://bucket/path/to/another-repo.tar.gz"}
+{"repo": "https://github.com/psf/requests", "difficulty": "easy"}
+{"repo": "https://github.com/pallets/flask", "difficulty": "easy"}
 ```
 
-For local testing, you can use local paths instead of S3 URIs.
+Optional metadata fields (preserved in output): `rank`, `language`, `build_system`, `tests`, `difficulty`, `notes`.
 
 ## Output
 
-For each repo, the harness produces:
-1. `bootstrap_result.json` - The BootstrapResult data
-2. `devcontainer.tar.gz` - The generated .devcontainer directory
-3. `session.jsonl` - The Claude session transcript
-4. `stdout.txt` / `stderr.txt` - Raw output for debugging
+The output JSON contains:
 
-A `summary.json` file is written with results for all repos.
-
-## Environment Variables
-
-- `ANTHROPIC_API_KEY` - Required for Claude API access
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - Required for S3 access (Modal mode)
+```json
+{
+  "bootstrap_devcontainer_version": {
+    "git_hash": "abc123...",
+    "branch": "main",
+    "commit_count": 100,
+    "commit_timestamp": "2024-01-01T00:00:00",
+    "is_dirty": false
+  },
+  "repos": [
+    {"repo": "https://github.com/psf/requests", "commit_hash": "def456..."}
+  ],
+  "results": [
+    {
+      "repo_entry": {"repo": "...", "commit_hash": "..."},
+      "success": true,
+      "bootstrap_result": {...}
+    }
+  ]
+}
+```
 
 ## Architecture
 
-The harness uses:
-- **Prefect** for flow orchestration and task management
-- **Pluggable task runners** - same code runs locally or distributed:
-  - `ThreadPoolTaskRunner` (default) - concurrent threads
-  - `ProcessPoolTaskRunner` - parallel processes
-  - `DaskTaskRunner` - distributed across cluster
-- Workers need:
-  - Docker (for devcontainer builds)
-  - Node.js + Claude Code CLI
-  - devcontainer CLI
-  - uv for Python package management
+1. **Clone** - Repos are cloned to `--clone_dir` (cached, reused across runs)
+2. **Worktree** - A git worktree is created in `--worktree_dir` for each run
+3. **Execute** - `bootstrap-devcontainer` CLI runs with `--agent_in_modal`
+4. **Collect** - Results are aggregated with version stamps
+
+Uses Prefect for task orchestration with caching.
+
+## Testing
+
+```bash
+# Run the integration test (requires Modal)
+cd evals
+uv run pytest test_eval_flow.py -v -m "slow and modal"
+```

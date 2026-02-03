@@ -1,255 +1,277 @@
-"""Prefect flow for MapReduce-style evaluation.
+"""Prefect flow for eval harness.
 
-This module provides a unified task that works with any Prefect task runner:
-- ThreadPoolTaskRunner (default, local)
-- ProcessPoolTaskRunner (local, parallel processes)
-- DaskTaskRunner (distributed)
-- Modal (via Prefect-Modal integration)
-
-The same `process_repo_task` runs everywhere - the task runner determines
-where execution happens.
+Clones repos, creates worktrees, and runs bootstrap-devcontainer CLI on each.
 """
 
 import json
 import logging
-import os
 import shutil
-import signal
-import sys
-import tarfile
-import tempfile
+import subprocess
 from pathlib import Path
-from types import FrameType
 
-import boto3
-from config import AgentConfig, EvalConfig, RepoEntry, WorkerResult
+from config import AgentConfig, EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
 from prefect import flow, get_run_logger, task
 from prefect.futures import wait
-from prefect.task_runners import ProcessPoolTaskRunner, ThreadPoolTaskRunner
-from worker import process_repo
+from prefect.tasks import task_input_hash
 
-# Global flag for graceful shutdown
-_shutdown_requested = False
+from bootstrap_devcontainer.version import get_version_info
 
-
-def _handle_sigint(_signum: int, _frame: FrameType | None) -> None:
-    """Handle SIGINT (Ctrl+C) gracefully."""
-    global _shutdown_requested
-    if _shutdown_requested:
-        # Second Ctrl+C - force exit
-        print("\nForce exit requested. Terminating immediately.", file=sys.stderr)
-        sys.exit(130)
-    _shutdown_requested = True
-    print("\nShutdown requested. Waiting for current tasks to finish...", file=sys.stderr)
-    print("Press Ctrl+C again to force exit.", file=sys.stderr)
+logger = logging.getLogger(__name__)
 
 
-class _PrefectLogHandler(logging.Handler):
-    """Handler that forwards Python logging records to a Prefect logger."""
+def _run_git(
+    args: list[str], cwd: Path | None = None, check: bool = True
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=check,
+    )
 
-    def __init__(self, prefect_logger: logging.Logger | logging.LoggerAdapter) -> None:  # type: ignore[type-arg]
-        super().__init__()
-        self._prefect_logger = prefect_logger
 
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            # Map log levels
-            if record.levelno >= logging.ERROR:
-                self._prefect_logger.error(msg)
-            elif record.levelno >= logging.WARNING:
-                self._prefect_logger.warning(msg)
-            elif record.levelno >= logging.INFO:
-                self._prefect_logger.info(msg)
-            else:
-                self._prefect_logger.debug(msg)
-        except Exception:
-            self.handleError(record)
+@task(
+    name="clone_repo",
+    description="Clone a repository to local cache",
+    cache_key_fn=task_input_hash,
+    cache_expiration=None,  # Never expire - repos are immutable at a given URL
+)
+def clone_repo_task(
+    repo_url: str,
+    clone_dir: Path,
+) -> tuple[Path, str]:
+    """Clone a repo to the cache directory.
+
+    Returns (repo_path, commit_hash).
+    Prefect caches this based on (repo_url, clone_dir).
+    """
+    log = get_run_logger()
+
+    # Derive a directory name from the repo URL
+    # e.g., https://github.com/psf/requests -> psf_requests
+    repo_name = repo_url.rstrip("/").split("/")[-2] + "_" + repo_url.rstrip("/").split("/")[-1]
+    repo_name = repo_name.replace(".git", "")
+    repo_path = clone_dir / repo_name
+
+    if repo_path.exists():
+        # Already cloned, just fetch latest and get HEAD
+        log.info(f"Repo already exists at {repo_path}, fetching...")
+        _run_git(["fetch", "--all"], cwd=repo_path)
+    else:
+        # Clone fresh
+        log.info(f"Cloning {repo_url} to {repo_path}")
+        clone_dir.mkdir(parents=True, exist_ok=True)
+        _run_git(["clone", repo_url, str(repo_path)])
+
+    # Get current HEAD commit
+    result = _run_git(["rev-parse", "HEAD"], cwd=repo_path)
+    commit_hash = result.stdout.strip()
+    log.info(f"Repo {repo_url} at commit {commit_hash[:12]}")
+
+    return repo_path, commit_hash
 
 
 @task(
     name="process_repo",
-    description="Process a single repository tarball with bootstrap_devcontainer",
+    description="Run bootstrap-devcontainer on a repo worktree",
     retries=1,
     retry_delay_seconds=60,
 )
 def process_repo_task(
-    repo_source: str,
+    repo_entry: RepoEntry,
+    clone_dir: Path,
+    worktree_dir: Path,
     agent_config: AgentConfig,
-    output_dir: str,
-) -> WorkerResult:
-    """Process a single repo - works in any execution environment.
+) -> RepoResult:
+    """Process a single repo.
 
-    This task is designed to work identically whether run locally or on
-    a remote worker (Modal, Dask, etc.). The task runner handles distribution.
-
-    Args:
-        repo_source: Path to tarball (local path or S3 URI)
-        agent_config: Configuration for the agent
-        output_dir: Directory for output artifacts
-
-    Returns:
-        WorkerResult with success/failure and artifact paths
+    1. Clone/fetch repo to clone_dir (cached)
+    2. Create worktree in worktree_dir
+    3. Run bootstrap-devcontainer CLI
+    4. Return result
     """
-    logger = get_run_logger()
-    logger.info(f"Starting process_repo_task for {repo_source}")
-
-    # Configure worker, process_runner, and modal loggers to forward to Prefect
-    # This ensures logs from worker.py, process_runner.py, and modal container appear in Prefect UI
-    for module_name in [
-        "worker",
-        "bootstrap_devcontainer.process_runner",
-        "bootstrap_devcontainer.modal",
-    ]:
-        module_logger = logging.getLogger(module_name)
-        module_logger.setLevel(logging.DEBUG)
-        # Add a handler that forwards to Prefect's logger
-        module_logger.handlers = []  # Clear existing handlers
-        module_logger.addHandler(_PrefectLogHandler(logger))
-
-    # API key is optional - if not set, relies on claude CLI's own auth
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
-    # Handle S3 sources by downloading first
-    tarball_path = Path(repo_source)
-    temp_download_dir = None
-
-    if repo_source.startswith("s3://"):
-        temp_download_dir = Path(tempfile.mkdtemp(prefix="s3_download_"))
-        tarball_path = temp_download_dir / "input.tar.gz"
-
-        # Parse S3 URI: s3://bucket/key -> bucket, key
-        bucket, key = repo_source.replace("s3://", "").split("/", 1)
-        s3 = boto3.client("s3")
-        s3.download_file(bucket, key, str(tarball_path))
+    log = get_run_logger()
+    repo_url = repo_entry.repo
 
     try:
-        logger.info(f"Calling process_repo with tarball={tarball_path}, output_dir={output_dir}")
-        result = process_repo(
-            tarball_path=tarball_path,
-            agent_config=agent_config,
-            output_dir=Path(output_dir),
-            anthropic_api_key=anthropic_api_key,
+        # Step 1: Clone (cached by Prefect)
+        repo_path, commit_hash = clone_repo_task.fn(repo_url, clone_dir)
+        repo_entry.commit_hash = commit_hash
+
+        # Step 2: Create worktree
+        # Derive worktree name from repo
+        repo_name = repo_path.name
+        work_path = worktree_dir / f"{repo_name}_{commit_hash[:8]}"
+
+        if work_path.exists():
+            # Clean up existing worktree
+            shutil.rmtree(work_path, ignore_errors=True)
+
+        work_path.parent.mkdir(parents=True, exist_ok=True)
+        _run_git(["worktree", "add", str(work_path), "HEAD"], cwd=repo_path)
+        log.info(f"Created worktree at {work_path}")
+
+        # Step 3: Run CLI
+        test_artifacts_dir = work_path / ".bootstrap_artifacts"
+        test_artifacts_dir.mkdir(exist_ok=True)
+
+        result_file = work_path / "bootstrap_result.json"
+
+        cmd = [
+            "uv",
+            "run",
+            "bootstrap-devcontainer",
+            "--project_root",
+            str(work_path),
+            "--test_artifacts_dir",
+            str(test_artifacts_dir),
+            "--max_budget_usd",
+            str(agent_config.max_budget_usd),
+            "--output_file",
+            str(result_file),
+            "--agent_time_limit_secs",
+            str(agent_config.timeout_minutes * 60),
+            "--agent_in_modal",
+        ]
+
+        if agent_config.log_db:
+            cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
+
+        if agent_config.require_cache_hit:
+            cmd.append("--require_cache_hit")
+
+        if agent_config.no_cache_replay:
+            cmd.append("--no_cache_replay")
+
+        log.info(f"Running: {' '.join(cmd[:8])}...")
+
+        proc = subprocess.run(
+            cmd,
+            cwd=work_path,
+            capture_output=True,
+            text=True,
+            timeout=agent_config.timeout_minutes * 60 + 60,  # Extra buffer
         )
-        # Preserve the original source URI
-        result.s3_repo_tarball = repo_source
-        logger.info(f"Completed {repo_source}: success={result.success}")
-        return result
+
+        # Step 4: Parse result
+        bootstrap_result = None
+        if result_file.exists():
+            try:
+                bootstrap_result = json.loads(result_file.read_text())
+            except json.JSONDecodeError:
+                log.warning(f"Failed to parse {result_file}")
+
+        success = proc.returncode == 0
+
+        if not success:
+            log.error(f"CLI failed: {proc.stderr[:500]}")
+
+        return RepoResult(
+            repo_entry=repo_entry,
+            success=success,
+            error_message=proc.stderr[:1000] if not success else None,
+            bootstrap_result=bootstrap_result,
+        )
+
+    except subprocess.TimeoutExpired:
+        return RepoResult(
+            repo_entry=repo_entry,
+            success=False,
+            error_message=f"Timeout after {agent_config.timeout_minutes} minutes",
+        )
+    except Exception as e:
+        import traceback
+
+        return RepoResult(
+            repo_entry=repo_entry,
+            success=False,
+            error_message=f"{e}\n{traceback.format_exc()}",
+        )
     finally:
-        # Clean up temp download
-        if temp_download_dir and temp_download_dir.exists():
-            shutil.rmtree(temp_download_dir, ignore_errors=True)
-
-
-def get_task_runner(execution_mode: str, max_workers: int):
-    """Get the appropriate task runner based on execution mode.
-
-    Args:
-        execution_mode: "local", "process", "dask", or "modal"
-        max_workers: Maximum parallel workers
-
-    Returns:
-        A Prefect task runner instance
-    """
-    if execution_mode == "local":
-        return ThreadPoolTaskRunner(max_workers=max_workers)
-    elif execution_mode == "process":
-        return ProcessPoolTaskRunner(max_workers=max_workers)
-    elif execution_mode == "dask":
-        from prefect_dask import (
-            DaskTaskRunner,  # type: ignore[import-not-found]  # Optional dependency
-        )
-
-        return DaskTaskRunner()
-    elif execution_mode == "modal":
-        # Modal integration via Prefect - requires prefect to be configured
-        # to use Modal as a work pool
-        # For now, fall back to local with a note
-        # TODO: Configure Modal work pool integration
-        return ThreadPoolTaskRunner(max_workers=max_workers)
-    else:
-        return ThreadPoolTaskRunner(max_workers=max_workers)
+        # Clean up worktree (but keep the clone)
+        if "work_path" in locals() and work_path.exists():
+            try:
+                _run_git(
+                    ["worktree", "remove", "--force", str(work_path)], cwd=repo_path, check=False
+                )
+            except Exception:
+                shutil.rmtree(work_path, ignore_errors=True)
 
 
 @flow(name="eval_bootstrap_devcontainer")
 def eval_flow(
     repo_list_path: str,
+    clone_dir: str,
+    worktree_dir: str,
     eval_config: EvalConfig,
-    output_dir: str,
-) -> list[WorkerResult]:
+    output_path: str | None = None,
+) -> EvalOutput:
     """Main evaluation flow.
-
-    The task_runner is configured based on eval_config.execution_mode.
-    The same process_repo_task runs in all modes - only the runner changes.
 
     Args:
         repo_list_path: Path to JSONL file with repo entries
+        clone_dir: Directory for pristine repo clones (cached)
+        worktree_dir: Directory for worktrees
         eval_config: Evaluation configuration
-        output_dir: Local directory for outputs
+        output_path: Optional path to write JSON output
 
     Returns:
-        List of WorkerResult for each repo
+        EvalOutput with version info, pinned repos, and results
     """
-    global _shutdown_requested
-    logger = get_run_logger()
+    log = get_run_logger()
 
-    # Install signal handler for graceful shutdown
-    original_sigint = signal.signal(signal.SIGINT, _handle_sigint)
+    # Resolve paths
+    clone_path = resolve_path(clone_dir)
+    worktree_path = resolve_path(worktree_dir)
+    clone_path.mkdir(parents=True, exist_ok=True)
+    worktree_path.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Load repo list
-        repos: list[RepoEntry] = []
-        with Path(repo_list_path).open() as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    repos.append(RepoEntry(**json.loads(line)))
+    # Load repo list
+    repos: list[RepoEntry] = []
+    with Path(repo_list_path).open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                repos.append(RepoEntry(**json.loads(line)))
 
-        logger.info(f"Loaded {len(repos)} repos from {repo_list_path}")
+    log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
 
-        # Submit all tasks
-        futures = []
-        for i, repo in enumerate(repos):
-            if _shutdown_requested:
-                logger.warning("Shutdown requested - skipping remaining task submissions")
-                break
+    # Submit all tasks
+    futures = []
+    for repo_entry in repos:
+        future = process_repo_task.submit(
+            repo_entry=repo_entry,
+            clone_dir=clone_path,
+            worktree_dir=worktree_path,
+            agent_config=eval_config.agent_config,
+        )
+        futures.append(future)
 
-            repo_output_dir = Path(output_dir) / f"repo_{i}"
-            repo_output_dir.mkdir(parents=True, exist_ok=True)
+    # Wait and collect
+    wait(futures)
+    results = [f.result() for f in futures]
 
-            future = process_repo_task.submit(
-                repo_source=repo.s3_repo_tarball,
-                agent_config=eval_config.agent_config,
-                output_dir=str(repo_output_dir),
-            )
-            futures.append(future)
-            logger.info(f"Submitted task {i + 1}/{len(repos)}: {repo.s3_repo_tarball}")
+    # Build output
+    version_info = get_version_info()
+    pinned_repos = [r.repo_entry for r in results]
 
-        # Wait for submitted tasks to complete
-        if futures:
-            logger.info(f"Waiting for {len(futures)} tasks to complete...")
-            wait(futures)
-            results = [f.result() for f in futures]
-        else:
-            results = []
-    finally:
-        # Restore original signal handler
-        signal.signal(signal.SIGINT, original_sigint)
+    output = EvalOutput(
+        bootstrap_devcontainer_version=version_info.model_dump(),
+        repos=pinned_repos,
+        results=results,
+    )
+
+    # Write output
+    if output_path:
+        out_path = resolve_path(output_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w") as f:
+            json.dump(output.model_dump(), f, indent=2)
+        log.info(f"Wrote output to {out_path}")
 
     success_count = sum(1 for r in results if r.success)
-    logger.info(f"All tasks complete: {success_count}/{len(results)} succeeded")
+    log.info(f"Complete: {success_count}/{len(results)} succeeded")
 
-    # Write summary
-    summary_path = Path(output_dir) / "summary.json"
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    with summary_path.open("w") as f:
-        json.dump([r.model_dump() for r in results], f, indent=2)
-
-    return results
-
-
-def create_tarball_from_dir(source_dir: Path, output_path: Path) -> Path:
-    """Create a tarball from a directory."""
-    with tarfile.open(output_path, "w:gz") as tar:
-        tar.add(source_dir, arcname=source_dir.name)
-    return output_path
+    return output
