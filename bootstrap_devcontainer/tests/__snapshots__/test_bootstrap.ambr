@@ -32,6 +32,60 @@
     }),
   })
 # ---
+# name: test_e2e_sample_projects[fullstack_project]
+  dict({
+    'agent': dict({
+      'exit_code': 0,
+      'model': '',
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Creating .devcontainer directory and copying timestamp helper script.',
+        'Creating devcontainer.json configuration file.',
+        'Creating Dockerfile with Python and Node.js runtimes for polyglot project.',
+        'Creating run_all_tests.sh script to execute both backend and frontend test suites.',
+        'Building dev container image to verify configuration.',
+        'Build failed due to uv virtual environment issue. Fixing Dockerfile to use proper uv commands.',
+        'Retrying dev container build with fixed uv commands.',
+        'Running tests in container to verify functionality.',
+      ]),
+      'summary': 'Successfully built polyglot dev container with Python and Node.js. Both backend (pytest) and frontend (node:test) suites pass. Key tip: This project needed both Python and Node.js runtimes since the frontend tests start the Flask backend server and make API calls to it. Using uv for Python dependencies significantly sped up builds.',
+      'timed_out': False,
+    }),
+    'error_message': None,
+    'success': True,
+    'verification': dict({
+      'error_message': None,
+      'success': True,
+      'test_results': list([
+        dict({
+          'name': 'test::add via API',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test::multiply via API',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'server_test::test_server_is_running',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test_simple::test_pass',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'test_simple::test_also_passes',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
+    }),
+  })
+# ---
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent': dict({
@@ -39,16 +93,12 @@
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Verifying existing devcontainer setup and testing build.',
-        'Building Docker image with devcontainer build.',
-        'Build failed due to network connectivity. Updating devcontainer.json to fix network access during build.',
-        'Rebuilding Docker image with network access enabled.',
-        'Build successful. Running tests in the container.',
-        'Tests passed. Verifying test artifacts were generated correctly.',
-        'Running final verification build and test.',
-        'Final verification complete. Documenting devcontainer structure.',
+        'Existing devcontainer configuration found. Building image to verify setup.',
+        'Network DNS issue during build. Need to ensure --network=host is properly configured for docker build.',
+        'Image built successfully. Running tests in container.',
+        'First test run successful. Running final verification build and test.',
       ]),
-      'summary': 'Everything worked. The devcontainer successfully builds and runs all tests. Key tip: Modal requires --network=host in build options (use "options" not "args" in devcontainer.json) and UV_LINK_MODE=copy to avoid symlink issues with Modal\'s snapshot mechanism. The uv package manager provides fast dependency installation with excellent layer caching.',
+      'summary': 'All tests pass successfully. The only issue encountered was the initial network configuration - needed to change devcontainer.json from "args: {network: host}" to "options: ["--network=host"]" for proper DNS resolution during build. This project uses uv for Python package management which provides fast dependency installation.',
       'timed_out': False,
     }),
     'error_message': None,
