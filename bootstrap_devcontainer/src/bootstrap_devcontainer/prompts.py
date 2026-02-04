@@ -21,10 +21,20 @@ Instructions:
    This file MUST include these lines, specifying exactly where the Dockerfile should be
    and that the build context is the entire source tree:
 ```
+  // ...
   "build": {{
     "dockerfile": "Dockerfile",
-    "context": ".."
-  }}
+    "context": "..",
+    "args": {{
+      // Without this, the build will fail on Modal when it tries to access the network.
+      "network": "host"
+    }}
+  }},
+  "runArgs": [
+    // Without this, the build will fail on Modal when it tries to access the network.
+    "--network=host"
+  ],
+  /// ...
 ```
    Note: devcontainer.json uses JSON5 format, so comments are allowed.
 

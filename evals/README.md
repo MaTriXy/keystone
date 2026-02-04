@@ -34,7 +34,7 @@ uv run python -m evals.eval_cli \
     --timeout_minutes 60 \
     --max_budget_usd 10.0 \
     --limit 1 \
-    --output_path ./eval_output.json
+    --output_path ~/eval_output.json
 ```
 
 ## Configuration
