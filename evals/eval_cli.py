@@ -43,6 +43,7 @@ def run(
     max_workers: int = typer.Option(4, "--max_workers", help="Max parallel workers"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
+    limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
     """Run the eval harness on a list of repos."""
     agent_config = AgentConfig(
@@ -69,6 +70,7 @@ def run(
         worktree_dir=str(worktree_dir),
         eval_config=eval_config,
         output_path=str(output_path) if output_path else None,
+        limit=limit,
     )
 
     # Print summary

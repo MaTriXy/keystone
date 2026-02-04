@@ -25,6 +25,12 @@ uv run python -m evals.eval_cli run \
     --repo_list_path evals/examples/repos.jsonl \
     --log_db ~/.bootstrap_devcontainer/eval.sqlite \
     --output_path ./eval_output.json
+
+# Run on only the first N repos (useful for testing)
+uv run python -m evals.eval_cli run \
+    --repo_list_path evals/examples/repos.jsonl \
+    --limit 1 \
+    --output_path ./eval_output.json
 ```
 
 ## Configuration

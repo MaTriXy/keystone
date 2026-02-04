@@ -214,6 +214,7 @@ def eval_flow(
     worktree_dir: str,
     eval_config: EvalConfig,
     output_path: str | None = None,
+    limit: int | None = None,
 ) -> EvalOutput:
     """Main evaluation flow.
 
@@ -223,6 +224,7 @@ def eval_flow(
         worktree_dir: Directory for worktrees
         eval_config: Evaluation configuration
         output_path: Optional path to write JSON output
+        limit: Optional limit on number of repos to process
 
     Returns:
         EvalOutput with version info, pinned repos, and results
@@ -244,6 +246,11 @@ def eval_flow(
                 repos.append(RepoEntry(**json.loads(line)))
 
     log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
+
+    # Apply limit if specified
+    if limit is not None:
+        repos = repos[:limit]
+        log.info(f"Limited to first {limit} repos")
 
     # Submit all tasks
     futures = []
