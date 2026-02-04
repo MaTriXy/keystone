@@ -8,6 +8,8 @@ from config import AgentConfig, EvalConfig
 from flow import eval_flow
 from rich.console import Console
 
+from bootstrap_devcontainer.constants import DEFAULT_LOG_PATH
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +41,9 @@ def run(
     timeout_minutes: int = typer.Option(
         30, "--timeout_minutes", help="Timeout per repo in minutes"
     ),
-    log_db: str = typer.Option(None, "--log_db", help="Database for logging/caching"),
+    log_db: str = typer.Option(
+        str(DEFAULT_LOG_PATH), "--log_db", help="Database for logging/caching"
+    ),
     max_workers: int = typer.Option(4, "--max_workers", help="Max parallel workers"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),

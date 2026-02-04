@@ -110,6 +110,9 @@ def process_repo_task(
             # Clean up existing worktree
             shutil.rmtree(work_path, ignore_errors=True)
 
+        # Prune stale worktree records (e.g., from deleted directories)
+        _run_git(["worktree", "prune"], cwd=repo_path)
+
         work_path.parent.mkdir(parents=True, exist_ok=True)
         _run_git(["worktree", "add", str(work_path), "HEAD"], cwd=repo_path)
         log.info(f"Created worktree at {work_path}")
