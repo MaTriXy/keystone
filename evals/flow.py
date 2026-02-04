@@ -198,13 +198,15 @@ def process_repo_task(
         )
     finally:
         # Clean up worktree (but keep the clone)
-        if "work_path" in locals() and work_path.exists():
-            try:
-                _run_git(
-                    ["worktree", "remove", "--force", str(work_path)], cwd=repo_path, check=False
-                )
-            except Exception:
-                shutil.rmtree(work_path, ignore_errors=True)
+        # TODO: Re-enable worktree cleanup after debugging
+        # if "work_path" in locals() and work_path.exists():
+        #     try:
+        #         _run_git(
+        #             ["worktree", "remove", "--force", str(work_path)], cwd=repo_path, check=False
+        #         )
+        #     except Exception:
+        #         shutil.rmtree(work_path, ignore_errors=True)
+        pass
 
 
 @flow(name="eval_bootstrap_devcontainer")
