@@ -25,13 +25,13 @@ Instructions:
   "build": {{
     "dockerfile": "Dockerfile",
     "context": "..",
-    "args": {{
+    "options": [
       // Without this, the build will fail on Modal when it tries to access the network.
-      "network": "host"
-    }}
+      "--network=host"
+    ]
   }},
   "runArgs": [
-    // Without this, the build will fail on Modal when it tries to access the network.
+    // Without this, the run will fail on Modal when it tries to access the network.
     "--network=host"
   ],
   /// ...
@@ -44,7 +44,7 @@ Instructions:
    ```
 
    This script wraps command execution with timestamped, tab-separated output that's easy to parse.
-   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]`
+   Usage: `/timestamp_process_output.pl [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]`
 
    Options:
    - `--logfile FILE`: Write timestamped output to FILE (always includes timestamps and elapsed time)
@@ -77,7 +77,7 @@ Instructions:
 
    IMPORTANT: Your Dockerfile must include perl for this script to work:
    ```dockerfile
-   RUN apt-get update && apt-get install -y perl
+   RUN apt-get update && apt-get install -y perl-base
    ```
 
 3. Create a .devcontainer/Dockerfile alongside that.

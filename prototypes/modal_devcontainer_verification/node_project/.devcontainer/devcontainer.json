@@ -7,7 +7,7 @@
       "BUILDKIT_INLINE_CACHE": "1"
     },
     "options": [
-      "--network=host"
+      "--network=none"
     ]
   },
   "customizations": {

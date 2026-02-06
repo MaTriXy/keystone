@@ -1,11 +1,19 @@
 # Use official Node.js LTS image
-FROM node:20-slim
+FROM ubuntu:latest
+RUN apt-get update && apt-get install -y curl
+RUN curl https://example.com # zz
 
 # Create test artifacts directory
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 
 # Set working directory
 WORKDIR /project_src
+
+
+RUN touch zz
+
+RUN apt-get update && apt-get install -y \
+    perl-base
 
 # Copy package.json first for better caching (build context is now workspace root)
 COPY package.json ./package.json
