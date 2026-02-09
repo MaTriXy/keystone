@@ -135,7 +135,7 @@ def bootstrap(
         help="Maximum seconds for building the devcontainer image",
     ),
     test_timeout_secs: int = typer.Option(
-        300,
+        1800,
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),

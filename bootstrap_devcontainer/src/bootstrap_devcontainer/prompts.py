@@ -3,17 +3,14 @@ from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
 AGENT_PROMPT_TEMPLATE = f"""
 We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
 
-Your task is to create and populate a .devcontainer/... folder at the root of the project's code tree.
-
-IMPORTANT: Only changes inside .devcontainer/... will be preserved. When we capture your work, we extract
-only the .devcontainer/ directory and reapply it to the original repo. Any changes you make outside
-.devcontainer/ (e.g., fixing source files, adding config files) will be lost.
-
-If the project needs modifications to run tests (e.g., creating config files, setting up fixtures),
-implement those modifications in run_all_tests.sh so they happen at test runtime inside the container.
-
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
+
+Your task is to create and populate a .devcontainer/... folder at the root of the project's code tree.
+
+IMPORTANT: Only your changes inside .devcontainer/... will be preserved.
+When we capture your work, we extract only the .devcontainer/ directory and reapply it to the original repo.
+Any changes you make outside the .devcontainer/ directory (e.g., fixing source files, adding config files) will be lost.
 
 Instructions:
 
@@ -26,12 +23,12 @@ Instructions:
     "dockerfile": "Dockerfile",
     "context": "..",
     "options": [
-      // Without this, the build will fail on Modal when it tries to access the network.
+      // Without this, the build will fail on Modal if it tries to access the network.
       "--network=host"
     ]
   }},
   "runArgs": [
-    // Without this, the run will fail on Modal when it tries to access the network.
+    // Without this, the run will fail on Modal if it tries to access the network.
     "--network=host"
   ],
   /// ...
@@ -252,6 +249,11 @@ Tips and Notes:
   Find a balance: too short causes churn, too long wastes time on stuck tests.
   Example: `timeout 300 pytest tests/` limits pytest to 5 minutes.
 
+* If the project source code needs modifications to run tests (e.g., creating config files, setting up test fixtures),
+  implement those modifications in the Dockerfile if possible, or in run_all_tests.sh if necessary,
+  so that they are preserved.
+  Remember that we won't preserve any changes you make outside the .devcontainer/ directory.
+
 * As you work, emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:
   {STATUS_MARKER} Exploring repository structure to identify file types and test locations.
@@ -303,16 +305,15 @@ MODAL_ADDENDUM = """
 
 IMPORTANT: You are running in a Modal sandbox environment.
 Bridge networking does not work in this environment due to gVisor/veth restrictions.
-When using `docker run`, you MUST use `--network host` for containers to have network access.
-When configuring the devcontainer, add "--network=host" to devcontainer.json build options.
-Example: `docker run --network host IMAGE CMD`
+When using `docker run`, you MUST use `--network=host` for containers to have network access.
+"""
 
+OLD_PART = """
 IMPORTANT: Modal's image builder does not support --chown flags in COPY commands.
 Do NOT use `COPY --chown=user:group` syntax. Instead, use separate RUN commands to change ownership:
 ```
 COPY file.txt /path/
 RUN chown user:group /path/file.txt
-```
 """
 
 
