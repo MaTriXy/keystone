@@ -90,15 +90,141 @@
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Existing devcontainer configuration found. Building image to verify setup.',
-        'Network DNS issue during build. Need to ensure --network=host is properly configured for docker build.',
-        'Image built successfully. Running tests in container.',
-        'First test run successful. Running final verification build and test.',
+        'Creating .devcontainer directory structure and copying timestamp helper script.',
+        'Creating devcontainer.json configuration file.',
+        'Creating Dockerfile with Python and uv dependencies.',
+        'Creating run_all_tests.sh script with pytest and JUnit XML reporting.',
+        'Verifying .devcontainer directory structure.',
+        'Building the dev container image to verify the setup.',
+        'Lock file needs updating. Removing --locked flag from uv sync to allow dependency resolution.',
+        'Rebuilding dev container with updated Dockerfile.',
+        'Running tests in the container to verify the setup.',
+        'Fixing test runner - removing --no-cov flag since pytest-cov is not installed.',
+        'Rebuilding container with updated test runner script.',
+        'Running tests again with the fixed test runner.',
+        'Verifying test artifacts were created correctly.',
+        'Performing final verification of the .devcontainer setup.',
+        'Running final end-to-end test to confirm everything works.',
+        'All tests passing. Creating final summary documentation.',
       ]),
-      'summary': 'All tests pass successfully. The only issue encountered was the initial network configuration - needed to change devcontainer.json from "args: {network: host}" to "options: ["--network=host"]" for proper DNS resolution during build. This project uses uv for Python package management which provides fast dependency installation.',
+      'summary': "Everything works perfectly. All 2 tests pass. The setup uses uv for fast Python dependency management with optimized Docker layer caching. Key learnings: removed --locked flag from uv sync as the lock file needed updates, and removed --no-cov flag from pytest as pytest-cov wasn't installed. The container builds quickly due to excellent layer caching strategy.",
       'timed_out': False,
     }),
     'error_message': None,
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "name": "Sample Python Project Dev Container",
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              // Without this, the build will fail on Modal if it tries to access the network.
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            // Without this, the run will fail on Modal if it tries to access the network.
+            "--network=host"
+          ],
+          "customizations": {
+            "vscode": {
+              "settings": {
+                "python.defaultInterpreterPath": "/venv/bin/python",
+                "python.testing.pytestEnabled": true
+              },
+              "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+              ]
+            }
+          }
+        }
+  
+      ''',
+      'dockerfile': '''
+        # Use Python 3.11 as base image
+        FROM python:3.11-slim
+        
+        # Install system dependencies including perl for timestamp script
+        RUN apt-get update && apt-get install -y \
+            perl-base \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Set up timestamp helper script
+        COPY .devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+        
+        # Create test artifacts directory
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        # Copy uv from official image
+        COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+        
+        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
+        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_LINK_MODE=copy
+        
+        # Pre-create uv virtual environment and install dependencies
+        # Install dependencies first (without the project itself) to maximize layer caching
+        COPY pyproject.toml uv.lock /tmp/deps/
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        RUN cd /tmp/deps && \
+            uv sync --no-install-project && \
+            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+        
+        # Copy the project source code
+        WORKDIR /project_src
+        COPY app.py ./
+        COPY tests/ ./tests/
+        COPY pyproject.toml uv.lock ./
+        
+        # Add venv to PATH
+        ENV PATH="/venv/bin:$PATH"
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/bin/bash
+        set -euo pipefail
+        
+        # Ensure test artifacts directories exist
+        mkdir -p /test_artifacts/junit
+        
+        # Set PYTHONPATH to include project source
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
+        
+        # Change to project directory
+        cd /project_src
+        
+        echo "=========================================="
+        echo "Running pytest tests..."
+        echo "=========================================="
+        
+        # Run pytest with JUnit XML output and timestamped logging
+        /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+            pytest --junitxml=/test_artifacts/junit/pytest.xml -v tests/
+        
+        # Check if tests passed
+        TEST_EXIT_CODE=$?
+        
+        if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo "=========================================="
+            echo "All tests passed successfully!"
+            echo "=========================================="
+            echo '{"success": true, "message": "All tests passed"}' > /test_artifacts/final_result.json
+        else
+            echo "=========================================="
+            echo "Tests failed with exit code: $TEST_EXIT_CODE"
+            echo "=========================================="
+            echo "{\"success\": false, \"message\": \"Tests failed with exit code: $TEST_EXIT_CODE\"}" > /test_artifacts/final_result.json
+            exit $TEST_EXIT_CODE
+        fi
+  
+      ''',
+    }),
     'success': True,
     'verification': dict({
       'error_message': None,
