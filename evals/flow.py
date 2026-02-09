@@ -158,11 +158,14 @@ def process_repo_task(
         log.info(f"Running: {' '.join(cmd[:8])}...")
 
         # Use streaming process runner to forward CLI output in real-time
+        # IMPORTANT: Run from our repo root, NOT the target repo's worktree.
+        # If cwd is the target repo, `uv run` sees that repo's pyproject.toml and tries to
+        # create a venv and install its dependencies locally (e.g. compiling pytorch).
+        # The --project_root CLI arg already tells bootstrap-devcontainer where the target is.
         repo_name = repo_path.name
         proc = run_process(
             cmd,
             log_prefix=f"[{repo_name}]",
-            cwd=str(work_path),
         )
 
         # Step 4: Parse result
