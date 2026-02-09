@@ -4,7 +4,7 @@ use warnings;
 use IO::Select;
 use IO::Handle;
 use POSIX qw(strftime);
-use Time::HiRes qw(time);
+
 use Getopt::Long;
 
 my $logfile;
@@ -53,7 +53,7 @@ my $sel = IO::Select->new();
 $sel->add($out_r, $err_r);
 
 sub iso_ts { strftime("%Y-%m-%dT%H:%M:%S%z", localtime) }
-sub elapsed { sprintf("%.3f", time() - $start_time) }
+sub elapsed { sprintf("%d", time() - $start_time) }
 
 while (my @ready = $sel->can_read) {
     for my $fh (@ready) {
