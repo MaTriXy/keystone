@@ -8,7 +8,8 @@ storage:
     rootdirectory: /var/lib/registry
 
 http:
-  addr: :5000
+  addr: 0.0.0.0:5000
+  relativeurls: true
   headers:
     X-Content-Type-Options: [nosniff]
 
