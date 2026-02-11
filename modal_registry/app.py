@@ -93,14 +93,23 @@ def registry():
         if query:
             url += f"?{query}"
 
-        # Get request body if present
-        content_length = environ.get("CONTENT_LENGTH", "0")
-        try:
-            content_length = int(content_length)
-        except ValueError:
-            content_length = 0
-
-        request_body = environ["wsgi.input"].read(content_length) if content_length > 0 else None
+        # Read request body - handle both Content-Length and chunked transfer encoding.
+        # Docker pushes use chunked encoding (no Content-Length), so we must read
+        # wsgi.input fully in that case.
+        content_length_str = environ.get("CONTENT_LENGTH", "")
+        wsgi_input = environ["wsgi.input"]
+        if content_length_str:
+            try:
+                content_length = int(content_length_str)
+            except ValueError:
+                content_length = 0
+            request_body = wsgi_input.read(content_length) if content_length > 0 else None
+        else:
+            # No Content-Length: likely chunked transfer encoding.
+            # Read all available data from wsgi.input.
+            request_body = wsgi_input.read()
+            if not request_body:
+                request_body = None
 
         # Build headers from environ
         headers = {}
@@ -110,21 +119,40 @@ def registry():
                 headers[header_name] = value
         if "CONTENT_TYPE" in environ:
             headers["Content-Type"] = environ["CONTENT_TYPE"]
+        # Set Content-Length for the upstream request when we have body data
+        if request_body is not None:
+            headers["Content-Length"] = str(len(request_body))
+        # Remove Transfer-Encoding since we're sending the full body at once
+        headers.pop("TRANSFER-ENCODING", None)
+        headers.pop("Transfer-Encoding", None)
 
         # Forward the request
         method = environ.get("REQUEST_METHOD", "GET")
         req = urllib.request.Request(url, data=request_body, headers=headers, method=method)
 
+        # The external hostname for rewriting Location headers
+        external_host = environ.get("HTTP_HOST", "")
+
+        def _rewrite_headers(raw_headers):
+            """Rewrite Location headers from http://localhost:5000 to the external HTTPS URL."""
+            result = []
+            for k, v in raw_headers:
+                if k.lower() == "location" and external_host:
+                    v = v.replace("http://localhost:5000", f"https://{external_host}")
+                    v = v.replace(f"http://{external_host}", f"https://{external_host}")
+                result.append((k, v))
+            return result
+
         try:
             with urllib.request.urlopen(req, timeout=120) as response:
                 response_body = response.read()
-                response_headers = [(k, v) for k, v in response.headers.items()]
+                response_headers = _rewrite_headers([(k, v) for k, v in response.headers.items()])
                 status = response.status
                 start_response(f"{status} OK", response_headers)
                 return [response_body]
         except urllib.error.HTTPError as e:
             response_body = e.read()
-            response_headers = [(k, v) for k, v in e.headers.items()]
+            response_headers = _rewrite_headers([(k, v) for k, v in e.headers.items()])
             start_response(f"{e.code} {e.reason}", response_headers)
             return [response_body]
         except Exception as e:

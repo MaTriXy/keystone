@@ -58,7 +58,7 @@ https://workspace--bootstrap-devcontainer-docker-registry-cache-registry.modal.r
 
 Save this URL as your `REGISTRY_URL` environment variable:
 ```bash
-export REGISTRY_URL="https://workspace--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 ```
 
 ## Usage
@@ -72,8 +72,8 @@ Verify the registry works:
 docker pull alpine
 
 # Tag and push to the registry
-docker tag alpine $REGISTRY_URL/test/alpine:latest
-docker push $REGISTRY_URL/test/alpine:latest
+docker tag alpine $BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/test/alpine:latest
+docker push $BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/test/alpine:latest
 ```
 
 If successful, your registry is functional! 🎉
@@ -85,8 +85,8 @@ Use the registry as a cache backend for `docker buildx`:
 ```bash
 docker buildx build \
   -t myimage:latest \
-  --cache-from type=registry,ref=$REGISTRY_URL/buildcache:main \
-  --cache-to type=registry,ref=$REGISTRY_URL/buildcache:main,mode=max \
+  --cache-from type=registry,ref=$BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/buildcache:main \
+  --cache-to type=registry,ref=$BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/buildcache:main,mode=max \
   .
 ```
 
@@ -101,7 +101,7 @@ Inside any Modal function, use the same cache flags:
 ```python
 import subprocess
 
-REGISTRY = "https://workspace--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+REGISTRY = "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 
 subprocess.run([
     "docker", "buildx", "build",
