@@ -139,7 +139,15 @@ def bootstrap(
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),
-):
+) -> None:
+    """Bootstrap a devcontainer for a project.
+
+    Docker Build Cache (optional):
+    When running in Modal (--agent_in_modal), configure cache registry via environment variables:
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL (e.g., https://registry.example.com)
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for authentication
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for authentication
+    """
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
 
