@@ -24,7 +24,7 @@ Modal App: docker-registry-cache
 ```
 
 ## Files
-
+modal secret createmodal secret create
 - **app.py**: Modal application definition
 - **registry_config.yml**: Docker registry configuration
 - **README.md**: This file

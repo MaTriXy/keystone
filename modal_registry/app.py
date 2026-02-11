@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 import modal
 
@@ -24,11 +25,14 @@ registry_image = (
     .add_local_file("registry_config.yml", "/etc/docker/registry/config.yml")
 )
 
+auth_secret = modal.Secret.from_name("bootstrap-devcontainer-docker-registry-auth")
+
 
 @app.function(
     image=registry_image,
     volumes={"/var/lib/registry": registry_volume},
     # CRITICAL SETTINGS
+    secrets=[auth_secret],
     max_containers=1,  # enforce singleton writer
     min_containers=1,  # keep registry hot (faster builds)
     timeout=60 * 60 * 2,  # allow long pushes (2 hours)
@@ -38,9 +42,14 @@ registry_image = (
 @modal.concurrent(max_inputs=100)  # Allow concurrent requests
 @modal.wsgi_app()
 def registry():
+    import os
     import socket
     import sys
     import time
+
+    # Write htpasswd file from secret
+    Path("/auth").mkdir(parents=True, exist_ok=True)
+    Path("/auth/htpasswd").write_text(os.environ["HT_PASSWD"], encoding="utf-8")
 
     # Start the registry process as a background daemon
     print("Starting Docker registry process...", file=sys.stderr)

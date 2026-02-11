@@ -12,7 +12,7 @@ http:
   headers:
     X-Content-Type-Options: [nosniff]
 
-# Required for buildx cache (large blobs)
-compatibility:
-  schema1:
-    enabled: true
+auth:
+  htpasswd:
+    realm: basic-realm
+    path: /auth/htpasswd
