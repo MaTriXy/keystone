@@ -19,9 +19,14 @@ registry_volume = modal.Volume.from_name(
 )
 
 # nginx config: proxy from EXTERNAL_PORT -> INTERNAL_REGISTRY_PORT.
-# Modal's @web_server proxy strips the Accept header, so we inject a default
-# that includes all modern manifest types. Without this, the Docker registry
-# returns schema v1 manifests which Docker >= 20 can't handle.
+#
+# nginx serves two purposes:
+# 1. Re-injects the Accept header for manifest requests (Modal strips it,
+#    causing the registry to return deprecated v1 schema manifests).
+# 2. Rewrites Location headers from http:// to https://. The registry only
+#    speaks HTTP internally but clients connect via HTTPS through Modal's
+#    proxy. Rather than using the registry's buggy `relativeurls` option,
+#    we let it generate normal absolute http:// URLs and fix the scheme here.
 NGINX_CONF = f"""\
 worker_processes 1;
 error_log /dev/stderr info;
@@ -38,6 +43,11 @@ http {{
     server {{
         listen {EXTERNAL_PORT};
 
+        # Rewrite http:// to https:// in Location headers returned by the
+        # registry. This replaces the need for relativeurls, which has bugs
+        # around cross-repo blob mounts and upload session redirects.
+        proxy_redirect http:// https://;
+
         # For manifest requests, always set Accept to include modern types.
         # Modal's proxy may strip or replace the Accept header, causing the
         # registry to return deprecated v1 schema manifests.
@@ -46,7 +56,6 @@ http {{
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto https;
             proxy_set_header Accept "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, */*";
             proxy_buffering off;
             proxy_request_buffering off;
@@ -57,7 +66,6 @@ http {{
             proxy_set_header Host $http_host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto https;
             proxy_buffering off;
             proxy_request_buffering off;
         }}
