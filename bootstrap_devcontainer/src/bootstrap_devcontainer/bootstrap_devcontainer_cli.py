@@ -461,6 +461,14 @@ def bootstrap(
             verification_error = verify_result.error_message
             image_build_seconds = verify_result.image_build_seconds
             test_execution_seconds = verify_result.test_execution_seconds
+
+            # Print verification errors for debugging
+            if not verification_success and verification_error:
+                print("=" * 60, file=sys.stderr)
+                print("VERIFICATION FAILED:", file=sys.stderr)
+                print("=" * 60, file=sys.stderr)
+                print(verification_error, file=sys.stderr)
+                print("=" * 60, file=sys.stderr)
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
             verification_success = False

@@ -34,7 +34,7 @@ RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 
 # Copy source tree (excluding .devcontainer which changes frequently).
 WORKDIR /project_src
-COPY src/ ./src/
+COPY app.py ./
 COPY tests/ ./tests/
 COPY pyproject.toml ./
 

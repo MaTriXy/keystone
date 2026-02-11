@@ -110,8 +110,8 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
 
     # Verify test artifacts were extracted from container via docker cp
-    assert (test_artifacts_dir / "pytest-report.xml").exists(), (
-        "pytest-report.xml should be extracted from /test_artifacts in container"
+    assert (test_artifacts_dir / "junit" / "pytest.xml").exists(), (
+        "junit/pytest.xml should be extracted from /test_artifacts in container"
     )
     assert (test_artifacts_dir / "final_result.json").exists(), (
         "final_result.json should be extracted from /test_artifacts in container"
