@@ -7,10 +7,7 @@ import modal
 
 app = modal.App("bootstrap-devcontainer-docker-registry-cache")
 
-# Modal exposes this port; nginx listens here and proxies to the registry.
-EXTERNAL_PORT = 5000
-# The Docker registry listens on this internal port.
-INTERNAL_REGISTRY_PORT = 5001
+REGISTRY_PORT = 5000
 
 # Persistent storage for cached layers
 registry_volume = modal.Volume.from_name(
@@ -18,65 +15,10 @@ registry_volume = modal.Volume.from_name(
     create_if_missing=True,
 )
 
-# nginx config: proxy from EXTERNAL_PORT -> INTERNAL_REGISTRY_PORT.
-#
-# nginx serves two purposes:
-# 1. Re-injects the Accept header for manifest requests (Modal strips it,
-#    causing the registry to return deprecated v1 schema manifests).
-# 2. Rewrites Location headers from http:// to https://. The registry only
-#    speaks HTTP internally but clients connect via HTTPS through Modal's
-#    proxy. Rather than using the registry's buggy `relativeurls` option,
-#    we let it generate normal absolute http:// URLs and fix the scheme here.
-NGINX_CONF = f"""\
-worker_processes 1;
-error_log /dev/stderr info;
-pid /tmp/nginx.pid;
-
-events {{
-    worker_connections 1024;
-}}
-
-http {{
-    access_log /dev/stderr;
-    client_max_body_size 0;  # unlimited upload size for layer blobs
-
-    server {{
-        listen {EXTERNAL_PORT};
-
-        # Rewrite http:// to https:// in Location headers returned by the
-        # registry. This replaces the need for relativeurls, which has bugs
-        # around cross-repo blob mounts and upload session redirects.
-        proxy_redirect http:// https://;
-
-        # For manifest requests, always set Accept to include modern types.
-        # Modal's proxy may strip or replace the Accept header, causing the
-        # registry to return deprecated v1 schema manifests.
-        location ~ ^/v2/.*/manifests/ {{
-            proxy_pass http://127.0.0.1:{INTERNAL_REGISTRY_PORT};
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header Accept "application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, */*";
-            proxy_buffering off;
-            proxy_request_buffering off;
-        }}
-
-        location / {{
-            proxy_pass http://127.0.0.1:{INTERNAL_REGISTRY_PORT};
-            proxy_set_header Host $http_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_buffering off;
-            proxy_request_buffering off;
-        }}
-    }}
-}}
-"""
-
-# Base image: Python + registry binary + nginx
+# Base image: Python + registry binary
 registry_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("ca-certificates", "wget", "nginx")
+    .apt_install("ca-certificates", "wget")
     .run_commands(
         # Download and install Docker registry binary
         "wget -O /tmp/registry.tar.gz https://github.com/distribution/distribution/releases/download/v2.8.3/registry_2.8.3_linux_amd64.tar.gz",
@@ -101,36 +43,27 @@ auth_secret = modal.Secret.from_name("bootstrap-devcontainer-docker-registry-aut
     memory=1024,
 )
 @modal.concurrent(max_inputs=100)
-@modal.web_server(EXTERNAL_PORT)
+@modal.web_server(REGISTRY_PORT)
 def registry() -> None:
-    """Start nginx (front) -> Docker registry (back).
+    """Start the Docker registry directly on the web server port.
 
-    nginx is needed because Modal's @web_server proxy strips the Accept header.
-    Without the correct Accept header, the registry returns deprecated v1 schema
-    manifests that modern Docker clients reject with "manifest unknown".
+    This registry is used exclusively as a BuildKit cache backend
+    (--cache-from / --cache-to). BuildKit's HTTP client handles the
+    OCI manifest types natively and uses Content-Length (not chunked
+    encoding), so no nginx proxy layer is needed.
+
+    The registry uses relativeurls: true to avoid http:// vs https://
+    scheme mismatches (Modal terminates TLS externally).
     """
     # Write htpasswd file from secret
     Path("/auth").mkdir(parents=True, exist_ok=True)
     Path("/auth/htpasswd").write_text(os.environ["HT_PASSWD"], encoding="utf-8")
 
-    # Write nginx config
-    Path("/etc/nginx/nginx.conf").write_text(NGINX_CONF, encoding="utf-8")
+    print(f"Starting registry on :{REGISTRY_PORT}", file=sys.stderr)
 
-    print(
-        f"Starting registry on :{INTERNAL_REGISTRY_PORT}, nginx on :{EXTERNAL_PORT}",
-        file=sys.stderr,
-    )
-
-    # Start the Docker registry on the internal port
+    # Start the Docker registry (foreground via Popen)
     subprocess.Popen(
         ["registry", "serve", "/etc/docker/registry/config.yml"],
-        stdout=sys.stderr,
-        stderr=sys.stderr,
-    )
-
-    # Start nginx on the external port (foreground-ish via Popen)
-    subprocess.Popen(
-        ["nginx", "-g", "daemon off;"],
         stdout=sys.stderr,
         stderr=sys.stderr,
     )

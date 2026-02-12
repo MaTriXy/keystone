@@ -17,11 +17,11 @@ This is **NOT** a production Docker registry. It is a **BuildKit cache backend o
 ## Architecture
 
 ```
-Modal App: docker-registry-cache
-    Web endpoint → Docker registry (registry:2)
-    Persistent storage → Modal Volume
-    Singleton runtime → max_containers=1
+Docker client (HTTPS) → Modal proxy (TLS termination) → Docker registry (:5000)
+                                                         ↕ Modal Volume (persistent storage)
 ```
+
+Single container, no nginx — the registry listens directly on the web server port.
 
 ## Files
 
