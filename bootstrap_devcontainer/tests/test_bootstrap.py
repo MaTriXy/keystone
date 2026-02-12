@@ -287,6 +287,111 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
+
+DOCKER_CACHE_SECRET = "bootstrap-devcontainer-docker-registry-config"
+
+
+def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
+    """Extract and parse the JSON BootstrapResult from CLI stdout."""
+    stdout_lines = stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+    assert json_start is not None, "Could not find JSON output in stdout"
+    json_str = "\n".join(stdout_lines[json_start:])
+    return BootstrapResult.model_validate_json(json_str)
+
+
+@pytest.mark.manual
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
+def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
+    """Verify that the docker build cache is populated on first run and hit on second run.
+
+    Run 1: Fresh agent run (--no_cache_replay) with --docker_cache_secret.
+            This populates both the agent inference cache and the docker build cache.
+    Run 2: Replay the cached agent output (cache hit) with --docker_cache_secret.
+            The docker image build should be significantly faster due to registry cache hits.
+    """
+    cache_file = tmp_path / "test_log.sqlite"
+
+    base_cmd = [
+        "bootstrap-devcontainer",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(tmp_path / "artifacts"),
+        "--log_db",
+        str(cache_file),
+        "--docker_cache_secret",
+        DOCKER_CACHE_SECRET,
+    ]
+
+    # --- Run 1: Fresh agent run (populates both caches) ---
+    logger.info("=" * 60)
+    logger.info("Docker Build Cache Test — Run 1 (fresh, populates caches)")
+    logger.info("=" * 60)
+
+    run1_result = run_process(
+        [*base_cmd, "--no_cache_replay"],
+        log_prefix="[run1]",
+    )
+    assert run1_result.returncode == 0, (
+        f"Run 1 failed with exit code {run1_result.returncode}"
+    )
+    output1 = _parse_bootstrap_result(run1_result.stdout)
+    assert output1.verification is not None
+    assert output1.verification.success, f"Run 1 verification failed: {output1.verification.error_message}"
+    run1_build_secs = output1.verification.image_build_seconds
+    assert run1_build_secs is not None, "Run 1 should report image_build_seconds"
+    logger.info("Run 1 image build: %.1f seconds", run1_build_secs)
+
+    # --- Run 2: Cache hit (agent replayed, docker cache should be warm) ---
+    logger.info("=" * 60)
+    logger.info("Docker Build Cache Test — Run 2 (cached agent, warm docker cache)")
+    logger.info("=" * 60)
+
+    # Use a fresh artifacts dir so there's no leftover state
+    run2_artifacts = tmp_path / "artifacts_run2"
+    run2_cmd = [
+        "bootstrap-devcontainer",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(run2_artifacts),
+        "--log_db",
+        str(cache_file),
+        "--docker_cache_secret",
+        DOCKER_CACHE_SECRET,
+        # Don't pass --no_cache_replay: this should be a cache hit for the agent
+    ]
+
+    run2_result = run_process(run2_cmd, log_prefix="[run2]")
+    assert run2_result.returncode == 0, (
+        f"Run 2 failed with exit code {run2_result.returncode}"
+    )
+    output2 = _parse_bootstrap_result(run2_result.stdout)
+    assert output2.verification is not None
+    assert output2.verification.success, f"Run 2 verification failed: {output2.verification.error_message}"
+    run2_build_secs = output2.verification.image_build_seconds
+    assert run2_build_secs is not None, "Run 2 should report image_build_seconds"
+    logger.info("Run 2 image build: %.1f seconds", run2_build_secs)
+
+    # --- Verify the docker build was faster on run 2 ---
+    logger.info(
+        "Build time comparison: Run 1 = %.1fs, Run 2 = %.1fs (%.1f%% of run 1)",
+        run1_build_secs,
+        run2_build_secs,
+        (run2_build_secs / run1_build_secs * 100) if run1_build_secs > 0 else 0,
+    )
+    # The cached build should be at least 2x faster. In practice it's often 5-10x.
+    assert run2_build_secs < run1_build_secs * 0.5, (
+        f"Expected run 2 build ({run2_build_secs:.1f}s) to be at least 2x faster "
+        f"than run 1 ({run1_build_secs:.1f}s) due to docker registry cache"
+    )
+
+
 def _validate_status_messages(output: BootstrapResult) -> None:
     """Validate that status messages have increasing timestamps and non-zero cumulative costs."""
     if not output.agent.status_messages:

@@ -90,66 +90,46 @@
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Creating .devcontainer directory structure and copying timestamp helper script.',
-        'Creating devcontainer.json configuration file.',
-        'Creating Dockerfile with Python and uv dependencies.',
-        'Creating run_all_tests.sh script with pytest and JUnit XML reporting.',
-        'Verifying .devcontainer directory structure.',
-        'Building the dev container image to verify the setup.',
-        'Lock file needs updating. Removing --locked flag from uv sync to allow dependency resolution.',
-        'Rebuilding dev container with updated Dockerfile.',
-        'Running tests in the container to verify the setup.',
-        'Fixing test runner - removing --no-cov flag since pytest-cov is not installed.',
-        'Rebuilding container with updated test runner script.',
-        'Running tests again with the fixed test runner.',
+        'Creating .devcontainer directory and copying pre-generated files.',
+        'Creating Dockerfile with Python 3.11, uv, and pre-cached dependencies.',
+        'Creating run_all_tests.sh with pytest execution and JUnit XML reporting.',
+        'Building Docker image to verify Dockerfile configuration.',
+        'Lockfile needs updating; removing --locked flag from uv sync commands.',
+        'Rebuilding Docker image with updated Dockerfile.',
+        'Running tests in container to verify setup.',
+        'Removing --no-cov flag from pytest command.',
+        'Rebuilding image with updated test runner script.',
+        'Running tests to verify final setup.',
         'Verifying test artifacts were created correctly.',
-        'Performing final verification of the .devcontainer setup.',
-        'Running final end-to-end test to confirm everything works.',
-        'All tests passing. Creating final summary documentation.',
+        'Verifying final .devcontainer structure.',
+        'Running final verification test.',
       ]),
-      'summary': "Everything works perfectly. All 2 tests pass. The setup uses uv for fast Python dependency management with optimized Docker layer caching. Key learnings: removed --locked flag from uv sync as the lock file needed updates, and removed --no-cov flag from pytest as pytest-cov wasn't installed. The container builds quickly due to excellent layer caching strategy.",
+      'summary': 'All tests pass successfully. The setup uses Python 3.11 with uv for fast dependency management. Key tip: Remove the --locked flag from uv sync when the lockfile needs updating, and always use --network=host with docker run in Modal/gVisor environments.',
       'timed_out': False,
     }),
     'error_message': None,
     'generated_files': dict({
       'devcontainer_json': '''
         {
-          "name": "Sample Python Project Dev Container",
           "build": {
             "dockerfile": "Dockerfile",
             "context": "..",
             "options": [
-              // Without this, the build will fail on Modal if it tries to access the network.
               "--network=host"
             ]
           },
           "runArgs": [
-            // Without this, the run will fail on Modal if it tries to access the network.
             "--network=host"
-          ],
-          "customizations": {
-            "vscode": {
-              "settings": {
-                "python.defaultInterpreterPath": "/venv/bin/python",
-                "python.testing.pytestEnabled": true
-              },
-              "extensions": [
-                "ms-python.python",
-                "ms-python.vscode-pylance"
-              ]
-            }
-          }
+          ]
         }
   
       ''',
       'dockerfile': '''
-        # Use Python 3.11 as base image
+        # Use Python 3.11 slim image as base
         FROM python:3.11-slim
         
-        # Install system dependencies including perl for timestamp script
-        RUN apt-get update && apt-get install -y \
-            perl-base \
-            && rm -rf /var/lib/apt/lists/*
+        # Install perl-base for timestamp helper script
+        RUN apt-get update && apt-get install -y perl-base && rm -rf /var/lib/apt/lists/*
         
         # Set up timestamp helper script
         COPY .devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
@@ -160,26 +140,29 @@
         # Copy uv from official image
         COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
         
-        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
-        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
-        ENV UV_LINK_MODE=copy
+        # Set up working directory
+        WORKDIR /project_src
         
         # Pre-create uv virtual environment and install dependencies
         # Install dependencies first (without the project itself) to maximize layer caching
+        # See: https://docs.astral.sh/uv/guides/integration/docker/#caching
         COPY pyproject.toml uv.lock /tmp/deps/
         ENV UV_PROJECT_ENVIRONMENT=/venv
         RUN cd /tmp/deps && \
             uv sync --no-install-project && \
             echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
-        # Copy the project source code
-        WORKDIR /project_src
+        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
+        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_LINK_MODE=copy
+        
+        # Copy source code (these won't change during agent work)
         COPY app.py ./
         COPY tests/ ./tests/
         COPY pyproject.toml uv.lock ./
         
-        # Add venv to PATH
-        ENV PATH="/venv/bin:$PATH"
+        # Install the project itself
+        RUN uv sync
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -190,38 +173,29 @@
         #!/bin/bash
         set -euo pipefail
         
-        # Ensure test artifacts directories exist
+        # Create JUnit XML directory
         mkdir -p /test_artifacts/junit
         
-        # Set PYTHONPATH to include project source
+        # Set PYTHONPATH to ensure imports work correctly
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
-        # Change to project directory
-        cd /project_src
-        
-        echo "=========================================="
-        echo "Running pytest tests..."
-        echo "=========================================="
+        # Activate the virtual environment
+        export PATH="/venv/bin:$PATH"
         
         # Run pytest with JUnit XML output and timestamped logging
+        echo "Running pytest tests..."
         /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
             pytest --junitxml=/test_artifacts/junit/pytest.xml -v tests/
         
-        # Check if tests passed
-        TEST_EXIT_CODE=$?
+        # Create final result JSON
+        cat > /test_artifacts/final_result.json << 'EOF'
+        {
+          "success": true,
+          "message": "All tests passed successfully"
+        }
+        EOF
         
-        if [ $TEST_EXIT_CODE -eq 0 ]; then
-            echo "=========================================="
-            echo "All tests passed successfully!"
-            echo "=========================================="
-            echo '{"success": true, "message": "All tests passed"}' > /test_artifacts/final_result.json
-        else
-            echo "=========================================="
-            echo "Tests failed with exit code: $TEST_EXIT_CODE"
-            echo "=========================================="
-            echo "{\"success\": false, \"message\": \"Tests failed with exit code: $TEST_EXIT_CODE\"}" > /test_artifacts/final_result.json
-            exit $TEST_EXIT_CODE
-        fi
+        echo "Test run completed successfully!"
   
       ''',
     }),
