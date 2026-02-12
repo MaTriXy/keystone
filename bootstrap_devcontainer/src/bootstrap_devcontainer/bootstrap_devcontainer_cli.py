@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import subprocess
 import sys
 import time
@@ -141,15 +140,17 @@ def bootstrap(
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),
+    docker_cache_secret: str | None = typer.Option(
+        None,
+        "--docker_cache_secret",
+        help=(
+            "Name of a Modal secret containing DOCKER_BUILD_CACHE_REGISTRY_URL, "
+            "DOCKER_BUILD_CACHE_REGISTRY_USERNAME, and DOCKER_BUILD_CACHE_REGISTRY_PASSWORD. "
+            "Enables registry-based Docker build caching when running in Modal."
+        ),
+    ),
 ) -> None:
-    """Bootstrap a devcontainer for a project.
-
-    Docker Build Cache (optional):
-    When running in Modal (--agent_in_modal), configure cache registry via environment variables:
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL (e.g., https://registry.example.com)
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for authentication
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for authentication
-    """
+    """Bootstrap a devcontainer for a project."""
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
 
@@ -186,25 +187,19 @@ def bootstrap(
 
     # Set up runner based on --agent_in_modal flag
     if agent_in_modal:
-        # Log Docker cache registry configuration if present
-        docker_registry = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY")
-        docker_username = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME")
-        docker_password = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD")
-
-        if docker_registry:
-            if docker_username and docker_password:
-                console.print(
-                    f"[blue]Docker cache registry:[/blue] {docker_registry} (with authentication)"
-                )
-            else:
-                console.print(
-                    f"[blue]Docker cache registry:[/blue] {docker_registry} (no authentication)"
-                )
+        if docker_cache_secret:
+            console.print(
+                f"[blue]Docker build cache:[/blue] using Modal secret '{docker_cache_secret}'"
+            )
         else:
-            console.print("[dim]Docker cache registry: not configured[/dim]")
+            console.print("[dim]Docker build cache: not configured[/dim]")
 
-        runner = ModalAgentRunner()
+        runner = ModalAgentRunner(docker_cache_secret=docker_cache_secret)
     else:
+        if docker_cache_secret:
+            console.print(
+                "[yellow]Warning:[/yellow] --docker_cache_secret is ignored when running locally"
+            )
         runner = LocalAgentRunner()
 
     token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}

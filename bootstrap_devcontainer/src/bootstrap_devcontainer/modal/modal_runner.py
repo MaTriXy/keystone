@@ -5,9 +5,8 @@ This avoids the 20-30s cold start penalty of creating a new sandbox for verifica
 and lets us use Docker's build cache directly instead of Modal's from_dockerfile.
 """
 
-import base64
+import dataclasses
 import io
-import json
 import logging
 import os
 import queue
@@ -29,6 +28,7 @@ from bootstrap_devcontainer.agent_runner import (
     build_claude_command,
 )
 from bootstrap_devcontainer.modal.image import create_modal_image
+from bootstrap_devcontainer.prompts import generate_devcontainer_json
 from bootstrap_devcontainer.schema import VerifyResult
 
 logger = logging.getLogger(__name__)
@@ -153,38 +153,26 @@ def _read_claude_auth() -> dict[str, str]:
     return auth_env
 
 
-def _read_docker_cache_config() -> dict[str, str]:
-    """Read Docker cache registry configuration from environment.
+@dataclasses.dataclass(frozen=True)
+class DockerCacheConfig:
+    """Docker build cache registry configuration.
 
-    Returns dict with optional keys:
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL for build cache
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for registry auth
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for registry auth
-    - DOCKER_AUTH_CONFIG: Formatted auth config for Docker (generated if URL+creds provided)
+    Read from environment variables (typically injected via Modal secret
+    ``bootstrap-devcontainer-docker-registry-config``):
+
+    - ``DOCKER_BUILD_CACHE_REGISTRY_URL``      - registry hostname
+    - ``DOCKER_BUILD_CACHE_REGISTRY_USERNAME``  - basic-auth username
+    - ``DOCKER_BUILD_CACHE_REGISTRY_PASSWORD``  - basic-auth password
     """
-    config: dict[str, str] = {}
 
-    registry_url = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY")
-    username = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME")
-    password = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD")
+    registry_url: str
+    username: str
+    password: str
 
-    if registry_url:
-        config["BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY"] = registry_url
-
-        # If credentials provided, generate DOCKER_AUTH_CONFIG
-        if username and password:
-            auth_string = f"{username}:{password}"
-            auth_b64 = base64.b64encode(auth_string.encode()).decode()
-
-            # Generate Docker auth config JSON
-            auth_config = {"auths": {registry_url: {"auth": auth_b64}}}
-            config["DOCKER_AUTH_CONFIG"] = json.dumps(auth_config)
-
-            logger.info(f"Configured Docker registry authentication for {registry_url}")
-        else:
-            logger.info(f"Docker cache registry URL provided ({registry_url}) but no credentials")
-
-    return config
+    @property
+    def cache_ref(self) -> str:
+        """OCI reference used for ``--cache-from`` / ``--cache-to``."""
+        return f"{self.registry_url}/buildcache:latest"
 
 
 class ModalAgentRunner(AgentRunner):
@@ -195,11 +183,17 @@ class ModalAgentRunner(AgentRunner):
     and benefits from Docker's build cache.
     """
 
-    def __init__(self, timeout_seconds: int = 3600) -> None:
+    def __init__(
+        self,
+        timeout_seconds: int = 3600,
+        docker_cache_secret: str | None = None,
+    ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._docker_cache_secret = docker_cache_secret
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
+        self._cache_config: DockerCacheConfig | None = None
 
     def ensure_sandbox(self) -> modal.Sandbox:
         """Create sandbox if not already created. Returns the sandbox."""
@@ -212,11 +206,18 @@ class ModalAgentRunner(AgentRunner):
         app = modal.App.lookup("bootstrap-devcontainer-sandbox", create_if_missing=True)
         image = create_modal_image()
 
+        # Attach the docker cache secret (if any) so its env vars are
+        # available inside the sandbox for docker login / cache flags.
+        secrets: list[modal.Secret] = []
+        if self._docker_cache_secret:
+            secrets.append(modal.Secret.from_name(self._docker_cache_secret))
+
         self._sandbox = modal.Sandbox.create(
             app=app,
             image=image,
             timeout=self._timeout_seconds,
             region="us-west-2",
+            secrets=secrets,
             experimental_options={"enable_docker": True},
         )
 
@@ -233,17 +234,76 @@ class ModalAgentRunner(AgentRunner):
         logger.info("Waiting for Docker daemon to be ready...")
         run_modal_command(self._sandbox, "/wait_for_docker.sh", name="docker-wait").wait()
 
-        # Configure Docker registry authentication if provided
-        docker_config = _read_docker_cache_config()
-        if "DOCKER_AUTH_CONFIG" in docker_config:
-            logger.info("Configuring Docker registry authentication...")
-            # Write auth config to Docker's expected location
-            auth_config_json = docker_config["DOCKER_AUTH_CONFIG"]
-            with self._sandbox.open("/root/.docker/config.json", "w") as f:
-                f.write(auth_config_json)
-            logger.info("Docker authentication configured")
+        # Configure Docker build cache registry if secret was provided
+        if self._docker_cache_secret:
+            self._cache_config = self._read_cache_config_from_sandbox()
+            if self._cache_config is not None:
+                self._docker_login(self._cache_config)
 
         return self._sandbox
+
+    def _read_env_from_sandbox(self, var_name: str) -> str | None:
+        """Read a single environment variable from the sandbox."""
+        assert self._sandbox is not None
+        proc = self._sandbox.exec("printenv", var_name)
+        value_parts: list[str] = []
+        for chunk in proc.stdout:
+            value_parts.append(chunk)
+        exit_code = proc.returncode
+        if exit_code != 0:
+            return None
+        return "".join(value_parts).strip() or None
+
+    def _read_cache_config_from_sandbox(self) -> DockerCacheConfig | None:
+        """Read Docker cache config env vars from inside the sandbox."""
+        url = self._read_env_from_sandbox("DOCKER_BUILD_CACHE_REGISTRY_URL")
+        username = self._read_env_from_sandbox("DOCKER_BUILD_CACHE_REGISTRY_USERNAME")
+        password = self._read_env_from_sandbox("DOCKER_BUILD_CACHE_REGISTRY_PASSWORD")
+
+        if url and username and password:
+            logger.info(f"Docker build cache registry configured: {url}")
+            return DockerCacheConfig(registry_url=url, username=username, password=password)
+
+        if url:
+            logger.warning(
+                f"DOCKER_BUILD_CACHE_REGISTRY_URL is set ({url}) "
+                "but USERNAME or PASSWORD is missing - cache disabled"
+            )
+        else:
+            logger.warning(
+                f"Docker cache secret '{self._docker_cache_secret}' was provided "
+                "but DOCKER_BUILD_CACHE_REGISTRY_URL is not set - cache disabled"
+            )
+        return None
+
+    def _docker_login(self, config: DockerCacheConfig) -> None:
+        """Run ``docker login`` inside the sandbox for both root and agent users."""
+        assert self._sandbox is not None
+        sb = self._sandbox
+
+        for run_as_agent in (False, True):
+            # Build a script that pipes the password into docker login
+            script = (
+                f"echo {shlex.quote(config.password)} | "
+                f"docker login --username {shlex.quote(config.username)} "
+                f"--password-stdin {shlex.quote(config.registry_url)}"
+            )
+            if run_as_agent:
+                script = f"su agent -c {shlex.quote(script)}"
+
+            with sb.open("/tmp/_docker_login.sh", "w") as f:
+                f.write(f"#!/bin/bash\n{script}\n")
+            run_modal_command(
+                sb, "chmod", "+x", "/tmp/_docker_login.sh", name="docker-login"
+            ).wait()
+            proc = run_modal_command(sb, "/tmp/_docker_login.sh", name="docker-login")
+            exit_code = proc.wait()
+            if exit_code != 0:
+                user = "agent" if run_as_agent else "root"
+                logger.error(f"docker login failed for {user} (exit {exit_code})")
+                raise RuntimeError(f"docker login to {config.registry_url} failed for {user}")
+
+        logger.info(f"Docker login successful for {config.registry_url}")
 
     def upload_project(self, project_archive: bytes) -> None:
         """Upload project archive to sandbox."""
@@ -257,6 +317,14 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="upload"
         ).wait()
+
+        # Write pre-generated devcontainer.json for the agent to copy into .devcontainer/
+        cache_url = self._cache_config.registry_url if self._cache_config else None
+        devcontainer_json = generate_devcontainer_json(cache_registry_url=cache_url)
+        with sb.open("/devcontainer.json", "w") as f:
+            f.write(devcontainer_json)
+        logger.info("Wrote /devcontainer.json to sandbox")
+
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
 
     def run(
@@ -413,14 +481,9 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         container_name = "bootstrap-verify-container"
 
         # 1. Build the image
-        # NOTE: Registry-based caching was attempted but Modal's serverless architecture
-        # doesn't support the stateful upload sessions that Docker registries require.
-        # See scripts/modal_registry.py for the attempted implementation.
         logger.info("Building devcontainer image with docker...")
         build_start = time.time()
 
-        # Build docker build command with optional cache registry
-        docker_config = _read_docker_cache_config()
         build_cmd = [
             "timeout",
             str(image_build_timeout_secs),
@@ -430,11 +493,8 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         ]
 
         # Add cache-from and cache-to flags if registry configured
-        if "BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY" in docker_config:
-            cache_registry = docker_config["BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY"]
-            # Use a unique cache key per project (could be based on project hash or name)
-            # For now, use a generic tag - in production you might want project-specific tags
-            cache_ref = f"{cache_registry}/buildcache:latest"
+        if self._cache_config is not None:
+            cache_ref = self._cache_config.cache_ref
             build_cmd.extend(
                 [
                     "--cache-from",

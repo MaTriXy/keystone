@@ -49,6 +49,12 @@ class AgentConfig(BaseModel):
         default=False, description="Skip cache lookup, force fresh execution"
     )
 
+    # Docker build cache (Modal secret name, optional)
+    docker_cache_secret: str | None = Field(
+        default=None,
+        description="Modal secret name with DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}",
+    )
+
 
 class EvalConfig(BaseModel):
     """Top-level eval configuration."""

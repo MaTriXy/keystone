@@ -47,22 +47,21 @@ def run(
     max_workers: int = typer.Option(4, "--max_workers", help="Max parallel workers"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
+    docker_cache_secret: str | None = typer.Option(
+        None,
+        "--docker_cache_secret",
+        help="Modal secret name for Docker build cache registry credentials",
+    ),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
-    """Run the eval harness on a list of repos.
-
-    Docker Build Cache (optional):
-    Configure via environment variables:
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL (e.g., https://registry.example.com)
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for authentication
-    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for authentication
-    """
+    """Run the eval harness on a list of repos."""
     agent_config = AgentConfig(
         max_budget_usd=max_budget_usd,
         timeout_minutes=timeout_minutes,
         log_db=log_db,
         require_cache_hit=require_cache_hit,
         no_cache_replay=no_cache_replay,
+        docker_cache_secret=docker_cache_secret,
     )
 
     eval_config = EvalConfig(

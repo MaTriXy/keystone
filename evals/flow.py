@@ -163,6 +163,9 @@ def process_repo_task(
         if agent_config.no_cache_replay:
             cmd.append("--no_cache_replay")
 
+        if agent_config.docker_cache_secret:
+            cmd.extend(["--docker_cache_secret", agent_config.docker_cache_secret])
+
         log.info(f"Running: {' '.join(cmd[:8])}...")
 
         # Use streaming process runner to forward CLI output in real-time

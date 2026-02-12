@@ -1,4 +1,41 @@
+from __future__ import annotations
+
+import json
+
 from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+
+
+def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:
+    """Generate the devcontainer.json content.
+
+    When *cache_registry_url* is provided, ``--cache-from`` and ``--cache-to``
+    build options are included so that ``devcontainer build`` (and any
+    ``docker build`` the agent runs) benefits from the remote registry cache.
+    """
+    build_options: list[str] = [
+        "--network=host",
+    ]
+    if cache_registry_url is not None:
+        cache_ref = f"{cache_registry_url}/buildcache:latest"
+        build_options.extend(
+            [
+                f"--cache-from=type=registry,ref={cache_ref}",
+                f"--cache-to=type=registry,ref={cache_ref},mode=max",
+            ]
+        )
+
+    devcontainer: dict[str, object] = {
+        "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": build_options,
+        },
+        "runArgs": [
+            "--network=host",
+        ],
+    }
+    return json.dumps(devcontainer, indent=2) + "\n"
+
 
 AGENT_PROMPT_TEMPLATE = f"""
 We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
@@ -14,26 +51,12 @@ Any changes you make outside the .devcontainer/ directory (e.g., fixing source f
 
 Instructions:
 
-1. Create a .devcontainer/devcontainer.json file at the project root.
-   This file MUST include these lines, specifying exactly where the Dockerfile should be
-   and that the build context is the entire source tree:
-```
-  // ...
-  "build": {{
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "options": [
-      // Without this, the build will fail on Modal if it tries to access the network.
-      "--network=host"
-    ]
-  }},
-  "runArgs": [
-    // Without this, the run will fail on Modal if it tries to access the network.
-    "--network=host"
-  ],
-  /// ...
-```
-   Note: devcontainer.json uses JSON5 format, so comments are allowed.
+1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
+   ```bash
+   cp /devcontainer.json .devcontainer/devcontainer.json
+   ```
+   This file is already configured with the correct build context, Dockerfile path,
+   network settings, and build cache options. Do NOT modify it.
 
 2. Copy the timestamp helper script into .devcontainer/:
    ```bash

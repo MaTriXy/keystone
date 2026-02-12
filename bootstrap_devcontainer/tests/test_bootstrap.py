@@ -252,10 +252,8 @@ def test_e2e_sample_projects(
 
     logger.info("Running: %s", " ".join(cmd))
 
-    # Note: run_process inherits environment variables by default, including:
-    # - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY
-    # - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME
-    # - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD
+    # Note: Docker build caching is configured via --docker_cache_secret (Modal secret name),
+    # not via environment variables. See ModalAgentRunner for details.
     result = run_process(cmd, log_prefix="[e2e]")
 
     if "failing" in str(project_root):

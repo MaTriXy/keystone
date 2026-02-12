@@ -15,10 +15,10 @@ registry_volume = modal.Volume.from_name(
     create_if_missing=True,
 )
 
-# Base image: Python + registry binary
+# Base image: Python + registry binary + apache2-utils for htpasswd generation
 registry_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("ca-certificates", "wget")
+    .apt_install("ca-certificates", "wget", "apache2-utils")
     .run_commands(
         # Download and install Docker registry binary
         "wget -O /tmp/registry.tar.gz https://github.com/distribution/distribution/releases/download/v2.8.3/registry_2.8.3_linux_amd64.tar.gz",
@@ -29,7 +29,12 @@ registry_image = (
     .add_local_file("registry_config.yml", "/etc/docker/registry/config.yml")
 )
 
-auth_secret = modal.Secret.from_name("bootstrap-devcontainer-docker-registry-auth")
+# This secret must contain:
+#   DOCKER_BUILD_CACHE_REGISTRY_URL      - full hostname of the registry
+#   DOCKER_BUILD_CACHE_REGISTRY_USERNAME  - username for basic auth
+#   DOCKER_BUILD_CACHE_REGISTRY_PASSWORD  - plaintext password for basic auth
+# The htpasswd file is derived at runtime from USERNAME + PASSWORD.
+auth_secret = modal.Secret.from_name("bootstrap-devcontainer-docker-registry-config")
 
 
 @app.function(
@@ -55,9 +60,17 @@ def registry() -> None:
     The registry uses relativeurls: true to avoid http:// vs https://
     scheme mismatches (Modal terminates TLS externally).
     """
-    # Write htpasswd file from secret
+    # Derive htpasswd file from plaintext credentials at startup
+    username = os.environ["DOCKER_BUILD_CACHE_REGISTRY_USERNAME"]
+    password = os.environ["DOCKER_BUILD_CACHE_REGISTRY_PASSWORD"]
     Path("/auth").mkdir(parents=True, exist_ok=True)
-    Path("/auth/htpasswd").write_text(os.environ["HT_PASSWD"], encoding="utf-8")
+    htpasswd_result = subprocess.run(
+        ["htpasswd", "-Bbn", username, password],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    Path("/auth/htpasswd").write_text(htpasswd_result.stdout, encoding="utf-8")
 
     print(f"Starting registry on :{REGISTRY_PORT}", file=sys.stderr)
 

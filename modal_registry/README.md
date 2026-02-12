@@ -1,127 +1,135 @@
-# Modal-Hosted Docker Buildx Registry Cache
+# Modal-Hosted Docker BuildKit Registry Cache
 
-A Docker BuildKit registry cache hosted on Modal for faster builds.
+A Docker registry hosted on Modal, used exclusively as a BuildKit cache backend
+(`--cache-from` / `--cache-to`) to speed up `docker build` and `devcontainer build`.
 
 ## What This Is
 
-This is **NOT** a production Docker registry. It is a **BuildKit cache backend only** that:
+This is **NOT** a general-purpose Docker registry. It is a **BuildKit cache backend only**:
 
 - ✅ Persists cache layers across runs using Modal Volume
 - ✅ Guarantees singleton writes (one registry instance)
 - ✅ Reachable from public internet (CI) and inside Modal sandboxes
-- ✅ Can run for hours but tolerates restarts (cache survives)
-- ✅ Has basic authentication (htpasswd)
-- ❌ Does NOT have high availability guarantees
+- ✅ Has basic authentication (htpasswd, derived at runtime from plaintext creds)
+- ❌ Does NOT support `docker push` / `docker pull` (see [Why BuildKit Only?](#why-buildkit-only))
 - ❌ Does NOT store production artifacts
+
+## Why BuildKit Only?
+
+Modal's HTTP proxy sits between the internet and the registry container. It has two
+behaviours that break the standard Docker push/pull client:
+
+1. **Rejects `Transfer-Encoding: chunked` requests.** Docker's push client uploads
+   layers using chunked encoding, which Modal's proxy does not forward.
+2. **May strip or rewrite the `Accept` header.** Docker's pull client uses specific
+   `Accept` values to negotiate manifest schemas; when these are missing or wrong,
+   the registry returns the wrong manifest type and the pull fails.
+
+BuildKit's own HTTP client (used by `--cache-from` / `--cache-to`) avoids both
+problems: it sends `Content-Length` headers (not chunked) and handles OCI manifest
+types natively. This is why registry-based BuildKit caching works perfectly while
+plain `docker push`/`docker pull` does not.
 
 ## Architecture
 
 ```
-Docker client (HTTPS) → Modal proxy (TLS termination) → Docker registry (:5000)
-                                                         ↕ Modal Volume (persistent storage)
+BuildKit (HTTPS) → Modal proxy (TLS termination) → Docker registry (:5000)
+                                                    ↕ Modal Volume (persistent storage)
 ```
 
 Single container, no nginx — the registry listens directly on the web server port.
 
+## Configuration — Modal Secret
+
+All credentials live in a single Modal secret named
+**`bootstrap-devcontainer-docker-registry-config`** with three environment variables:
+
+| Variable | Example | Description |
+|----------|---------|-------------|
+| `DOCKER_BUILD_CACHE_REGISTRY_URL` | `imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run` | Registry hostname (no `https://` prefix) |
+| `DOCKER_BUILD_CACHE_REGISTRY_USERNAME` | `buildcache` | Basic-auth username |
+| `DOCKER_BUILD_CACHE_REGISTRY_PASSWORD` | `hunter2` | Plaintext password |
+
+The registry app derives the htpasswd file at startup from USERNAME + PASSWORD
+(via `htpasswd -Bbn`), so there is no redundant pre-hashed secret to maintain.
+
+The same secret is used in two places:
+
+1. **`modal_registry/app.py`** — attached to the registry function so it can
+   generate the htpasswd file and start the authenticated registry.
+2. **`bootstrap_devcontainer_cli.py --docker_cache_secret`** — passed by name to
+   `ModalAgentRunner`, which attaches it to the sandbox so `docker login` and
+   build-cache flags work inside the sandbox.
+
+### Creating the Secret
+
+```bash
+modal secret create bootstrap-devcontainer-docker-registry-config \
+  DOCKER_BUILD_CACHE_REGISTRY_URL="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run" \
+  DOCKER_BUILD_CACHE_REGISTRY_USERNAME="buildcache" \
+  DOCKER_BUILD_CACHE_REGISTRY_PASSWORD="your-password-here"
+```
+
 ## Files
 
-- **app.py**: Modal application definition
-- **registry_config.yml**: Docker registry configuration
-- **README.md**: This file
+- **app.py** — Modal application definition (registry function)
+- **registry_config.yml** — Docker Distribution registry configuration
+- **README.md** — This file
 
 ## Deployment
 
-### Prerequisites
-
-1. Install Modal CLI:
-   ```bash
-   pip install modal
-   ```
-
-2. Authenticate with Modal:
-   ```bash
-   modal token new
-   ```
-
-### Deploy the Registry
-
-From the `modal_registry/` directory:
-
 ```bash
+# From the modal_registry/ directory
 modal deploy app.py
 ```
 
 Modal will print a URL like:
 ```
-https://workspace--bootstrap-devcontainer-docker-registry-cache-registry.modal.run
+https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run
 ```
 
-Save this URL as your `REGISTRY_URL` environment variable:
-```bash
-export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
-```
+The hostname (without `https://`) is the value for `DOCKER_BUILD_CACHE_REGISTRY_URL`.
 
 ## Usage
 
-### BuildKit Cache (Primary Use Case)
-
-Use the registry as a `--cache-from` / `--cache-to` backend for `docker buildx`:
+### With bootstrap_devcontainer CLI
 
 ```bash
-export REGISTRY="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+uv run bootstrap_devcontainer bootstrap \
+  --project_root /path/to/project \
+  --test_artifacts_dir /tmp/artifacts \
+  --agent_in_modal \
+  --docker_cache_secret bootstrap-devcontainer-docker-registry-config
+```
 
-# Login (needed once)
-docker login "$REGISTRY" -u buildcache -p JabiaJockSapSkelpRathWalt
+The CLI will:
+1. Attach the secret to the Modal sandbox
+2. Run `docker login` inside the sandbox (for both root and agent users)
+3. Generate a `devcontainer.json` with `--cache-from` / `--cache-to` flags
+4. Use the same cache flags for verification builds
 
-# Build with registry cache
+### Manual BuildKit Cache Usage
+
+```bash
+REGISTRY="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+
+docker login "$REGISTRY" -u buildcache -p your-password-here
+
 docker buildx build \
   -t myimage:latest \
-  --cache-from "type=registry,ref=$REGISTRY/buildcache:main" \
-  --cache-to "type=registry,ref=$REGISTRY/buildcache:main,mode=max" \
+  --cache-from "type=registry,ref=$REGISTRY/buildcache:latest" \
+  --cache-to "type=registry,ref=$REGISTRY/buildcache:latest,mode=max" \
   .
 ```
-
-**Expected behavior:**
-- **First build**: Slow (cache warmup, layers pushed to registry)
-- **Subsequent builds**: Much faster (cache hit, layers pulled from registry)
-
-### Using from Modal Sandbox
-
-Inside any Modal function, use the same cache flags:
-
-```python
-import subprocess
-
-REGISTRY = "imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
-
-subprocess.run([
-    "docker", "buildx", "build",
-    "--cache-from", f"type=registry,ref={REGISTRY}/buildcache:main",
-    "--cache-to", f"type=registry,ref={REGISTRY}/buildcache:main,mode=max",
-    "-t", "example:latest",
-    ".",
-], check=True)
-```
-
-**Note**: No special networking config required. Modal automatically routes traffic internally.
 
 ### Verify the Registry
 
 ```bash
-curl -s -u buildcache:JabiaJockSapSkelpRathWalt \
+curl -s -u buildcache:your-password-here \
   "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/_catalog"
 ```
 
-### Known Limitations
-
-> **`docker push` / `docker pull` are not supported.** Modal's HTTP proxy rejects
-> `Transfer-Encoding: chunked` requests (used by Docker's push client) and may strip
-> the `Accept` header (causing manifest schema issues on pull). BuildKit's own HTTP
-> client avoids both problems, so `--cache-from` / `--cache-to` work perfectly.
-
 ## Operational Characteristics
-
-### Expected Behavior
 
 | Aspect | Description |
 |--------|-------------|
@@ -131,73 +139,26 @@ curl -s -u buildcache:JabiaJockSapSkelpRathWalt \
 | **Timeout** | 2 hours per operation |
 | **Warmup** | Kept warm (1 instance) for faster response |
 
-### Key Settings
-
-| Setting | Value | Why |
-|---------|-------|-----|
-| `max_containers` | 1 | Prevent corruption (singleton writer) |
-| `keep_warm` | 1 | Faster startup |
-| `timeout` | 2 hours | Allow large layer pushes |
-| `cpu` | 1 | Adequate for registry |
-| `memory` | 1024 MB | Adequate for registry |
-
 ## Cost Expectations
 
-**Typical usage:**
-- **Idle**: Near $0 (keep_warm=1 has minimal cost)
+- **Idle**: Near $0 (min_containers=1 has minimal cost)
 - **Active builds**: Small compute cost during pushes/pulls
 - **Storage**: Modal Volume storage costs
 
-**This is far cheaper than running a dedicated VM.**
-
-## Future Improvements (Optional)
-
-These are **NOT** required for MVP but could be added later:
-
-- [ ] Add periodic volume pruning job
-- [ ] Support separate cache tags per branch
-- [ ] Add metrics/monitoring
+Far cheaper than running a dedicated VM.
 
 ## Troubleshooting
 
 ### Registry not responding
 
-Check Modal logs:
 ```bash
 modal app logs bootstrap-devcontainer-docker-registry-cache
 ```
 
 ### Cache not working
 
-Verify you're using the same `ref` for both `--cache-from` and `--cache-to`:
-```bash
-ref=$REGISTRY_URL/buildcache:main
-```
+Verify you're using the same `ref` for both `--cache-from` and `--cache-to`.
 
 ### Push fails with timeout
 
-Increase the timeout in `app.py`:
-```python
-timeout=60 * 60 * 4,  # 4 hours
-```
-
-Then redeploy:
-```bash
-modal deploy app.py
-```
-
-## Definition of Done
-
-Project is complete when:
-
-- ✅ Modal app deploys successfully
-- ✅ `--cache-to` pushes layers to registry (tested)
-- ✅ `--cache-from` pulls layers and produces cache hits (tested)
-- ✅ Cache works from inside a Modal function
-
-## Support
-
-For issues with:
-- **Modal platform**: Check [Modal docs](https://modal.com/docs) or support
-- **Docker registry**: Check [Docker registry docs](https://docs.docker.com/registry/)
-- **BuildKit cache**: Check [BuildKit cache docs](https://docs.docker.com/build/cache/backends/)
+Increase `timeout` in `app.py` and redeploy.
