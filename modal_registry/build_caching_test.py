@@ -25,6 +25,7 @@ def _buildx(
     cache_to: str | None = None,
     cache_from: str | None = None,
     no_cache: bool = False,
+    build_args: dict[str, str] | None = None,
 ) -> str:
     """Run docker buildx build and return combined stdout+stderr."""
     cmd = [
@@ -40,6 +41,8 @@ def _buildx(
         cmd.extend(["--cache-to", cache_to])
     if cache_from:
         cmd.extend(["--cache-from", cache_from])
+    for key, val in (build_args or {}).items():
+        cmd.extend(["--build-arg", f"{key}={val}"])
     cmd.append(dockerfile_dir)
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -52,15 +55,18 @@ def _buildx(
 @pytest.mark.manual
 def test_buildkit_cache_roundtrip() -> None:
     """Push cache layers to the registry, then pull them back and verify cache hits."""
-    cache_ref = f"{REGISTRY}/test-cache-roundtrip-{int(time.time())}:cache"
+    ts = str(int(time.time()))
+    cache_ref = f"{REGISTRY}/test-cache-roundtrip-{ts}:cache"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Write a Dockerfile with a timestamp so the RUN layer is unique
+        # Use a build arg so the RUN layer is unique per test run.
+        # The ARG before RUN ensures the layer fingerprint changes each time.
         dockerfile = Path(tmpdir) / "Dockerfile"
         dockerfile.write_text(
-            f"FROM alpine:3.19\n"
-            f"RUN echo 'built-at-{int(time.time())}' > /stamp.txt\n"
-            f"RUN apk add --no-cache curl\n"
+            "FROM alpine:3.19\n"
+            "ARG CACHE_BUST\n"
+            'RUN echo "built-at-${CACHE_BUST}" > /stamp.txt\n'
+            "RUN apk add --no-cache curl\n"
         )
 
         # Build 1: push cache to registry (--no-cache so layers are fresh)
@@ -68,6 +74,7 @@ def test_buildkit_cache_roundtrip() -> None:
             tmpdir,
             cache_to=f"type=registry,ref={cache_ref},mode=max",
             no_cache=True,
+            build_args={"CACHE_BUST": ts},
         )
         assert "writing cache image manifest" in output1, (
             f"Expected cache export in build 1 output:\n{output1}"
@@ -85,6 +92,7 @@ def test_buildkit_cache_roundtrip() -> None:
         output2 = _buildx(
             tmpdir,
             cache_from=f"type=registry,ref={cache_ref}",
+            build_args={"CACHE_BUST": ts},
         )
         assert "importing cache manifest from" in output2, (
             f"Expected registry cache import in build 2 output:\n{output2}"
