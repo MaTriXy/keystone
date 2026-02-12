@@ -2,10 +2,9 @@
 set -eo pipefail
 # Run pytest in collection-only mode to verify test discovery works
 # without actually executing any tests.
-# Ignore subprojects that have their own dependency environments
-uv run pytest --collect-only -q \
+# Uses --all-packages to get deps from all workspace members.
+# Excludes samples/ (standalone example projects) and github_datasets/ (yanked dep).
+uv run --all-packages pytest --collect-only -q \
   --ignore=samples \
-  --ignore=bootstrap_devcontainer \
-  --ignore=evals \
   --ignore=github_datasets \
   2>&1 | tail -5
