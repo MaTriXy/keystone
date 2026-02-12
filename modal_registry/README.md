@@ -63,22 +63,41 @@ export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://imbue--bootstrap-devconta
 
 ## Usage
 
-### Login, Push, and Pull
+### Login and Pull
 
 ```bash
 # Login
 docker login imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run \
   -u buildcache -p JabiaJockSapSkelpRathWalt
 
-# Tag a local image and push
-docker tag alpine imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
-docker push imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
-
 # Pull
 docker pull imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
 ```
 
-Replace `alpine:latest` with whatever image/tag you're working with.
+### Pushing Images
+
+> **⚠️ `docker push` does not work.** Modal's HTTP proxy rejects `Transfer-Encoding: chunked`
+> requests with 500 Internal Server Error. Docker's push client sends chunked uploads for blob
+> data, which Modal cannot handle. This is a Modal platform limitation.
+
+Use one of these alternatives instead:
+
+**Option 1: `crane push`** (recommended for pushing pre-built images)
+```bash
+# Install: https://github.com/google/go-containerregistry/tree/main/cmd/crane
+crane auth login imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run \
+  -u buildcache -p JabiaJockSapSkelpRathWalt
+
+crane push myimage.tar imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/myimage:latest
+```
+
+**Option 2: `docker buildx build --push`** (recommended for build-and-push workflows)
+```bash
+docker buildx build --push \
+  -t imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/myimage:latest .
+```
+
+Both alternatives use `Content-Length` headers instead of chunked encoding and work reliably.
 
 ### Basic Registry Test
 
@@ -198,7 +217,7 @@ modal deploy app.py
 Project is complete when:
 
 - ✅ Modal app deploys successfully
-- ✅ `docker push` works to registry URL
+- ✅ Image push works via `crane` or `docker buildx build --push`
 - ✅ buildx cache reduces build time on second run
 - ✅ Cache works from inside a Modal function
 
