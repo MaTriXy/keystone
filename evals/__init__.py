@@ -1,4 +1,4 @@
-"""Eval harness for bootstrap_devcontainer."""
+"""Eval harness for keystone."""
 
 from config import AgentConfig, EvalConfig, EvalOutput, RepoEntry, RepoResult
 from flow import eval_flow

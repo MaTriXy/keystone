@@ -13,7 +13,7 @@ import pytest
 from config import AgentConfig, EvalConfig
 from flow import eval_flow
 
-from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
+from keystone.constants import DEFAULT_TESTING_LOG_PATH
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 FAKE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_agent.py"
@@ -111,8 +111,8 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     )
 
     # Verify output structure
-    assert output.bootstrap_devcontainer_version is not None
-    assert "git_hash" in output.bootstrap_devcontainer_version
+    assert output.keystone_version is not None
+    assert "git_hash" in output.keystone_version
     assert len(output.repos) == 2
     assert len(output.results) == 2
 
@@ -182,8 +182,8 @@ def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -
     )
 
     # Verify output structure
-    assert output.bootstrap_devcontainer_version is not None
-    assert "git_hash" in output.bootstrap_devcontainer_version
+    assert output.keystone_version is not None
+    assert "git_hash" in output.keystone_version
     assert len(output.repos) == 2
     assert len(output.results) == 2
 
@@ -197,8 +197,8 @@ def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -
     print("EVAL OUTPUT REPORT")
     print("=" * 60)
     print(f"\nOutput file: {output_path}")
-    print("\nbootstrap_devcontainer version:")
-    for k, v in output.bootstrap_devcontainer_version.items():
+    print("\nkeystone version:")
+    for k, v in output.keystone_version.items():
         print(f"  {k}: {v}")
 
     print("\n" + "-" * 60)

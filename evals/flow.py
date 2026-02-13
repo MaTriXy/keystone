@@ -15,8 +15,8 @@ from prefect import flow, get_run_logger, task
 from prefect.futures import wait
 from prefect.tasks import task_input_hash
 
-from bootstrap_devcontainer.process_runner import run_process
-from bootstrap_devcontainer.version import get_version_info
+from keystone.process_runner import run_process
+from keystone.version import get_version_info
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +236,7 @@ def process_repo_task(
         pass
 
 
-@flow(name="eval_bootstrap_devcontainer")
+@flow(name="eval_keystone")
 def eval_flow(
     repo_list_path: str,
     clone_dir: str,
@@ -301,7 +301,7 @@ def eval_flow(
     pinned_repos = [r.repo_entry for r in results]
 
     output = EvalOutput(
-        bootstrap_devcontainer_version=version_info.model_dump(),
+        keystone_version=version_info.model_dump(),
         repos=pinned_repos,
         results=results,
     )

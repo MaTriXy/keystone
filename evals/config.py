@@ -75,7 +75,7 @@ class RepoResult(BaseModel):
 class EvalOutput(BaseModel):
     """Output of the entire eval run."""
 
-    bootstrap_devcontainer_version: dict[str, Any]
+    keystone_version: dict[str, Any]
     repos: list[RepoEntry]  # Input repos with commit_hash pinned
     results: list[RepoResult]
 

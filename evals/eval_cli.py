@@ -8,7 +8,7 @@ from config import AgentConfig, EvalConfig
 from flow import eval_flow
 from rich.console import Console
 
-from bootstrap_devcontainer.constants import DEFAULT_LOG_PATH
+from keystone.constants import DEFAULT_LOG_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -17,7 +17,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 
-app = typer.Typer(help="Eval harness for bootstrap_devcontainer")
+app = typer.Typer(help="Eval harness for keystone")
 console = Console()
 
 

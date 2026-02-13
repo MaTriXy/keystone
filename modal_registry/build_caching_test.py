@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap_devcontainer.process_runner import run_process
+from keystone.process_runner import run_process
 
 REGISTRY = "imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 
