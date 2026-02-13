@@ -20,12 +20,11 @@ Run directly from the repository using `uvx`:
 IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-skip-permissions` in your current environment.
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirectory=bootstrap_devcontainer' \
+uvx --from 'git+https://github.com/imbue-ai/keystone' \
   bootstrap-devcontainer \
-  --log_db ~/.bootstrap_devcontainer/log.sqlite \
   --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
-  --project_root ./samples/python_project
+  --project_root ./my_project
 ```
 
 Not currently supported:
