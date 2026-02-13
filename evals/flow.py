@@ -75,8 +75,9 @@ def clone_repo_task(
     return repo_path, commit_hash
 
 
-def _process_repo_task_name(repo_entry: RepoEntry, **_kwargs: object) -> str:
+def _process_repo_task_name(parameters: dict[str, object]) -> str:
     """Derive a human-friendly task-run name from the repo URL."""
+    repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
     short_name = repo_entry.repo.rstrip("/").split("/")[-1].replace(".git", "")
     return f"process_repo/{short_name}"
 

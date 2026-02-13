@@ -22,7 +22,7 @@ dev-dependencies = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-exclude = ["github_datasets", "samples"]
+exclude = ["github_datasets", "samples", "prototypes"]
 
 [tool.ruff.lint]
 select = [

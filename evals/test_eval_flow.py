@@ -16,7 +16,7 @@ from flow import eval_flow
 from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
-FAKE_AGENT = Path(__file__).parent.parent / "bootstrap_devcontainer" / "tests" / "fake_agent.py"
+FAKE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_agent.py"
 
 
 def init_git_repo(path: Path) -> None:
