@@ -255,9 +255,7 @@ su agent -c "$(printf 'echo %q | docker login --username %q --password-stdin %q'
 """
         with sb.open("/tmp/_docker_login.sh", "w") as f:
             f.write(login_script)
-        run_modal_command(
-            sb, "chmod", "+x", "/tmp/_docker_login.sh", name="docker-login"
-        ).wait()
+        run_modal_command(sb, "chmod", "+x", "/tmp/_docker_login.sh", name="docker-login").wait()
         proc = run_modal_command(sb, "/tmp/_docker_login.sh", name="docker-login")
         exit_code = proc.wait()
         if exit_code != 0:

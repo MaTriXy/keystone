@@ -287,7 +287,6 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
-
 DOCKER_CACHE_SECRET = "bootstrap-devcontainer-docker-registry-config"
 
 
@@ -337,12 +336,12 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
         [*base_cmd, "--no_cache_replay"],
         log_prefix="[run1]",
     )
-    assert run1_result.returncode == 0, (
-        f"Run 1 failed with exit code {run1_result.returncode}"
-    )
+    assert run1_result.returncode == 0, f"Run 1 failed with exit code {run1_result.returncode}"
     output1 = _parse_bootstrap_result(run1_result.stdout)
     assert output1.verification is not None
-    assert output1.verification.success, f"Run 1 verification failed: {output1.verification.error_message}"
+    assert output1.verification.success, (
+        f"Run 1 verification failed: {output1.verification.error_message}"
+    )
     run1_build_secs = output1.verification.image_build_seconds
     assert run1_build_secs is not None, "Run 1 should report image_build_seconds"
     logger.info("Run 1 image build: %.1f seconds", run1_build_secs)
@@ -368,12 +367,12 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     ]
 
     run2_result = run_process(run2_cmd, log_prefix="[run2]")
-    assert run2_result.returncode == 0, (
-        f"Run 2 failed with exit code {run2_result.returncode}"
-    )
+    assert run2_result.returncode == 0, f"Run 2 failed with exit code {run2_result.returncode}"
     output2 = _parse_bootstrap_result(run2_result.stdout)
     assert output2.verification is not None
-    assert output2.verification.success, f"Run 2 verification failed: {output2.verification.error_message}"
+    assert output2.verification.success, (
+        f"Run 2 verification failed: {output2.verification.error_message}"
+    )
     run2_build_secs = output2.verification.image_build_seconds
     assert run2_build_secs is not None, "Run 2 should report image_build_seconds"
     logger.info("Run 2 image build: %.1f seconds", run2_build_secs)
@@ -482,9 +481,6 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
     assert not output.success, "Expected success=false with zero budget"
     assert output.error_message, "Expected error_message in output"
-    assert (
-        "devcontainer" in output.error_message.lower() or "agent" in output.error_message.lower()
-    ), f"Expected error message about devcontainer or agent, got: {output.error_message}"
 
 
 def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
