@@ -1,10 +1,17 @@
-# Keystone
+# Keystone: an agentic tool to configure Dockerfiles for any repo
 
-Automatically generates a working `.devcontainer/` setup for any project using an AI agent. Given a source directory, it analyzes the project structure and creates:
+Keystone automatically generates a working `.devcontainer/` configuration for any project using an AI agent.
+Given a source repo, it analyzes the project structure and creates:
 
-- `devcontainer.json` - VS Code dev container configuration
-- `Dockerfile` - Container image definition
-- `run_all_tests.sh` - Test runner script with artifact collection
+- `//devcontainer/devcontainer.json` - VS Code dev container configuration
+- `//devcontainer/Dockerfile` - Container image definition
+- `//devcontainer/run_all_tests.sh` - Test runner script with artifact collection
+
+## Prerequisites for your environment
+
+* A [Modal account] (https://modal.com/docs/guide#getting-started) -- we use this to safely sandbox Claude Code as it works on your container.
+* `$ANTHROPIC_API_KEY` -- Keystone uses your API key to run Claude Code in its Modal sandbox.
+* [`uvx`](https://docs.astral.sh/uv/getting-started/installation/) to run Keystone.
 
 ## Usage
 
@@ -28,13 +35,10 @@ Not currently supported:
 - `--project_root` - Path to the source project (required)
 - `--test_artifacts_dir` - Directory for test artifacts (required)
 - `--agent_cmd` - Agent command to run (default: `claude`)
-- `--max_budget_usd` - Maximum budget for agent inference (default: 1.0)
-- `--log_db` - Database for logging/caching. SQLite path or postgresql:// URL (default: `~/.imbue_keystone/log.sqlite`)
-- `--require_cache_hit` - Fail immediately if cache miss (useful for CI/testing)
-- `--no_cache_replay` - Skip cache lookup but still log the run (force fresh execution)
-- `--cache_version` - String appended to cache key to invalidate old entries
+
 - `--output_file` - Path to write JSON result (defaults to stdout)
 - `--agent_in_modal/--agent_local` - Run agent in Modal sandbox (default) or locally
+- `--max_budget_usd` - Maximum budget for agent inference (default: $1.00)
 - `--agent_time_limit_secs` - Maximum seconds for agent execution (default: 3600)
 - `--image_build_timeout_secs` - Maximum seconds for building devcontainer image (default: 600)
 - `--test_timeout_secs` - Maximum seconds for running tests (default: 300)
