@@ -120,7 +120,7 @@ def _version_info_from_git() -> VersionInfo:
     timestamp_unix = subprocess.check_output(
         ["git", "log", "-1", "--format=%ct"], text=True
     ).strip()
-    commit_timestamp = datetime.fromtimestamp(int(timestamp_unix)).isoformat() # FIXME: Everything else uses UTC
+    commit_timestamp = datetime.fromtimestamp(int(timestamp_unix)).isoformat() # FIXME: Everything else uses UTC -- can we use ISO 8601 with timezone?
 
     return VersionInfo(
         git_hash=git_hash,
