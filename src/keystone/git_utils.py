@@ -31,7 +31,7 @@ def get_git_tree_hash(repo_path: Path) -> str:
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to get git tree hash: {e.stderr}") from e
 
-
+# FIXME: Dead
 def create_git_archive(repo_path: Path, output_path: Path) -> None:
     """Create a tarball of the repository using git archive.
 
@@ -99,7 +99,7 @@ def is_git_dirty(repo_path: Path) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-
+# FIXME: Dead
 def extract_git_archive_to_temp(repo_path: Path) -> Path:
     """Create a git archive and extract it to a temporary directory.
 
@@ -110,6 +110,6 @@ def extract_git_archive_to_temp(repo_path: Path) -> Path:
     temp_dir = Path(tempfile.mkdtemp(prefix="git-archive-"))
 
     with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
-        tar.extractall(temp_dir)
+        tar.extractall(temp_dir)                # FIXME: Should use filter="data" to strip dangerous paths (path traversal)
 
     return temp_dir

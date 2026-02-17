@@ -53,7 +53,7 @@ Instructions:
 
 1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
    ```bash
-   cp /devcontainer.json .devcontainer/devcontainer.json
+   cp /.devcontainer.json .devcontainer/devcontainer.json
    ```
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
@@ -316,7 +316,7 @@ docker run --network host \
   /run_all_tests.sh
 
 # If you want access to the detailed test artifacts from a completed container, you can extract them with:
-docker cp "$CONTAINER_NAME:/test_artifacts" /tmp/test_artifacts.$CONTAINER_NAME"
+docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME"
 
 # Note: If you run a container in detached mode, make sure to `docker wait $CONTAINER_NAME` before trying to extract the test artifacts.
 

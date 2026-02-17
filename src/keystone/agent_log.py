@@ -137,6 +137,7 @@ def compute_cache_key(
 ) -> CacheKey:
     """Compute cache key components from inputs."""
     git_tree_hash = get_git_tree_hash(repo_path)
+    # FIXME: MD5 whereas everything else uses SHA256
     prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
     return CacheKey(
         git_tree_hash=git_tree_hash,
@@ -160,6 +161,7 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
     with engine.connect() as conn:
         # Check if column exists (works for SQLite and PostgreSQL)
         if engine.dialect.name == "sqlite":
+            # FIXME: Possible SQL injection risk
             result = conn.execute(text(f"PRAGMA table_info({table})"))
             columns = {row[1] for row in result}
             if not columns:
@@ -291,12 +293,13 @@ class AgentLog:
                 result = conn.execute(query, {"cache_hash": cache_hash})
                 row = result.fetchone()
         except Exception:
-            # Table may not exist yet (first run)
+            # FIXME: Should log error message here
             return None
 
         if row is None:
             return None
 
+        # FIXME: Could name rows
         events_data = json.loads(row[6])
         return AgentRunRecord(
             cli_run_id=row[0],
