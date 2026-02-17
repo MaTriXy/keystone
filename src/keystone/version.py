@@ -1,6 +1,7 @@
 """Version information utility.
 
 Resolution order:
+# FIXME: Option 1 here is never used, since we don't bake this into any packaged artifact.
 1. ``version_stamp.json`` baked in next to this module (CI / Docker builds).
 2. Live ``git`` commands (local development).
 3. PEP 610 ``direct_url.json`` metadata written by pip/uv when installing
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 _DIST_NAME = "keystone"
 
 
+# FIXME: Consider moving to schema.py.
 class VersionInfo(BaseModel):
     """Version information for the current codebase."""
 

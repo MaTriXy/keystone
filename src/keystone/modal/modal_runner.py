@@ -1,8 +1,6 @@
-"""Modal-based agent runner for running keystone agent in cloud sandbox.
+"""Modal-based agent runner for running Keystone agent in cloud sandbox.
 
-The sandbox is created once and reused for both agent execution and verification.
-This avoids the 20-30s cold start penalty of creating a new sandbox for verification,
-and lets us use Docker's build cache directly instead of Modal's from_dockerfile.
+The sandbox is created once and reused for both agent execution and verification of the agent's work.
 """
 
 import io
@@ -131,7 +129,7 @@ def run_modal_command(
         name: Short name for this process (required, used in log prefix)
         **kwargs: Additional arguments passed to sb.exec()
     """
-
+    # FIXME: Why not use the outer logger?
     logger = logging.getLogger("keystone.modal")
     logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
@@ -556,7 +554,7 @@ exec timeout {image_build_timeout_secs} docker build \
             "cp",
             f"{container_name}:/test_artifacts",
             "/tmp/test_artifacts",
-            name="extract",
+            name="cp_test_artifacts",
         ).wait()
         run_modal_command(
             sb,
