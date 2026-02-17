@@ -1,3 +1,5 @@
+"""Schemas for the Keystone CLI."""
+
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -19,8 +21,9 @@ class AgentConfig(BaseModel):
         return self.model_dump_json(indent=None)
 
 
+# FIXME: Is this even used?
 class VerifyResult(BaseModel):
-    """Result of running verification tests."""
+    """After the agent assembles a devcontainer, we rebuild it and re-run the tests to check the agent's work."""
 
     success: bool
     error_message: str | None = None
@@ -29,6 +32,8 @@ class VerifyResult(BaseModel):
 
 
 class TokenSpending(BaseModel):
+    """Used to track this resource usage by the agent."""
+
     input: int = 0
     cached: int = 0
     output: int = 0
@@ -57,6 +62,7 @@ class TestResult(BaseModel):
     skipped: bool = False
 
 
+# FIXME: The similarity of name to VerifyResult is confusing.
 class VerificationResult(BaseModel):
     """Result of verification phase including image build and test execution."""
 
@@ -93,6 +99,8 @@ class GeneratedFiles(BaseModel):
 
 
 class BootstrapResult(BaseModel):
+    """The final result of the entire bootstrap process."""
+
     success: bool
     error_message: str | None = None
 

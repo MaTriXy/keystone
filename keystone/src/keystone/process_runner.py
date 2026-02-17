@@ -10,6 +10,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+# FIXME: Use Pydantic instead.
 @dataclass
 class ProcessResult:
     """Result of a process run with captured output."""
@@ -34,6 +35,7 @@ def _stream_reader(
 
 def run_process(
     cmd: list[str],
+    # FIXME: Get rid of default below -- never use a blank string for a log prefix.
     log_prefix: str = "",
     env: dict[str, str] | None = None,
     cwd: str | None = None,
@@ -41,7 +43,7 @@ def run_process(
     stderr_callback: Callable[[str], None] | None = None,
 ) -> ProcessResult:
     """
-    Run a subprocess with multi-threaded stdout/stderr capture.
+    Run a subprocess with multi-threaded stdout/stderr capture, blocking until the process finishes.
 
     Args:
         cmd: Command and arguments to run.
@@ -54,6 +56,7 @@ def run_process(
     Returns:
         ProcessResult with returncode, stdout, and stderr.
     """
+    # FIXME: It's strange to only update this env var if the whole env is None.
     if env is None:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
@@ -75,6 +78,7 @@ def run_process(
     effective_stdout_cb: Callable[[str], None] | None = stdout_callback
     effective_stderr_cb: Callable[[str], None] | None = stderr_callback
 
+    # FIXME: We should use logging instead of print.
     def _log_stdout(line: str) -> None:
         print(f"{log_prefix} STDOUT: {line}", flush=True)
 
@@ -89,12 +93,12 @@ def run_process(
     stdout_thread = threading.Thread(
         target=_stream_reader,
         args=(process.stdout, stdout_lines, effective_stdout_cb),
-        name="stdout-reader",
+        name=f"{log_prefix}-stdout-reader",
     )
     stderr_thread = threading.Thread(
         target=_stream_reader,
         args=(process.stderr, stderr_lines, effective_stderr_cb),
-        name="stderr-reader",
+        name=f"{log_prefix}-stderr-reader",
     )
 
     stdout_thread.start()

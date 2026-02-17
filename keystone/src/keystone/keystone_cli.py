@@ -1,3 +1,5 @@
+"""Main user entry point for the Keystone CLI."""
+
 import json
 import logging
 import subprocess
@@ -49,6 +51,7 @@ from keystone.schema import (
 from keystone.version import get_version_info
 
 
+# FIXME: Move to logging_utils.py.
 class ISOFormatter(logging.Formatter):
     """Log formatter with ISO 8601 timestamps including milliseconds and timezone."""
 
@@ -71,6 +74,7 @@ app = typer.Typer()
 console = Console(stderr=True, force_terminal=True)
 
 
+# FIXME: Move to docker_utils.py.
 def check_docker_available() -> bool:
     """Check if Docker CLI is installed and daemon is running."""
     try:
@@ -115,7 +119,7 @@ def bootstrap(
     cache_version: str = typer.Option(
         "2026-02-09",
         "--cache_version",
-        help="String appended to cache key to invalidate old entries",
+        help="String appended to cache key.  Bumping this invalidates the cache, forcing fresh runs.",
     ),
     output_file: Path | None = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
@@ -126,17 +130,20 @@ def bootstrap(
         help="Run agent in Modal sandbox (default) or locally",
     ),
     agent_time_limit_secs: int = typer.Option(
-        3600,
+        60 * 60,
+        # FIXME: Rename all _secs to _seconds.
         "--agent_time_limit_secs",
         help="Maximum seconds for agent execution (uses timeout command)",
     ),
     image_build_timeout_secs: int = typer.Option(
         30 * 60,
+        # FIXME: Rename all _secs to _seconds.
         "--image_build_timeout_secs",
         help="Maximum seconds for building the devcontainer image",
     ),
     test_timeout_secs: int = typer.Option(
         30 * 60,
+        # FIXME: Rename all _secs to _seconds.
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),
@@ -182,6 +189,7 @@ def bootstrap(
     # Build prompt
     prompt = build_agent_prompt(agent_in_modal)
 
+    # FIXME: Use monotonic time.
     start_time = time.time()
     start_datetime = datetime.now(UTC)
 
@@ -202,6 +210,7 @@ def bootstrap(
             )
         runner = LocalAgentRunner()
 
+    # FIXME: Use the pydantic model in @schema.py.
     token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
     total_cost_usd = 0.0
     model_name = ""
@@ -218,11 +227,13 @@ def bootstrap(
             message=message,
         )
 
+    # FIXME: Extract this to claude_agent_output_handling.py.
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
 
         Returns True if a marker was found.
         """
+        # FIXME: Do not use nonlocal, use a class/object to track state.
         nonlocal agent_summary, status_messages
         found = False
         for line in text.split("\n"):
@@ -247,6 +258,7 @@ def bootstrap(
                 found = True
         return found
 
+    # FIXME: Extract this to claude_agent_output_handling.py.
     def process_stdout_line(line: str) -> None:
         """Process a line of agent stdout, extracting messages and token usage."""
         nonlocal total_cost_usd, model_name
@@ -272,6 +284,7 @@ def bootstrap(
                 model_name = data.get("model", "")
                 # usage tokens are per-turn, so accumulate them
                 usage = data.get("usage", {})
+                # FIXME: Use the pydantic model in @schema.py.
                 token_spending["input"] += usage.get("input_tokens", 0)
                 token_spending["cached"] += usage.get("cache_read_input_tokens", 0)
                 token_spending["output"] += usage.get("output_tokens", 0)
@@ -292,8 +305,9 @@ def bootstrap(
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     try:
-        # Set up logging/caching
+        # Set up logging/caching of agentic runs.
         # Default to ~/.imbue_keystone/log.sqlite if not specified
+        # FIXME: Don't log if there's no argument provided.
         effective_log_db = log_db or str(Path.home() / ".imbue_keystone" / "log.sqlite")
 
         agent_log = AgentLog(effective_log_db)
@@ -374,6 +388,7 @@ def bootstrap(
                 )
 
             try:
+                # FIXME: This feels a little deeply nested for the core logic.
                 for event in runner.run(
                     prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_secs
                 ):

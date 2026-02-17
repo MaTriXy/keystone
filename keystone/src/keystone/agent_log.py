@@ -1,5 +1,8 @@
 """Append-only log and cache for agent runs.
 
+This logging is only turned on if the user provides a --log_db argument, and is used for
+analytics, debugging, and caching.
+
 This module provides a database-backed logging and caching layer for the keystone agent.
 The design philosophy is "log everything, cache selectively":
 
@@ -80,9 +83,11 @@ from keystone.schema import AgentConfig
 from keystone.version import VersionInfo, get_version_info
 
 
+# FIXME: This is basically replicated from agent_runner.py.
 class StreamEvent(BaseModel):
     """A single event from the agent's output stream."""
 
+    # FIXME: Use an enum for this instead of a string.
     stream: Literal["stdout", "stderr"]
     line: str
 
@@ -179,6 +184,7 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
                 return
 
         if column not in columns:
+            # FIXME: Could we simplify this and delete above code with some "IF NOT EXISTS" syntax here?
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
             conn.commit()
 
@@ -227,6 +233,7 @@ class AgentLog:
 
     def log_cli_run(self, record: CLIRunRecord) -> None:
         """Log a CLI invocation."""
+        # TODO: Pandas is a heavy dependency just fo this.  Maybe there's another simple way to add a row?
         df = pd.DataFrame(
             [
                 {

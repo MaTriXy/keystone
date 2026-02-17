@@ -61,6 +61,9 @@ class AgentRunner(ABC):
         agent_cmd: str,
         time_limit_secs: int,
     ) -> Iterator[StreamEvent]:
+        # FIXME: It's not clear why this is a generator -- we could just return a result object.
+        # It is important that the intermediate output gets logged in a streaming way, but it needn't be a generator.
+        # That would eliminate the need for the separate exit_code method below.
         """Run the agent and yield output events.
 
         Args:
@@ -144,6 +147,7 @@ class LocalAgentRunner(AgentRunner):
                 ["docker", "ps"],
                 capture_output=True,
                 timeout=10,
+                check=False,
             )
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -186,7 +190,7 @@ class LocalAgentRunner(AgentRunner):
 
         # Add timeout if available
         try:
-            subprocess.run(["timeout", "--version"], capture_output=True)
+            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
             full_cmd = ["timeout", str(time_limit_secs), *full_cmd]
         except FileNotFoundError:
             pass
