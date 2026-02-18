@@ -72,7 +72,6 @@ import tarfile
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel
@@ -80,19 +79,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from keystone.git_utils import get_git_tree_hash
-from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig, StreamEvent
 from keystone.version import VersionInfo, get_version_info
 
 logger = logging.getLogger(__name__)
-
-
-# FIXME: This is basically replicated from agent_runner.py.
-class StreamEvent(BaseModel):
-    """A single event from the agent's output stream."""
-
-    # FIXME: Use an enum for this instead of a string.
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 class CacheKey(BaseModel):

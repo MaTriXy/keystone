@@ -14,7 +14,6 @@ from keystone.agent_log import (
     AgentLog,
     AgentRunRecord,
     CLIRunRecord,
-    StreamEvent,
     compute_cache_key,
     extract_devcontainer_tarball,
 )
@@ -45,6 +44,7 @@ from keystone.schema import (
     BootstrapResult,
     GeneratedFiles,
     InferenceCost,
+    StreamEvent,
     TokenSpending,
     VerificationResult,
 )
@@ -181,8 +181,7 @@ def bootstrap(
             )
         runner = LocalAgentRunner()
 
-    # FIXME: Use the pydantic model in @schema.py.
-    token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
+    token_spending = TokenSpending()
     total_cost_usd = 0.0
     model_name = ""
     exit_code = 1
@@ -255,11 +254,10 @@ def bootstrap(
                 model_name = data.get("model", "")
                 # usage tokens are per-turn, so accumulate them
                 usage = data.get("usage", {})
-                # FIXME: Use the pydantic model in @schema.py.
-                token_spending["input"] += usage.get("input_tokens", 0)
-                token_spending["cached"] += usage.get("cache_read_input_tokens", 0)
-                token_spending["output"] += usage.get("output_tokens", 0)
-                token_spending["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
+                token_spending.input += usage.get("input_tokens", 0)
+                token_spending.cached += usage.get("cache_read_input_tokens", 0)
+                token_spending.output += usage.get("output_tokens", 0)
+                token_spending.cache_creation += usage.get("cache_creation_input_tokens", 0)
 
             # Log other message types at debug level for visibility
             elif msg_type:
@@ -364,7 +362,7 @@ def bootstrap(
                     prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_seconds
                 ):
                     # Collect all events for logging
-                    collected_events.append(StreamEvent(stream=event.stream, line=event.line))
+                    collected_events.append(event)
                     if event.stream == "stdout":
                         process_stdout_line(event.line)
                     else:
@@ -503,7 +501,7 @@ def bootstrap(
             status_messages=status_messages,
             cost=InferenceCost(
                 cost_usd=total_cost_usd,
-                token_spending=TokenSpending(**token_spending),
+                token_spending=token_spending,
             ),
         ),
         verification=verification,

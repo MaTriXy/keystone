@@ -9,27 +9,17 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import Literal
 
 from keystone.agent_log import create_devcontainer_tarball
 from keystone.process_runner import run_process
-from keystone.schema import VerificationResult
+from keystone.schema import StreamEvent, VerificationResult
 
 logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
 TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
-
-
-@dataclass
-class StreamEvent:
-    """A line of output from the agent process."""
-
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 def build_claude_command(
@@ -197,6 +187,7 @@ class LocalAgentRunner(AgentRunner):
 
         result = run_process(
             full_cmd,
+            log_prefix="[agent]",
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,

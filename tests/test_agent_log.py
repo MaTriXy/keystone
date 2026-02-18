@@ -12,9 +12,8 @@ from keystone.agent_log import (
     AgentRunRecord,
     CacheKey,
     CLIRunRecord,
-    StreamEvent,
 )
-from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig, StreamEvent
 
 
 @pytest.fixture

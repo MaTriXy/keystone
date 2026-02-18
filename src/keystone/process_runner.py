@@ -34,7 +34,7 @@ def _stream_reader(
 
 def run_process(
     cmd: list[str],
-    log_prefix: str = "",  # TODO: Make required once all callers provide a prefix.
+    log_prefix: str,
     env: dict[str, str] | None = None,
     cwd: str | None = None,
     stdout_callback: Callable[[str], None] | None = None,
