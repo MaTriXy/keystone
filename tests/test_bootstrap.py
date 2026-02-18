@@ -28,7 +28,7 @@ def test_cli_help() -> None:
 
 
 @pytest.mark.manual
-def test_cli_runs_from_uvx() -> None:
+def test_cli_help_runs_from_uvx() -> None:
     """Test that the CLI can be installed and invoked via uvx from the public repo.
 
     The uvx command tested here is the one documented in the README:
