@@ -8,7 +8,7 @@ from config import AgentConfig, EvalConfig
 from flow import eval_flow
 from rich.console import Console
 
-from keystone.constants import DEFAULT_LOG_PATH
+DEFAULT_LOG_PATH = Path.home() / ".imbue_keystone" / "log.sqlite"
 
 # Configure logging
 logging.basicConfig(
