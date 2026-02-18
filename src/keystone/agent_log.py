@@ -1,5 +1,8 @@
 """Append-only log and cache for agent runs.
 
+This logging is only turned on if the user provides a --log_db argument, and is used for
+analytics, debugging, and caching.
+
 This module provides a database-backed logging and caching layer for the keystone agent.
 The design philosophy is "log everything, cache selectively":
 
@@ -69,7 +72,6 @@ import tarfile
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel
@@ -77,17 +79,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from keystone.git_utils import get_git_tree_hash
-from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig, StreamEvent
 from keystone.version import VersionInfo, get_version_info
 
 logger = logging.getLogger(__name__)
-
-
-class StreamEvent(BaseModel):
-    """A single event from the agent's output stream."""
-
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 class CacheKey(BaseModel):
@@ -188,6 +183,7 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
                 return
 
         if column not in columns:
+            # FIXME: Could we simplify this and delete above code with some "IF NOT EXISTS" syntax here?
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
             conn.commit()
 
@@ -236,6 +232,7 @@ class AgentLog:
 
     def log_cli_run(self, record: CLIRunRecord) -> None:
         """Log a CLI invocation."""
+        # TODO: Pandas is a heavy dependency just fo this.  Maybe there's another simple way to add a row?
         df = pd.DataFrame(
             [
                 {

@@ -66,8 +66,7 @@ uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
 
 ```bash
 # Run local code tree on a project.
-uv run keystone \
-  --log_db ~/.imbue_keystone/log.sqlite \
+uvx run keystone \
   --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./samples/python_project

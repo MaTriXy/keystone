@@ -1,8 +1,6 @@
-"""Modal-based agent runner for running keystone agent in cloud sandbox.
+"""Modal-based agent runner for running Keystone agent in cloud sandbox.
 
-The sandbox is created once and reused for both agent execution and verification.
-This avoids the 20-30s cold start penalty of creating a new sandbox for verification,
-and lets us use Docker's build cache directly instead of Modal's from_dockerfile.
+The sandbox is created once and reused for both agent execution and verification of the agent's work.
 """
 
 import io
@@ -23,12 +21,11 @@ import modal
 from keystone.agent_runner import (
     TIMEOUT_EXIT_CODE,
     AgentRunner,
-    StreamEvent,
     build_claude_command,
 )
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import VerifyResult
+from keystone.schema import StreamEvent, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +128,6 @@ def run_modal_command(
         name: Short name for this process (required, used in log prefix)
         **kwargs: Additional arguments passed to sb.exec()
     """
-
-    logger = logging.getLogger("keystone.modal")
     logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
     return ManagedProcess(proc, prefix=name, capture=capture)
@@ -429,9 +424,9 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
-    ) -> VerifyResult:
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
         """Run verification by building and running docker in the existing sandbox.
 
         Uses docker commands directly instead of Modal's from_dockerfile, which:
@@ -465,7 +460,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             sb, "test", "-f", "/project/.devcontainer/Dockerfile", name="verify"
         )
         if check_proc.wait() != 0:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message="Build failed: .devcontainer/Dockerfile not found.",
             )
@@ -484,7 +479,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
 #!/bin/bash
 set -euo pipefail
 CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/buildcache:latest"
-exec timeout {image_build_timeout_secs} docker build \
+exec timeout {image_build_timeout_seconds} docker build \
     --network=host \
     --cache-from "type=registry,ref=$CACHE_REF" \
     --cache-to "type=registry,ref=$CACHE_REF,mode=max" \
@@ -502,7 +497,7 @@ exec timeout {image_build_timeout_secs} docker build \
         else:
             build_cmd = [
                 "timeout",
-                str(image_build_timeout_secs),
+                str(image_build_timeout_seconds),
                 "docker",
                 "build",
                 "--network=host",
@@ -516,13 +511,13 @@ exec timeout {image_build_timeout_secs} docker build \
         build_exit = build_proc.wait()
         image_build_seconds = time.time() - build_start
         if build_exit == TIMEOUT_EXIT_CODE:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
-                error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                error_message=f"Image build timed out after {image_build_timeout_seconds} seconds",
                 image_build_seconds=image_build_seconds,
             )
         if build_exit != 0:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Build failed with exit code {build_exit}",
                 image_build_seconds=image_build_seconds,
@@ -535,7 +530,7 @@ exec timeout {image_build_timeout_secs} docker build \
         test_proc = run_modal_command(
             sb,
             "timeout",
-            str(test_timeout_secs),
+            str(test_timeout_seconds),
             "docker",
             "run",
             "--network=host",
@@ -556,7 +551,7 @@ exec timeout {image_build_timeout_secs} docker build \
             "cp",
             f"{container_name}:/test_artifacts",
             "/tmp/test_artifacts",
-            name="extract",
+            name="cp_test_artifacts",
         ).wait()
         run_modal_command(
             sb,
@@ -583,22 +578,22 @@ exec timeout {image_build_timeout_secs} docker build \
         run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
 
         if test_exit_code == TIMEOUT_EXIT_CODE:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
-                error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
                 image_build_seconds=image_build_seconds,
                 test_execution_seconds=test_execution_seconds,
             )
         if test_exit_code == 0:
             logger.info("Verification successful!")
-            return VerifyResult(
+            return VerificationResult(
                 success=True,
                 image_build_seconds=image_build_seconds,
                 test_execution_seconds=test_execution_seconds,
             )
         else:
             logger.error(f"Test run failed with return code {test_exit_code}")
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Test run failed with return code {test_exit_code}",
                 image_build_seconds=image_build_seconds,

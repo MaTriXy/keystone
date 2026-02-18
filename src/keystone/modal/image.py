@@ -1,3 +1,8 @@
+"""Modal image with Docker and Claude CLI installed.
+
+This is the shared image used by all Modal-based agent runners.
+"""
+
 from pathlib import Path
 
 import modal
