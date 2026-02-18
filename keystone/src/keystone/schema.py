@@ -1,8 +1,24 @@
 """Schemas for the Keystone CLI."""
 
 from datetime import datetime
+from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
+
+
+class StreamType(str, Enum):
+    """Type of output stream from the agent process."""
+
+    STDOUT = "stdout"
+    STDERR = "stderr"
+
+
+class StreamEvent(BaseModel):
+    """A single event from the agent's output stream."""
+
+    stream: Literal["stdout", "stderr"]
+    line: str
 
 
 class AgentConfig(BaseModel):

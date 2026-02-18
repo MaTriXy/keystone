@@ -21,12 +21,11 @@ import modal
 from keystone.agent_runner import (
     TIMEOUT_EXIT_CODE,
     AgentRunner,
-    StreamEvent,
     build_claude_command,
 )
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import VerificationResult
+from keystone.schema import StreamEvent, VerificationResult
 
 logger = logging.getLogger(__name__)
 
