@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Script to start the Docker daemon in a Modal sandbox.
+# There's some Modal-specific setup to do here.
+
 set -xe -o pipefail
 
 # Clean up stale state from previous runs

@@ -1,6 +1,24 @@
+"""Schemas for the Keystone CLI."""
+
 from datetime import datetime
+from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
+
+
+class StreamType(str, Enum):
+    """Type of output stream from the agent process."""
+
+    STDOUT = "stdout"
+    STDERR = "stderr"
+
+
+class StreamEvent(BaseModel):
+    """A single event from the agent's output stream."""
+
+    stream: Literal["stdout", "stderr"]
+    line: str
 
 
 class AgentConfig(BaseModel):
@@ -11,7 +29,7 @@ class AgentConfig(BaseModel):
 
     agent_cmd: str
     max_budget_usd: float
-    agent_time_limit_secs: int
+    agent_time_limit_seconds: int
     agent_in_modal: bool
 
     def to_cache_key_json(self) -> str:
@@ -19,16 +37,9 @@ class AgentConfig(BaseModel):
         return self.model_dump_json(indent=None)
 
 
-class VerifyResult(BaseModel):
-    """Result of running verification tests."""
-
-    success: bool
-    error_message: str | None = None
-    image_build_seconds: float | None = None
-    test_execution_seconds: float | None = None
-
-
 class TokenSpending(BaseModel):
+    """Used to track this resource usage by the agent."""
+
     input: int = 0
     cached: int = 0
     output: int = 0
@@ -93,6 +104,8 @@ class GeneratedFiles(BaseModel):
 
 
 class BootstrapResult(BaseModel):
+    """The final result of the entire bootstrap process."""
+
     success: bool
     error_message: str | None = None
 

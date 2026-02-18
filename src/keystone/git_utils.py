@@ -78,5 +78,3 @@ def is_git_dirty(repo_path: Path) -> bool:
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
-
-

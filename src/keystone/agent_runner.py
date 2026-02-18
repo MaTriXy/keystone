@@ -9,27 +9,17 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import Literal
 
 from keystone.agent_log import create_devcontainer_tarball
 from keystone.process_runner import run_process
-from keystone.schema import VerifyResult
+from keystone.schema import StreamEvent, VerificationResult
 
 logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
 TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
-
-
-@dataclass
-class StreamEvent:
-    """A line of output from the agent process."""
-
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 def build_claude_command(
@@ -61,6 +51,9 @@ class AgentRunner(ABC):
         agent_cmd: str,
         time_limit_secs: int,
     ) -> Iterator[StreamEvent]:
+        # FIXME: It's not clear why this is a generator -- we could just return a result object.
+        # It is important that the intermediate output gets logged in a streaming way, but it needn't be a generator.
+        # That would eliminate the need for the separate exit_code method below.
         """Run the agent and yield output events.
 
         Args:
@@ -92,20 +85,20 @@ class AgentRunner(ABC):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
-    ) -> VerifyResult:
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
         """Run verification tests on pristine source + agent's devcontainer.
 
         Args:
             project_archive: Git archive tarball of the original project source.
             devcontainer_tarball: Tarball of .devcontainer/ created by agent.
             test_artifacts_dir: Directory to store test artifacts.
-            image_build_timeout_secs: Timeout for building the devcontainer image.
-            test_timeout_secs: Timeout for running tests.
+            image_build_timeout_seconds: Timeout for building the devcontainer image.
+            test_timeout_seconds: Timeout for running tests.
 
         Returns:
-            VerifyResult with success status and optional error message.
+            VerificationResult with success status and optional error message.
         """
         ...
 
@@ -144,6 +137,7 @@ class LocalAgentRunner(AgentRunner):
                 ["docker", "ps"],
                 capture_output=True,
                 timeout=10,
+                check=False,
             )
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -186,13 +180,14 @@ class LocalAgentRunner(AgentRunner):
 
         # Add timeout if available
         try:
-            subprocess.run(["timeout", "--version"], capture_output=True)
+            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
             full_cmd = ["timeout", str(time_limit_secs), *full_cmd]
         except FileNotFoundError:
             pass
 
         result = run_process(
             full_cmd,
+            log_prefix="[local_agent]",
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,
@@ -217,16 +212,16 @@ class LocalAgentRunner(AgentRunner):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
-    ) -> VerifyResult:
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
         """Run verification tests locally using Docker.
 
         Extracts pristine project source + agent's devcontainer to a temp dir,
         then builds and runs tests.
         """
         if not self._check_docker_available():
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message="Docker is required for local verification but not available.",
             )
@@ -245,7 +240,7 @@ class LocalAgentRunner(AgentRunner):
             # Check if devcontainer.json exists
             devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"
             if not devcontainer_json.exists():
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message="Build failed: .devcontainer/devcontainer.json not found.",
                 )
@@ -257,7 +252,7 @@ class LocalAgentRunner(AgentRunner):
             build_start = time.time()
             build_cmd = [
                 "timeout",
-                str(image_build_timeout_secs),
+                str(image_build_timeout_seconds),
                 "devcontainer",
                 "build",
                 "--workspace-folder",
@@ -269,13 +264,13 @@ class LocalAgentRunner(AgentRunner):
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
             image_build_seconds = time.time() - build_start
             if build_proc.returncode == TIMEOUT_EXIT_CODE:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
-                    error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                    error_message=f"Image build timed out after {image_build_timeout_seconds} seconds",
                     image_build_seconds=image_build_seconds,
                 )
             if build_proc.returncode != 0:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message=f"Build failed:\n{build_proc.stderr}",
                     image_build_seconds=image_build_seconds,
@@ -287,7 +282,7 @@ class LocalAgentRunner(AgentRunner):
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             test_cmd = [
                 "timeout",
-                str(test_timeout_secs),
+                str(test_timeout_seconds),
                 "docker",
                 "run",
                 "--name",
@@ -309,20 +304,20 @@ class LocalAgentRunner(AgentRunner):
             subprocess.run(["docker", "rm", container_name], capture_output=True)
 
             if test_run.returncode == TIMEOUT_EXIT_CODE:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
-                    error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                    error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
                     image_build_seconds=image_build_seconds,
                     test_execution_seconds=test_execution_seconds,
                 )
             if test_run.returncode == 0:
-                return VerifyResult(
+                return VerificationResult(
                     success=True,
                     image_build_seconds=image_build_seconds,
                     test_execution_seconds=test_execution_seconds,
                 )
             else:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message=f"Test run failed with return code {test_run.returncode}",
                     image_build_seconds=image_build_seconds,

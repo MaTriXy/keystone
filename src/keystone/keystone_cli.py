@@ -1,6 +1,7 @@
+"""Main user entry point for the Keystone CLI."""
+
 import json
 import logging
-import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -13,7 +14,6 @@ from keystone.agent_log import (
     AgentLog,
     AgentRunRecord,
     CLIRunRecord,
-    StreamEvent,
     compute_cache_key,
     extract_devcontainer_tarball,
 )
@@ -33,9 +33,10 @@ from keystone.git_utils import (
     is_git_dirty,
     is_git_repo,
 )
+from keystone.junit_report_parser import parse_junit_xml
+from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
-from keystone.report_parsers import parse_junit_xml
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -43,19 +44,11 @@ from keystone.schema import (
     BootstrapResult,
     GeneratedFiles,
     InferenceCost,
+    StreamEvent,
     TokenSpending,
     VerificationResult,
 )
 from keystone.version import get_version_info
-
-
-class ISOFormatter(logging.Formatter):
-    """Log formatter with ISO 8601 timestamps including milliseconds and timezone."""
-
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: ARG002
-        dt = datetime.fromtimestamp(record.created, tz=UTC).astimezone()
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{int(record.msecs):03d}{dt.strftime('%z')}"
-
 
 # Configure logging with standard format including timestamp, thread, and source location
 _handler = logging.StreamHandler()
@@ -69,20 +62,6 @@ logging.getLogger("keystone").setLevel(logging.DEBUG)
 
 app = typer.Typer()
 console = Console(stderr=True, force_terminal=True)
-
-
-def check_docker_available() -> bool:
-    """Check if Docker CLI is installed and daemon is running."""
-    try:
-        result = subprocess.run(
-            ["docker", "ps"],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
 
 
 @app.command()
@@ -115,7 +94,7 @@ def bootstrap(
     cache_version: str = typer.Option(
         "2026-02-09",
         "--cache_version",
-        help="String appended to cache key to invalidate old entries",
+        help="String appended to cache key.  Bumping this invalidates the cache, forcing fresh runs.",
     ),
     output_file: Path | None = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
@@ -125,19 +104,19 @@ def bootstrap(
         "--agent_in_modal/--run_agent_locally_with_dangerously_skip_permissions",
         help="Run agent in Modal sandbox (default) or locally",
     ),
-    agent_time_limit_secs: int = typer.Option(
-        3600,
-        "--agent_time_limit_secs",
+    agent_time_limit_seconds: int = typer.Option(
+        60 * 60,
+        "--agent_time_limit_seconds",
         help="Maximum seconds for agent execution (uses timeout command)",
     ),
-    image_build_timeout_secs: int = typer.Option(
+    image_build_timeout_seconds: int = typer.Option(
         30 * 60,
-        "--image_build_timeout_secs",
+        "--image_build_timeout_seconds",
         help="Maximum seconds for building the devcontainer image",
     ),
-    test_timeout_secs: int = typer.Option(
+    test_timeout_seconds: int = typer.Option(
         30 * 60,
-        "--test_timeout_secs",
+        "--test_timeout_seconds",
         help="Maximum seconds for running tests",
     ),
     docker_cache_secret: str | None = typer.Option(
@@ -182,7 +161,7 @@ def bootstrap(
     # Build prompt
     prompt = build_agent_prompt(agent_in_modal)
 
-    start_time = time.time()
+    start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
 
     # Set up runner based on --agent_in_modal flag
@@ -202,7 +181,7 @@ def bootstrap(
             )
         runner = LocalAgentRunner()
 
-    token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
+    token_spending = TokenSpending()
     total_cost_usd = 0.0
     model_name = ""
     exit_code = 1
@@ -218,11 +197,13 @@ def bootstrap(
             message=message,
         )
 
+    # FIXME: Extract this to claude_agent_output_handling.py.
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
 
         Returns True if a marker was found.
         """
+        # FIXME: Do not use nonlocal, use a class/object to track state.
         nonlocal agent_summary, status_messages
         found = False
         for line in text.split("\n"):
@@ -247,6 +228,7 @@ def bootstrap(
                 found = True
         return found
 
+    # FIXME: Extract this to claude_agent_output_handling.py.
     def process_stdout_line(line: str) -> None:
         """Process a line of agent stdout, extracting messages and token usage."""
         nonlocal total_cost_usd, model_name
@@ -272,10 +254,10 @@ def bootstrap(
                 model_name = data.get("model", "")
                 # usage tokens are per-turn, so accumulate them
                 usage = data.get("usage", {})
-                token_spending["input"] += usage.get("input_tokens", 0)
-                token_spending["cached"] += usage.get("cache_read_input_tokens", 0)
-                token_spending["output"] += usage.get("output_tokens", 0)
-                token_spending["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
+                token_spending.input += usage.get("input_tokens", 0)
+                token_spending.cached += usage.get("cache_read_input_tokens", 0)
+                token_spending.output += usage.get("output_tokens", 0)
+                token_spending.cache_creation += usage.get("cache_creation_input_tokens", 0)
 
             # Log other message types at debug level for visibility
             elif msg_type:
@@ -292,8 +274,9 @@ def bootstrap(
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     try:
-        # Set up logging/caching
+        # Set up logging/caching of agentic runs.
         # Default to ~/.imbue_keystone/log.sqlite if not specified
+        # FIXME: Don't log if there's no argument provided.
         effective_log_db = log_db or str(Path.home() / ".imbue_keystone" / "log.sqlite")
 
         agent_log = AgentLog(effective_log_db)
@@ -305,7 +288,7 @@ def bootstrap(
         agent_config = AgentConfig(
             agent_cmd=agent_cmd,
             max_budget_usd=max_budget_usd,
-            agent_time_limit_secs=agent_time_limit_secs,
+            agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
         )
 
@@ -374,11 +357,12 @@ def bootstrap(
                 )
 
             try:
+                # FIXME: This feels a little deeply nested for the core logic.
                 for event in runner.run(
-                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_secs
+                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_seconds
                 ):
                     # Collect all events for logging
-                    collected_events.append(StreamEvent(stream=event.stream, line=event.line))
+                    collected_events.append(event)
                     if event.stream == "stdout":
                         process_stdout_line(event.line)
                     else:
@@ -419,7 +403,7 @@ def bootstrap(
                 print(f"Error running agent: {e}", file=sys.stderr)
                 exit_code = 1
 
-        agent_work_seconds = time.time() - start_time
+        agent_work_seconds = time.monotonic() - start_time
 
         # Verification step
         logging.info(f"{ANSI_BLUE}Verifying agent's work...{ANSI_RESET}")
@@ -448,8 +432,8 @@ def bootstrap(
                 project_archive,
                 devcontainer_tarball,
                 test_artifacts_dir,
-                image_build_timeout_secs,
-                test_timeout_secs,
+                image_build_timeout_seconds,
+                test_timeout_seconds,
             )
             verification_success = verify_result.success
             verification_error = verify_result.error_message
@@ -517,7 +501,7 @@ def bootstrap(
             status_messages=status_messages,
             cost=InferenceCost(
                 cost_usd=total_cost_usd,
-                token_spending=TokenSpending(**token_spending),
+                token_spending=token_spending,
             ),
         ),
         verification=verification,
