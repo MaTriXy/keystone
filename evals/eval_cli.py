@@ -47,8 +47,8 @@ def run(
     max_workers: int = typer.Option(4, "--max_workers", help="Max parallel workers"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
-    docker_cache_secret: str | None = typer.Option(
-        None,
+    docker_cache_secret: str = typer.Option(
+        "keystone-docker-registry-config",
         "--docker_cache_secret",
         help="Modal secret name for Docker build cache registry credentials",
     ),

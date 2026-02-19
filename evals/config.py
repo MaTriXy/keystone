@@ -32,9 +32,6 @@ class AgentConfig(BaseModel):
     # Agent command (use fake_agent.py for testing)
     agent_cmd: str = Field(default="claude", description="Agent command to run")
 
-    # Run agent in Modal or locally
-    agent_in_modal: bool = Field(default=True, description="Run agent in Modal sandbox")
-
     # Log database (shared with CLI)
     log_db: str | None = Field(
         default=None,
@@ -49,9 +46,9 @@ class AgentConfig(BaseModel):
         default=False, description="Skip cache lookup, force fresh execution"
     )
 
-    # Docker build cache (Modal secret name, optional)
-    docker_cache_secret: str | None = Field(
-        default=None,
+    # Docker build cache (Modal secret name)
+    docker_cache_secret: str = Field(
+        default="keystone-docker-registry-config",
         description="Modal secret name with DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}",
     )
 

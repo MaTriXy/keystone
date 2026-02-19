@@ -150,10 +150,7 @@ def process_repo_task(
             agent_config.agent_cmd,
         ]
 
-        if agent_config.agent_in_modal:
-            cmd.append("--agent_in_modal")
-        else:
-            cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
+        cmd.append("--agent_in_modal")
 
         if agent_config.log_db:
             cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
@@ -164,8 +161,7 @@ def process_repo_task(
         if agent_config.no_cache_replay:
             cmd.append("--no_cache_replay")
 
-        if agent_config.docker_cache_secret:
-            cmd.extend(["--docker_cache_secret", agent_config.docker_cache_secret])
+        cmd.extend(["--docker_cache_secret", agent_config.docker_cache_secret])
 
         log.info(f"Running: {' '.join(cmd[:8])}...")
 
