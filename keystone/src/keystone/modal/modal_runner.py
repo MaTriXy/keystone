@@ -23,6 +23,7 @@ from keystone.agent_runner import (
     AgentRunner,
     build_claude_command,
 )
+from keystone.llm_provider import LLMProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
 from keystone.schema import StreamEvent, VerificationResult
@@ -322,13 +323,14 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
+        provider: LLMProvider | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
         self.upload_project(project_archive)
 
         try:
-            yield from self._run_agent(prompt, max_budget_usd, agent_cmd, time_limit_secs)
+            yield from self._run_agent(prompt, max_budget_usd, agent_cmd, time_limit_secs, provider)
         except Exception:
             if self._sandbox:
                 self._sandbox.terminate()
@@ -341,6 +343,7 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
+        provider: LLMProvider | None = None,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
@@ -365,7 +368,10 @@ ENDJSON
 
         # Build agent command
         # Note: agent_cmd might be "claude" or a full path
-        cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd)
+        if provider is not None:
+            cmd_parts = provider.build_command(prompt, max_budget_usd, agent_cmd)
+        else:
+            cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd)
 
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'

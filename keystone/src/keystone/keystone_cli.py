@@ -1,6 +1,5 @@
 """Main user entry point for the Keystone CLI."""
 
-import json
 import logging
 import sys
 import time
@@ -34,6 +33,7 @@ from keystone.git_utils import (
     is_git_repo,
 )
 from keystone.junit_report_parser import parse_junit_xml
+from keystone.llm_provider import ProviderConfig, get_provider
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
@@ -76,6 +76,11 @@ def bootstrap(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
     agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
+    provider_name: str = typer.Option(
+        "claude",
+        "--provider",
+        help="LLM provider name (e.g. 'claude'). See keystone.llm_provider.PROVIDER_REGISTRY.",
+    ),
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
@@ -184,6 +189,15 @@ def bootstrap(
             )
         runner = LocalAgentRunner()
 
+    # Instantiate the LLM provider
+    provider_config = ProviderConfig(
+        name=provider_name,
+        agent_cmd=agent_cmd,
+    )
+    provider = get_provider(provider_config)
+    # Use provider's default command if agent_cmd wasn't explicitly changed
+    effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
+
     token_spending = TokenSpending()
     total_cost_usd = 0.0
     model_name = ""
@@ -231,46 +245,42 @@ def bootstrap(
                 found = True
         return found
 
-    # FIXME: Extract this to claude_agent_output_handling.py.
     def process_stdout_line(line: str) -> None:
-        """Process a line of agent stdout, extracting messages and token usage."""
+        """Process a line of agent stdout via the LLM provider's parser."""
         nonlocal total_cost_usd, model_name
-        try:
-            data = json.loads(line)
-            msg_type = data.get("type")
+        parsed = provider.parse_stdout_line(line)
 
-            if msg_type == "assistant":
-                content = data.get("message", {}).get("content", [])
-                for item in content:
-                    if item.get("type") == "text":
-                        txt = item.get("text", "").strip()
-                        if txt and not check_and_print_status(txt):
-                            logging.info(f"Assistant: {txt}")
-                    elif item.get("type") == "tool_use":
-                        name = item.get("name")
-                        input_data = item.get("input", {})
-                        logging.info(f"Tool Call: {name}({input_data})")
-
-            elif msg_type == "result":
-                # total_cost_usd from API is already cumulative for the session
-                total_cost_usd = data.get("total_cost_usd", 0.0)
-                model_name = data.get("model", "")
-                # usage tokens are per-turn, so accumulate them
-                usage = data.get("usage", {})
-                token_spending.input += usage.get("input_tokens", 0)
-                token_spending.cached += usage.get("cache_read_input_tokens", 0)
-                token_spending.output += usage.get("output_tokens", 0)
-                token_spending.cache_creation += usage.get("cache_creation_input_tokens", 0)
-
-            # Log other message types at debug level for visibility
-            elif msg_type:
-                logging.debug(f"Agent message type={msg_type}: {line[:200]}")
-
-        except json.JSONDecodeError:
-            # Not JSON or partial JSON, log it for debugging purposes
-            # We use debug level because legitimate partial chunks might trigger this
+        if parsed.unparsed:
             logging.debug(f"Agent stdout (non-JSON): {line.strip()}")
-            pass
+            return
+
+        if parsed.text is not None and not check_and_print_status(parsed.text):
+            logging.info(f"Assistant: {parsed.text}")
+
+        if parsed.tool_call is not None:
+            name, input_data = parsed.tool_call
+            logging.info(f"Tool Call: {name}({input_data})")
+
+        if parsed.cost_usd is not None:
+            total_cost_usd = parsed.cost_usd
+
+        if parsed.model is not None:
+            model_name = parsed.model
+
+        # Accumulate token usage deltas
+        token_spending.input += parsed.input_tokens
+        token_spending.cached += parsed.cached_tokens
+        token_spending.output += parsed.output_tokens
+        token_spending.cache_creation += parsed.cache_creation_tokens
+
+        # Log unhandled message types at debug level
+        if (
+            parsed.raw_type
+            and parsed.text is None
+            and parsed.tool_call is None
+            and parsed.cost_usd is None
+        ):
+            logging.debug(f"Agent message type={parsed.raw_type}: {line[:200]}")
 
     def process_stderr_line(line: str) -> None:
         """Forward agent stderr to our stderr."""
@@ -286,10 +296,9 @@ def bootstrap(
         cli_run_id = agent_log.generate_run_id()
 
         # Build agent config (part of cache key)
-        assert agent_cmd is not None
         assert max_budget_usd is not None
         agent_config = AgentConfig(
-            agent_cmd=agent_cmd,
+            agent_cmd=effective_agent_cmd,
             max_budget_usd=max_budget_usd,
             agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
@@ -362,7 +371,12 @@ def bootstrap(
             try:
                 # FIXME: This feels a little deeply nested for the core logic.
                 for event in runner.run(
-                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_seconds
+                    prompt,
+                    project_archive,
+                    max_budget_usd,
+                    effective_agent_cmd,
+                    agent_time_limit_seconds,
+                    provider=provider,
                 ):
                     # Collect all events for logging
                     collected_events.append(event)
