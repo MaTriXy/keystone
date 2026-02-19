@@ -168,7 +168,9 @@ def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.Mo
         ),
     ],
 )
-def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str) -> None:
+def test_e2e_fake_agent(
+    tmp_path: Path, project_root: Path, execution_mode: str, caplog: pytest.LogCaptureFixture
+) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
@@ -210,6 +212,17 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str)
 
     assert result.exit_code == 0, f"Process failed: {result.stderr}"
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
+
+    if use_modal:
+        # Verify BuildKit registry cache integration is working.
+        # These lines appear in docker build output logged by keystone.modal logger.
+        all_logs = caplog.text
+        assert "importing cache manifest from" in all_logs, (
+            "Expected BuildKit to import cache manifest (--cache-from)"
+        )
+        assert "exporting cache to registry" in all_logs, (
+            "Expected BuildKit to export cache to registry (--cache-to)"
+        )
 
     # Check that status lines were emitted to stdout (rich prints in blue)
     if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
