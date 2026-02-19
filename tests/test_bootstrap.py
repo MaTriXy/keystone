@@ -19,6 +19,8 @@ from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
 
+DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
+
 
 def test_cli_help() -> None:
     result = CliRunner().invoke(app, ["--help"])
@@ -28,7 +30,7 @@ def test_cli_help() -> None:
 
 
 @pytest.mark.manual
-def test_cli_runs_from_uvx() -> None:
+def test_cli_help_runs_from_uvx() -> None:
     """Test that the CLI can be installed and invoked via uvx from the public repo.
 
     The uvx command tested here is the one documented in the README:
@@ -72,6 +74,54 @@ def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.Monkey
     get_version_info.cache_clear()
 
 
+def test_cli_does_not_crash_in_empty_git_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI must not crash when --project_root is an empty git repo (no commits).
+
+    This reproduces the bug seen when running via uvx:
+        uvx --from 'git+https://github.com/imbue-ai/keystone@prod' keystone \\
+            --project_root <empty-repo> --test_artifacts_dir <dir>
+
+    In that scenario the CWD may be inside a git repo with no commits, causing
+    ``git rev-parse HEAD`` to fail with exit code 128.  The version fallback
+    chain must catch this and continue.
+    """
+    # Create an empty git repo (init but no commits)
+    empty_repo = tmp_path / "empty_git_repo"
+    empty_repo.mkdir()
+    init_git_repo(empty_repo, add_all=False, commit=False)
+
+    test_artifacts_dir = tmp_path / "test_artifacts"
+
+    # Simulate uvx environment: CWD is the empty repo, no stamp file
+    monkeypatch.chdir(empty_repo)
+    get_version_info.cache_clear()
+
+    try:
+        cmd = [
+            "--project_root",
+            str(empty_repo),
+            "--test_artifacts_dir",
+            str(test_artifacts_dir),
+            "--max_budget_usd",
+            "0",
+            "--run_agent_locally_with_dangerously_skip_permissions",
+        ]
+        result = CliRunner().invoke(app, cmd)
+
+        # The CLI will fail because the empty repo has no devcontainer config etc.,
+        # but it must NOT crash with CalledProcessError from git rev-parse HEAD.
+        # Exit code 1 (controlled failure) is fine; a traceback with
+        # CalledProcessError from version.py is not.
+        assert "CalledProcessError" not in (result.stdout + (result.stderr or "")), (
+            f"CLI crashed with CalledProcessError (version resolution bug):\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    finally:
+        get_version_info.cache_clear()
+
+
 def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Simulate uvx installing from a git URL: no local git, but PEP 610 metadata exists.
 
@@ -107,17 +157,37 @@ def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.Mo
     get_version_info.cache_clear()
 
 
-def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
+@pytest.mark.parametrize(
+    "execution_mode",
+    [
+        pytest.param("local", id="local"),
+        pytest.param(
+            "modal",
+            id="modal",
+            marks=pytest.mark.manual,
+        ),
+    ],
+)
+def test_e2e_fake_agent(
+    tmp_path: Path, project_root: Path, execution_mode: str, caplog: pytest.LogCaptureFixture
+) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
+
+    Parameterized to run both locally (--run_agent_locally_with_dangerously_skip_permissions)
+    and on Modal (--agent_in_modal with --docker_cache_secret for registry cache).
     """
+    use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent = Path(__file__).parent / "fake_agent.py"
+    fake_agent_src = Path(__file__).parent / "fake_agent.py"
     cache_file = tmp_path / "cache.sqlite"
 
+    # fake_agent.py is baked into the Modal image at /usr/local/bin/fake_agent.py
+    agent_cmd_str = "fake_agent.py" if use_modal else str(fake_agent_src)
+
     logger.info("=" * 60)
-    logger.info("E2E Test with Fake Agent Starting")
+    logger.info("E2E Test with Fake Agent Starting (mode=%s)", execution_mode)
     logger.info("Project root: %s", project_root)
     logger.info("Test artifacts dir: %s", test_artifacts_dir)
     logger.info("=" * 60)
@@ -128,19 +198,31 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--agent_cmd",
-        shlex.quote(str(fake_agent)),
+        shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
-        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
+    if use_modal:
+        cmd += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+    else:
+        cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
     logger.info("Running: %s", " ".join(cmd))
     result = CliRunner().invoke(app, cmd)
 
-    # result = run_process(cmd, log_prefix="[fake-agent]")
-
     assert result.exit_code == 0, f"Process failed: {result.stderr}"
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
+
+    if use_modal:
+        # Verify BuildKit registry cache integration is working.
+        # These lines appear in docker build output logged by keystone.modal logger.
+        all_logs = caplog.text
+        assert "importing cache manifest from" in all_logs, (
+            "Expected BuildKit to import cache manifest (--cache-from)"
+        )
+        assert "exporting cache to registry" in all_logs, (
+            "Expected BuildKit to export cache to registry (--cache-to)"
+        )
 
     # Check that status lines were emitted to stdout (rich prints in blue)
     if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
@@ -217,21 +299,21 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        # "keystone",
         "--project_root",
         str(project_root2),
         "--test_artifacts_dir",
         str(test_artifacts_dir2),
         "--agent_cmd",
-        shlex.quote(str(fake_agent)),
+        shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
-        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
+    if use_modal:
+        cmd2 += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+    else:
+        cmd2 += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
     result2 = CliRunner().invoke(app, cmd2)
-
-    # result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
 
     assert result2.exit_code == 0, f"Cached run failed: {result2.stderr}"
     assert "CACHE HIT" in result2.stderr, "Expected cache hit on second run"
@@ -369,9 +451,6 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
-DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
-
-
 def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
     """Extract and parse the JSON BootstrapResult from CLI stdout."""
     stdout_lines = stdout.strip().split("\n")
@@ -424,9 +503,9 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     assert output1.verification.success, (
         f"Run 1 verification failed: {output1.verification.error_message}"
     )
-    run1_build_secs = output1.verification.image_build_seconds
-    assert run1_build_secs is not None, "Run 1 should report image_build_seconds"
-    logger.info("Run 1 image build: %.1f seconds", run1_build_secs)
+    run1_build_seconds = output1.verification.image_build_seconds
+    assert run1_build_seconds is not None, "Run 1 should report image_build_seconds"
+    logger.info("Run 1 image build: %.1f seconds", run1_build_seconds)
 
     # --- Run 2: Cache hit (agent replayed, docker cache should be warm) ---
     logger.info("=" * 60)
@@ -455,21 +534,21 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     assert output2.verification.success, (
         f"Run 2 verification failed: {output2.verification.error_message}"
     )
-    run2_build_secs = output2.verification.image_build_seconds
-    assert run2_build_secs is not None, "Run 2 should report image_build_seconds"
-    logger.info("Run 2 image build: %.1f seconds", run2_build_secs)
+    run2_build_seconds = output2.verification.image_build_seconds
+    assert run2_build_seconds is not None, "Run 2 should report image_build_seconds"
+    logger.info("Run 2 image build: %.1f seconds", run2_build_seconds)
 
     # --- Verify the docker build was faster on run 2 ---
     logger.info(
         "Build time comparison: Run 1 = %.1fs, Run 2 = %.1fs (%.1f%% of run 1)",
-        run1_build_secs,
-        run2_build_secs,
-        (run2_build_secs / run1_build_secs * 100) if run1_build_secs > 0 else 0,
+        run1_build_seconds,
+        run2_build_seconds,
+        (run2_build_seconds / run1_build_seconds * 100) if run1_build_seconds > 0 else 0,
     )
     # The cached build should be at least 2x faster. In practice it's often 5-10x.
-    assert run2_build_secs < run1_build_secs * 0.5, (
-        f"Expected run 2 build ({run2_build_secs:.1f}s) to be at least 2x faster "
-        f"than run 1 ({run1_build_secs:.1f}s) due to docker registry cache"
+    assert run2_build_seconds < run1_build_seconds * 0.5, (
+        f"Expected run 2 build ({run2_build_seconds:.1f}s) to be at least 2x faster "
+        f"than run 1 ({run1_build_seconds:.1f}s) due to docker registry cache"
     )
 
 
