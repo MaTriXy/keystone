@@ -75,11 +75,11 @@ def sample_repos(tmp_path: Path) -> tuple[Path, list[str]]:
 
 @pytest.mark.slow
 def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
-    """Test the eval flow with fake agent (no Modal, no LLM).
+    """Test the eval flow with fake agent on Modal (no LLM).
 
     This test:
     1. Creates local git repos from samples
-    2. Runs the eval flow with fake agent locally
+    2. Runs the eval flow with fake agent on Modal
     3. Verifies results structure and that repos are pinned
 
     Uses fake_agent.py which generates a working Python devcontainer.
@@ -94,7 +94,6 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
         max_budget_usd=1.0,
         timeout_minutes=5,
         agent_cmd=f"python {FAKE_AGENT}",
-        agent_in_modal=False,  # Run locally with fake agent
     )
 
     eval_config = EvalConfig(
@@ -164,7 +163,6 @@ def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -
         max_budget_usd=1.0,
         timeout_minutes=10,
         agent_cmd="claude",
-        agent_in_modal=True,
         log_db=str(DEFAULT_TESTING_LOG_PATH),
     )
 
