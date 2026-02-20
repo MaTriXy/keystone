@@ -21,7 +21,7 @@ app = typer.Typer(help="Eval harness for keystone")
 console = Console()
 
 
-@app.command()
+@app.command("run")
 def run(
     repo_list_path: Path = typer.Option(..., "--repo_list_path", help="Path to repo_list.jsonl"),
     s3_output_prefix: str = typer.Option(
