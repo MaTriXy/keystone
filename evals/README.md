@@ -12,24 +12,31 @@ uv sync
 
 Requires AWS credentials in your environment for S3 access (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` or an AWS profile).
 
-## Usage — Local
+## Usage — Local (recommended for ad hoc work)
 
-Run the flow directly on your laptop. The Prefect orchestrator runs in-process; keystone tasks run on Modal.
+Run the flow directly on your laptop. The Prefect orchestrator runs in-process; keystone tasks run on Modal. **This always uses your current code tree — no deploy step needed.** Best for iterating on code changes.
 
 ```bash
-# Run on all repos
+# Quick smoke test: run on just 1 repo
 cd evals
 uv run eval-harness \
     --repo_list_path examples/repos.jsonl \
-    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
-    --max_budget_usd 1.0
+    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
+    --max_budget_usd 1.0 \
+    --limit 1
 
-# Run on only the first 2 repos (useful for testing)
+# Run on only the first 2 repos
 uv run eval-harness \
     --repo_list_path examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
     --limit 2
+
+# Run on all repos
+uv run eval-harness \
+    --repo_list_path examples/repos.jsonl \
+    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
+    --max_budget_usd 1.0
 
 # Force fresh execution (skip keystone cache)
 uv run eval-harness \
@@ -43,6 +50,8 @@ uv run eval-harness \
 ## Usage — Prefect Cloud
 
 Deploy the flow to a Prefect-managed work pool so it runs in the cloud instead of on your laptop.
+
+> **When do I need to redeploy?** Code is shipped to Prefect Cloud at deploy time. You must re-run `prefect deploy` every time you change `flow.py`, `config.py`, or anything they import. If you're only changing **parameters** (not code), you can skip the redeploy and pass `--param` overrides at run time.
 
 ### One-time setup
 
@@ -65,6 +74,9 @@ prefect deploy
 # Trigger a run (uses defaults from prefect.yaml)
 prefect deployment run eval_keystone/eval-keystone
 
+# Quick test: run on just 1 repo
+prefect deployment run eval_keystone/eval-keystone --param limit=1
+
 # Trigger with overrides
 prefect deployment run eval_keystone/eval-keystone \
     --param s3_output_prefix=s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
@@ -72,6 +84,14 @@ prefect deployment run eval_keystone/eval-keystone \
 ```
 
 The deployment is configured in `prefect.yaml`. Edit it to change default parameters, work pool, etc.
+
+### Local vs. Cloud cheat sheet
+
+| Scenario | Command | Redeploy needed? |
+|---|---|---|
+| Ad hoc / iterating on code | `uv run eval-harness --limit 1 ...` | No — always uses current tree |
+| Push code to Prefect Cloud | `cd evals && prefect deploy` | Yes — every code change |
+| Change only parameters | `prefect deployment run ... --param limit=1` | No — params are runtime |
 
 ## Configuration
 
