@@ -135,7 +135,6 @@ def run_modal_command(
 _SCRIPT_DIR = Path(__file__).parent
 
 
-
 class ModalAgentRunner(AgentRunner):
     """Run agent in a Modal sandbox with Docker support.
 
@@ -318,7 +317,9 @@ ENDJSON
         self.upload_project(project_archive)
 
         try:
-            yield from self._run_agent(prompt, max_budget_usd, agent_cmd, time_limit_seconds, provider)
+            yield from self._run_agent(
+                prompt, max_budget_usd, agent_cmd, time_limit_seconds, provider
+            )
         except Exception:
             if self._sandbox:
                 self._sandbox.terminate()

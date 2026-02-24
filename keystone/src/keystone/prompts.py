@@ -351,8 +351,5 @@ RUN chown user:group /path/file.txt
 def build_agent_prompt(agent_in_modal: bool) -> str:
     """Build the agent prompt, optionally adding Modal-specific guidance."""
     prompt = AGENT_PROMPT_TEMPLATE
-    if agent_in_modal:
-        prompt = prompt + MODAL_ADDENDUM
-    else:
-        prompt = prompt + LOCAL_ADDENDUM
+    prompt = prompt + MODAL_ADDENDUM if agent_in_modal else prompt + LOCAL_ADDENDUM
     return prompt
