@@ -398,13 +398,17 @@ def bootstrap(
         test_results=test_results,
     )
 
-    overall_success = verification_success and exit_code == 0
+    # Verification passing is the source of truth for success — the agent may
+    # exit non-zero (e.g. timeout code 124) yet still produce correct output.
+    overall_success = verification_success
     error_message: str | None = None
     if not overall_success:
         if verification_error:
             error_message = verification_error
         elif exit_code != 0:
             error_message = f"Agent exited with code {exit_code}"
+    elif exit_code != 0:
+        logging.warning(f"Agent exited with code {exit_code} but verification passed")
 
     # Read generated files for inclusion in result
     devcontainer_json_path = project_root / ".devcontainer" / "devcontainer.json"
@@ -457,6 +461,7 @@ def bootstrap(
         print(output.model_dump_json(indent=2), flush=True)
 
     if not overall_success:
+        logging.error(f"Keystone failed: {error_message or 'unknown error'}")
         raise typer.Exit(code=1)
 
     # Log the output location
