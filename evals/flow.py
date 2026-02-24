@@ -145,10 +145,8 @@ def _process_repo_task_name(parameters: dict[str, object]) -> str:
     repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
     eval_config: EvalConfig = parameters["eval_config"]  # type: ignore[assignment]
     trial: int | None = parameters.get("trial")  # type: ignore[assignment]
-    parts = [eval_config.name or "default", repo_entry.id]
-    if trial is not None:
-        parts.append(f"t{trial}")
-    return "/".join(parts)
+    trial_num = trial if trial is not None else 0
+    return f"{eval_config.name or 'default'}/{repo_entry.id}/t{trial_num}"
 
 
 @task(
