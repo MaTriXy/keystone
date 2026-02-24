@@ -1,0 +1,30 @@
+{
+  // Minimal eval: 2 cheap models × 2 repos × 2 trials
+  "repo_list_path": "evals/examples/repos_tiny.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/tiny-test/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "claude-haiku",
+      "agent_config": {
+        "provider": "claude",
+        "model": "claude-haiku-4-5-20251001",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 30
+      },
+      "trials_per_repo": 2,
+      "max_workers": 4
+    },
+    {
+      "name": "codex-mini",
+      "agent_config": {
+        "provider": "codex",
+        "model": "gpt-5.1-codex-mini",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 30
+      },
+      "trials_per_repo": 2,
+      "max_workers": 4
+    }
+  ]
+}
