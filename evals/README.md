@@ -18,27 +18,27 @@ Run the flow directly on your laptop. The Prefect orchestrator runs in-process; 
 
 ```bash
 # Quick smoke test: run on just 1 repo
-uv run --package evals eval-harness \
+uv run eval-harness \
     --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
     --limit 1
 
 # Run on only the first 2 repos
-uv run --package evals eval-harness \
+uv run eval-harness \
     --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
     --limit 2
 
 # Run on all repos
-uv run --package evals eval-harness \
+uv run eval-harness \
     --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
     --max_budget_usd 1.0
 
 # Force fresh execution (skip keystone cache)
-uv run --package evals eval-harness \
+uv run eval-harness \
     --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
     --no_cache_replay \
@@ -46,7 +46,7 @@ uv run --package evals eval-harness \
     --max_budget_usd 10.0
 
 # Multi-model comparison from a config file
-uv run --package evals eval-harness \
+uv run eval-harness \
     --config_file evals/examples/tiny_two_model_test.json
 ```
 
@@ -139,5 +139,5 @@ Uses Prefect for task orchestration and fsspec for S3 storage.
 
 ```bash
 # Run the integration test (requires Modal)
-uv run --package evals pytest evals/test_eval_flow.py -v -m "slow and modal"
+uv run pytest evals/test_eval_flow.py -v -m "slow and modal"
 ```
