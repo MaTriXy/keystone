@@ -1,9 +1,9 @@
 """CLI for the eval harness."""
 
-import json
 import logging
 from pathlib import Path
 
+import json5
 import typer
 from config import AgentConfig, EvalConfig, EvalOutput, EvalRunConfig, LLMModel
 from flow import eval_flow
@@ -104,7 +104,7 @@ def run(
     2. **CLI flag mode**: Build a single ``EvalConfig`` from CLI flags.
     """
     if config_file is not None:
-        raw = json.loads(config_file.read_text())
+        raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
         run_config = EvalRunConfig(**raw)
         effective_limit = limit if limit is not None else run_config.limit
 
