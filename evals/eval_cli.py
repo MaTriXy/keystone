@@ -11,12 +11,15 @@ from rich.console import Console
 
 DEFAULT_LOG_PATH = Path.home() / ".imbue_keystone" / "log.sqlite"
 
-# Configure logging
+# Configure logging: WARNING for third-party, INFO for our code and prefect
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
+# Allow INFO from our own modules and prefect (flow progress)
+for _logger_name in ("flow", "eval_cli", "prefect.flow_runs", "prefect.task_runs"):
+    logging.getLogger(_logger_name).setLevel(logging.INFO)
 
 app = typer.Typer(help="Eval harness for keystone")
 console = Console()
