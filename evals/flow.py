@@ -500,6 +500,68 @@ def _run_eval_phase(
     return output
 
 
+def _collect_eval_results(
+    eval_config: EvalConfig,
+    process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]],
+    log: Any,
+) -> EvalOutput:
+    """Collect results from already-completed futures and build EvalOutput."""
+    total_tasks = len(process_futures)
+    trials_per_repo = eval_config.trials_per_repo
+    results: list[RepoResult] = []
+    succeeded = 0
+    failed = 0
+    for repo_entry, trial, future in process_futures:
+        trial_label = f" trial={trial}" if trials_per_repo > 1 else ""
+        try:
+            result = future.result()
+            results.append(result)
+            succeeded += 1
+            remaining = total_tasks - succeeded - failed
+            log.info(
+                f"repo id={repo_entry.id}{trial_label} finished with SUCCESS, "
+                f"{remaining} tasks remain in the eval."
+            )
+        except Exception as e:
+            failed += 1
+            remaining = total_tasks - succeeded - failed
+            log.info(
+                f"repo id={repo_entry.id}{trial_label} finished with FAILURE, "
+                f"{remaining} tasks remain in the eval."
+            )
+            results.append(
+                RepoResult(
+                    repo_entry=repo_entry,
+                    success=False,
+                    error_message=str(e),
+                )
+            )
+
+    # Build output
+    version_info = get_version_info()
+    pinned_repos = [r.repo_entry for r in results]
+
+    output = EvalOutput(
+        keystone_version=version_info.model_dump(),
+        repos=pinned_repos,
+        results=results,
+    )
+
+    # Upload summary to S3
+    s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
+    try:
+        _s3_write_text(
+            f"{s3_output_prefix}/eval_summary.json",
+            json.dumps(output.model_dump(), indent=2),
+        )
+        log.info(f"Wrote eval summary to {s3_output_prefix}/eval_summary.json")
+    except Exception as e:
+        log.warning(f"Failed to upload eval summary to S3: {e}")
+
+    log.info(f"Complete: {succeeded}/{total_tasks} succeeded, {failed}/{total_tasks} failed")
+    return output
+
+
 @flow(name="eval_keystone")
 def eval_flow(
     repo_list_path: str,
@@ -518,14 +580,47 @@ def eval_flow(
     # Phase 1: Archive repos once (shared across all configs)
     archives = _archive_repos(repos, s3_repo_cache_prefix, log)
 
-    # Phase 2: Run each config against the same archives
-    outputs: list[EvalOutput] = []
+    # Phase 2: Submit all configs' tasks concurrently, then collect results.
+    # Each config gets its own list of futures so results can be grouped later.
+    config_futures: list[
+        tuple[EvalConfig, list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]]
+    ] = []
     for i, eval_config in enumerate(eval_configs):
         label = eval_config.name or f"config-{i}"
-        log.info(f"--- Starting eval [{label}] ---")
-        output = _run_eval_phase(archives, eval_config, log)
+        log.info(f"--- Submitting eval [{label}] ---")
+
+        trials_per_repo = eval_config.trials_per_repo
+        if trials_per_repo > 1 and not eval_config.agent_config.no_cache_replay:
+            log.info(f"trials_per_repo={trials_per_repo} > 1: forcing --no_cache_replay")
+            eval_config = eval_config.model_copy(
+                update={
+                    "agent_config": eval_config.agent_config.model_copy(
+                        update={"no_cache_replay": True}
+                    )
+                }
+            )
+
+        futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
+        for repo_entry, s3_path, commit_hash in archives:
+            for trial in range(trials_per_repo):
+                future = process_repo_task.submit(
+                    repo_entry=repo_entry,
+                    s3_tarball_path=s3_path,
+                    commit_hash=commit_hash,
+                    eval_config=eval_config,
+                    trial=trial if trials_per_repo > 1 else None,
+                )
+                futures.append((repo_entry, trial, future))
+        config_futures.append((eval_config, futures))
+
+    # Wait for ALL futures across all configs
+    all_futures = [f for _, group in config_futures for _, _, f in group]
+    wait(all_futures)
+
+    # Collect results per config
+    outputs: list[EvalOutput] = []
+    for eval_config, futures in config_futures:
+        output = _collect_eval_results(eval_config, futures, log)
         outputs.append(output)
 
     return outputs
-
-    return output
