@@ -1,6 +1,6 @@
 {
   "repo_list_path": "evals/examples/repos.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24_thad/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
   "configs": [
     {
@@ -9,8 +9,9 @@
         "provider": "claude",
         "model": "claude-opus-4-6",
         "max_budget_usd": 10.0,
-        "timeout_minutes": 45
+        "timeout_minutes": 30
       },
+      "trials_per_repo": 3,
       "max_workers": 8
     },
     {
@@ -19,29 +20,30 @@
         "provider": "claude",
         "model": "claude-haiku-4-5-20251001",
         "max_budget_usd": 10.0,
-        "timeout_minutes": 45
+        "timeout_minutes": 30
       },
+      "trials_per_repo": 3,
       "max_workers": 8
     },
-    {
-      "name": "codex-premium",
-      "agent_config": {
-        "provider": "codex",
-        "model": "gpt-5.2-codex",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 45
-      },
-      "max_workers": 8
-    },
-    {
-      "name": "codex-mini",
-      "agent_config": {
-        "provider": "codex",
-        "model": "gpt-5.1-codex-mini",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 45
-      },
-      "max_workers": 8
-    }
+    // {
+    //   "name": "codex-premium",
+    //   "agent_config": {
+    //     "provider": "codex",
+    //     "model": "gpt-5.2-codex",
+    //     "max_budget_usd": 10.0,
+    //     "timeout_minutes": 45
+    //   },
+    //   "max_workers": 8
+    // },
+    // {
+    //   "name": "codex-mini",
+    //   "agent_config": {
+    //     "provider": "codex",
+    //     "model": "gpt-5.1-codex-mini",
+    //     "max_budget_usd": 10.0,
+    //     "timeout_minutes": 45
+    //   },
+    //   "max_workers": 8
+    // }
   ]
 }
