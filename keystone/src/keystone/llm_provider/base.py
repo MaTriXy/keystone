@@ -65,6 +65,9 @@ class AgentErrorEvent(AgentEvent):
 class AgentProvider(ABC):
     """Interface that each LLM backend must implement."""
 
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model
+
     @property
     @abstractmethod
     def name(self) -> str:

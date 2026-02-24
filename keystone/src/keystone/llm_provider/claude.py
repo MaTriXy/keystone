@@ -38,6 +38,7 @@ class ClaudeProvider(AgentProvider):
             *("--output-format", "stream-json"),
             "--verbose",
             *("--max-budget-usd", str(max_budget_usd)),
+            *(("--model", self.model) if self.model else ()),
             *("-p", prompt),
         ]
 

@@ -79,11 +79,18 @@ def bootstrap(
     test_artifacts_dir: Path = typer.Option(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
-    agent_cmd: str | None = typer.Option(None, "--agent_cmd", help="Agent command to run (default: inferred from --provider)"),
+    agent_cmd: str | None = typer.Option(
+        None, "--agent_cmd", help="Agent command to run (default: inferred from --provider)"
+    ),
     provider_name: str = typer.Option(
         "claude",
         "--provider",
         help="LLM provider name (e.g. 'claude'). See keystone.llm_provider.PROVIDER_REGISTRY.",
+    ),
+    model: ClaudeModel | None = typer.Option(
+        None,
+        "--model",
+        help="Model to use (sonnet, opus, haiku, opusplan). Passed as --model to the agent CLI.",
     ),
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
@@ -194,7 +201,7 @@ def bootstrap(
         inner_runner = LocalAgentRunner()
 
     # Instantiate the LLM provider
-    provider = get_provider(provider_name)
+    provider = get_provider(provider_name, model=model.value if model else None)
     effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
 
     token_spending = TokenSpending()
