@@ -45,6 +45,9 @@ uv run eval-harness \
     --no_cache_replay \
     --timeout_minutes 60 \
     --max_budget_usd 10.0
+
+# Multi-model comparison from a config file
+uv run eval-harness --config_file examples/tiny_two_model_test.json
 ```
 
 ## Usage — Prefect Cloud
