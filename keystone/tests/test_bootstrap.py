@@ -435,6 +435,65 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
 
 
 @pytest.mark.manual
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
+def test_e2e_codex_mini_prompt_rejection(tmp_path: Path, project_root: Path) -> None:
+    """Verify that gpt-5.1-codex-mini rejects the prompt and the error propagates correctly.
+
+    The gpt-5.1-codex-mini model triggers OpenAI's content filter on the keystone
+    prompt, producing a turn.failed event. This test verifies that:
+    1. The CLI exits with non-zero exit code.
+    2. The BootstrapResult JSON has success=False.
+    3. The error_message contains useful information about the failure.
+    """
+    test_artifacts_dir = tmp_path / "test_artifacts"
+    cache_file = tmp_path / "codex_mini_cache.sqlite"
+
+    logger.info("=" * 60)
+    logger.info("E2E Test: Codex-mini prompt rejection")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "keystone",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--log_db",
+        str(cache_file),
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5.1-codex-mini",
+        "--agent_in_modal",
+        "--docker_cache_secret",
+        DOCKER_CACHE_SECRET,
+        "--no_cache_replay",
+    ]
+
+    logger.info("Running: %s", " ".join(cmd))
+    result = run_process(cmd, log_prefix="[codex-mini-rejection]")
+
+    output = _parse_bootstrap_result(result.stdout)
+
+    # The CLI should exit with non-zero code
+    assert result.returncode != 0, (
+        f"Expected non-zero exit code for codex-mini prompt rejection, got {result.returncode}"
+    )
+
+    # The result should indicate failure
+    assert not output.success, "Expected success=False for codex-mini prompt rejection"
+
+    # The error message should contain something useful
+    assert output.error_message is not None, "Expected an error_message for prompt rejection"
+    assert len(output.error_message) > 0, "error_message should not be empty"
+
+    logger.info("Codex-mini prompt rejection test passed:")
+    logger.info("  exit code: %d", result.returncode)
+    logger.info("  error_message: %s", output.error_message)
+
+
+@pytest.mark.manual
 @pytest.mark.parametrize(
     "project_root",
     [
