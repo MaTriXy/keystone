@@ -1,8 +1,8 @@
 {
   // Minimal eval: 2 cheap models × 2 repos × 2 trials
   "repo_list_path": "evals/examples/repos_tiny.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/tiny-test_thad_2026-02-25/",
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_output_prefix": "file:///tmp/keystone-evals/tiny-test_v1",
+  "s3_repo_cache_prefix": "file:///tmp/keystone-evals/repo-tarballs/",
   "configs": [
     {
       "name": "claude-haiku",

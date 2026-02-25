@@ -148,8 +148,7 @@ def _process_repo_task_name(parameters: dict[str, object]) -> str:
     repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
     eval_config: EvalConfig = parameters["eval_config"]  # type: ignore[assignment]
     trial: int | None = parameters.get("trial")  # type: ignore[assignment]
-    trial_num = trial if trial is not None else 0
-    return f"{eval_config.name or 'default'}/{repo_entry.id}/t{trial_num}"
+    return f"{eval_config.name or 'default'}/{repo_entry.id}/t{trial}"
 
 
 @task(
@@ -163,7 +162,7 @@ def process_repo_task(
     s3_tarball_path: str,
     commit_hash: str,
     eval_config: EvalConfig,
-    trial: int | None = None,
+    trial: int = 0,
 ) -> RepoResult:
     """Process a single repo.
 
@@ -177,10 +176,7 @@ def process_repo_task(
     repo_id = repo_entry.id
     agent_config = eval_config.agent_config
     s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
-    # {prefix}/{repo_id}/ for single-trial, {prefix}/{repo_id}/trial_{n}/ for multi-trial
-    repo_output_prefix = f"{s3_output_prefix}/{repo_id}"
-    if trial is not None:
-        repo_output_prefix = f"{repo_output_prefix}/trial_{trial}"
+    repo_output_prefix = f"{s3_output_prefix}/{repo_id}/trial_{trial}"
 
     repo_entry.commit_hash = commit_hash
 
@@ -460,7 +456,7 @@ def _run_eval_phase(
                 s3_tarball_path=s3_path,
                 commit_hash=commit_hash,
                 eval_config=eval_config,
-                trial=trial if trials_per_repo > 1 else None,
+                trial=trial,
             )
             process_futures.append((repo_entry, trial, future))
 
@@ -470,7 +466,7 @@ def _run_eval_phase(
     succeeded = 0
     failed = 0
     for repo_entry, trial, future in process_futures:
-        trial_label = f" trial={trial}" if trials_per_repo > 1 else ""
+        trial_label = f" trial={trial}"
         try:
             result = future.result()
             results.append(result)
@@ -529,12 +525,11 @@ def _collect_eval_results(
 ) -> EvalOutput:
     """Collect results from already-completed futures and build EvalOutput."""
     total_tasks = len(process_futures)
-    trials_per_repo = eval_config.trials_per_repo
     results: list[RepoResult] = []
     succeeded = 0
     failed = 0
     for repo_entry, trial, future in process_futures:
-        trial_label = f" trial={trial}" if trials_per_repo > 1 else ""
+        trial_label = f" trial={trial}"
         try:
             result = future.result()
             results.append(result)
@@ -632,7 +627,7 @@ def eval_flow(
                     s3_tarball_path=s3_path,
                     commit_hash=commit_hash,
                     eval_config=eval_config,
-                    trial=trial if trials_per_repo > 1 else None,
+                    trial=trial,
                 )
                 futures.append((repo_entry, trial, future))
         config_futures.append((eval_config, futures))
