@@ -15,7 +15,7 @@ class StreamType(str, Enum):
 
 
 class LLMModel(str, Enum):
-    """LLM model choices for the agent (Claude and Codex)."""
+    """LLM model choices for the agent (Claude, Codex, and OpenCode)."""
 
     # Claude models
     HAIKU = "claude-haiku-4-5-20251001"
@@ -23,6 +23,11 @@ class LLMModel(str, Enum):
     # Codex models
     CODEX_MINI = "gpt-5.1-codex-mini"
     CODEX = "gpt-5.2-codex"
+    # OpenCode models (provider/model format — same backends, routed through OpenCode)
+    OPENCODE_HAIKU = "anthropic/claude-haiku-4.5"
+    OPENCODE_OPUS = "anthropic/claude-opus-4.6"
+    OPENCODE_CODEX_MINI = "openai/gpt-5.1-codex-mini"
+    OPENCODE_CODEX = "openai/gpt-5.2-codex"
 
 
 class StreamEvent(BaseModel):

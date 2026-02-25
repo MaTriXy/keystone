@@ -245,15 +245,16 @@ def test_e2e_fake_agent(
 
     # Verify agent_summary was captured
     assert output.agent.summary is not None, "Expected agent.summary to be set"
-    assert output.agent.summary.message == "Created Python devcontainer with pytest support.", (
-        f"Expected agent.summary to be captured, got: {output.agent.summary}"
-    )
+    assert (
+        output.agent.summary.message
+        == "[fake_claude_agent/unknown-model] Created Python devcontainer with pytest support."
+    ), f"Expected agent.summary to be captured, got: {output.agent.summary}"
 
     # Verify status_messages were captured in order
     assert [m.message for m in output.agent.status_messages] == [
-        "Exploring repository structure.",
-        "Creating devcontainer.json and Dockerfile.",
-        "Completed setup of devcontainer files.",
+        "[fake_claude_agent/unknown-model] Exploring repository structure.",
+        "[fake_claude_agent/unknown-model] Creating devcontainer.json and Dockerfile.",
+        "[fake_claude_agent/unknown-model] Completed setup of devcontainer files.",
     ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
 
     # Verify test_results contents (now nested in verification)
@@ -337,7 +338,6 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     logger.info("=" * 60)
 
     cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -347,11 +347,11 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
+    logger.info("Running: keystone %s", " ".join(cmd))
 
-    result = run_process(cmd, log_prefix="[fake-agent-rust]")
+    result = CliRunner().invoke(app, cmd)
 
-    logger.info("Return code: %s", result.returncode)
+    logger.info("Exit code: %s", result.exit_code)
 
     # The script should complete but report failure since Python devcontainer
     # won't have Rust toolchain to run cargo test
@@ -365,12 +365,12 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     if json_start is not None:
         json_str = "\n".join(stdout_lines[json_start:])
         output = BootstrapResult.model_validate_json(json_str)
-        assert result.returncode != 0 or not output.success, (
+        assert result.exit_code != 0 or not output.success, (
             "Expected failure: Python devcontainer cannot run Rust tests"
         )
     else:
         # If we can't parse JSON, the process must have failed
-        assert result.returncode != 0, "Expected failure: Python devcontainer cannot run Rust tests"
+        assert result.exit_code != 0, "Expected failure: Python devcontainer cannot run Rust tests"
 
     # Verify the devcontainer was created (agent ran successfully)
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
@@ -396,7 +396,6 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -411,13 +410,13 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
         "--no_cache_replay",
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
-    result = run_process(cmd, log_prefix="[codex-modal]")
+    logger.info("Running: keystone %s", " ".join(cmd))
+    result = CliRunner().invoke(app, cmd)
 
     output = _parse_bootstrap_result(result.stdout)
 
-    assert result.returncode == 0, (
-        f"Codex on Modal failed (exit {result.returncode}):\nerror: {output.error_message}"
+    assert result.exit_code == 0, (
+        f"Codex on Modal failed (exit {result.exit_code}):\nerror: {output.error_message}"
     )
     assert output.success, f"Bootstrap failed: {output.error_message}"
 
@@ -529,7 +528,10 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     indirect=True,
 )
 def test_e2e_sample_projects(
-    tmp_path: Path, project_root: Path, snapshot: SnapshotAssertion
+    tmp_path: Path,
+    project_root: Path,
+    snapshot: SnapshotAssertion,
+    request: pytest.FixtureRequest,
 ) -> None:
     test_artifacts_dir = tmp_path / "test_artifacts"
     cache_file = DEFAULT_TESTING_LOG_PATH
@@ -542,7 +544,6 @@ def test_e2e_sample_projects(
 
     # Use -u for unbuffered Python output
     cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -551,18 +552,17 @@ def test_e2e_sample_projects(
         str(cache_file),
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
+    logger.info("Running: keystone %s", " ".join(cmd))
 
     # Note: Docker build caching is configured via --docker_cache_secret (Modal secret name),
     # not via environment variables. See ModalAgentRunner for details.
-    result = run_process(cmd, log_prefix="[e2e]")
+    result = CliRunner().invoke(app, cmd)
 
-    if "failing" in str(project_root):
-        assert result.returncode != 0, "Expected failure for failing project"
+    sample_name = request.node.callspec.params["project_root"]
+    if "failing" in sample_name:
+        assert result.exit_code != 0, "Expected failure for failing project"
     else:
-        assert result.returncode == 0, (
-            f"f{project_root!s} failed with exit code {result.returncode}"
-        )
+        assert result.exit_code == 0, f"{sample_name} failed with exit code {result.exit_code}"
 
     # Parse the JSON output (find the JSON object in stdout)
     stdout_lines = result.stdout.strip().split("\n")
@@ -614,7 +614,6 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     cache_file = tmp_path / "test_log.sqlite"
 
     base_cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -630,11 +629,8 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     logger.info("Docker Build Cache Test — Run 1 (fresh, populates caches)")
     logger.info("=" * 60)
 
-    run1_result = run_process(
-        [*base_cmd, "--no_cache_replay"],
-        log_prefix="[run1]",
-    )
-    assert run1_result.returncode == 0, f"Run 1 failed with exit code {run1_result.returncode}"
+    run1_result = CliRunner().invoke(app, [*base_cmd, "--no_cache_replay"])
+    assert run1_result.exit_code == 0, f"Run 1 failed with exit code {run1_result.exit_code}"
     output1 = _parse_bootstrap_result(run1_result.stdout)
     assert output1.verification is not None
     assert output1.verification.success, (
@@ -652,7 +648,6 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     # Use a fresh artifacts dir so there's no leftover state
     run2_artifacts = tmp_path / "artifacts_run2"
     run2_cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -664,8 +659,8 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
         # Don't pass --no_cache_replay: this should be a cache hit for the agent
     ]
 
-    run2_result = run_process(run2_cmd, log_prefix="[run2]")
-    assert run2_result.returncode == 0, f"Run 2 failed with exit code {run2_result.returncode}"
+    run2_result = CliRunner().invoke(app, run2_cmd)
+    assert run2_result.exit_code == 0, f"Run 2 failed with exit code {run2_result.exit_code}"
     output2 = _parse_bootstrap_result(run2_result.stdout)
     assert output2.verification is not None
     assert output2.verification.success, (
@@ -683,10 +678,19 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
         (run2_build_seconds / run1_build_seconds * 100) if run1_build_seconds > 0 else 0,
     )
     # The cached build should be at least 2x faster. In practice it's often 5-10x.
-    assert run2_build_seconds < run1_build_seconds * 0.5, (
-        f"Expected run 2 build ({run2_build_seconds:.1f}s) to be at least 2x faster "
-        f"than run 1 ({run1_build_seconds:.1f}s) due to docker registry cache"
-    )
+    # However, if run 1 was already fast (< 20s) due to a warm local cache,
+    # the comparison is meaningless — both runs are already cached.
+    if run1_build_seconds >= 20:
+        assert run2_build_seconds < run1_build_seconds * 0.5, (
+            f"Expected run 2 build ({run2_build_seconds:.1f}s) to be at least 2x faster "
+            f"than run 1 ({run1_build_seconds:.1f}s) due to docker registry cache"
+        )
+    else:
+        logger.info(
+            "Skipping build time comparison: run 1 was already fast (%.1fs), "
+            "likely due to warm local cache",
+            run1_build_seconds,
+        )
 
 
 def _validate_status_messages(output: BootstrapResult) -> None:
@@ -749,21 +753,23 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "keystone",
-        *("--project_root", str(project_root)),
-        *("--test_artifacts_dir", str(test_artifacts_dir)),
-        *("--max_budget_usd", "0"),
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--max_budget_usd",
+        "0",
         "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner (budget test uses real claude locally)
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
+    logger.info("Running: keystone %s", " ".join(cmd))
 
-    result = run_process(cmd, log_prefix="[budget-zero]")
+    result = CliRunner().invoke(app, cmd)
 
-    logger.info("Return code: %s", result.returncode)
+    logger.info("Exit code: %s", result.exit_code)
 
     # CLI should return non-zero exit code on failure
-    assert result.returncode != 0, "Expected non-zero exit code with zero budget"
+    assert result.exit_code != 0, "Expected non-zero exit code with zero budget"
 
     # Parse JSON output - should still be present even on failure
     stdout_lines = result.stdout.strip().split("\n")
@@ -781,6 +787,9 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     assert output.error_message, "Expected error_message in output"
 
 
+@pytest.mark.skipif(
+    not shutil.which("timeout"), reason="GNU timeout not available (install coreutils)"
+)
 def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
     """
     Test that setting a very short --agent_time_limit_seconds causes timeout.

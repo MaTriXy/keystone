@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from keystone.llm_provider.claude import ClaudeProvider
 from keystone.llm_provider.codex import CodexProvider
+from keystone.llm_provider.opencode import OpencodeProvider
 
 if TYPE_CHECKING:
     from keystone.llm_provider.base import AgentProvider
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 PROVIDER_REGISTRY: dict[str, type[AgentProvider]] = {
     "claude": ClaudeProvider,
     "codex": CodexProvider,
+    "opencode": OpencodeProvider,
 }
 
 

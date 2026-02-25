@@ -67,7 +67,7 @@ def run(
         help="S3 prefix for cached repo tarballs",
     ),
     provider: str = typer.Option(
-        "claude", "--provider", help="LLM provider name (claude or codex)"
+        "claude", "--provider", help="LLM provider name (claude, codex, or opencode)"
     ),
     max_budget_usd: float = typer.Option(
         1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
