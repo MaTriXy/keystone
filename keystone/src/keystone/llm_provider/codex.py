@@ -21,9 +21,55 @@ from keystone.llm_provider.base import (
     AgentToolResultEvent,
 )
 
+# Pricing per 1M tokens for OpenAI models used by the Codex CLI.
+# Source: https://platform.openai.com/docs/pricing  (February 2026)
+# Each entry maps a model-name prefix to (input, cached_input, output) rates.
+_OPENAI_PRICING_PER_M: dict[str, tuple[float, float, float]] = {
+    "gpt-5.2": (1.75, 0.18, 14.00),
+    "gpt-5.1": (1.25, 0.125, 10.00),
+    "gpt-5": (1.25, 0.125, 10.00),  # also matches gpt-5-codex
+}
+
+# Default pricing when the model name is unknown (codex CLI doesn't report it).
+# Uses gpt-5-codex rates as a conservative default.
+_DEFAULT_PRICING_PER_M: tuple[float, float, float] = (1.25, 0.125, 10.00)
+
+
+def _estimate_cost_usd(
+    input_tokens: int,
+    cached_tokens: int,
+    output_tokens: int,
+    model: str | None = None,
+) -> float:
+    """Estimate dollar cost from token counts and (optional) model name.
+
+    Cached tokens are a subset of input tokens, so we bill the non-cached
+    portion at the full input rate and the cached portion at the discounted
+    cached-input rate.
+    """
+    pricing = _DEFAULT_PRICING_PER_M
+    if model:
+        model_lower = model.lower()
+        for prefix, rates in _OPENAI_PRICING_PER_M.items():
+            if model_lower.startswith(prefix):
+                pricing = rates
+                break
+
+    input_rate, cached_rate, output_rate = pricing
+    non_cached = max(input_tokens - cached_tokens, 0)
+    return (
+        non_cached * input_rate / 1_000_000
+        + cached_tokens * cached_rate / 1_000_000
+        + output_tokens * output_rate / 1_000_000
+    )
+
 
 class CodexProvider(AgentProvider):
     """Provider for the ``codex`` CLI (OpenAI Codex)."""
+
+    def __init__(self, model: str | None = None) -> None:
+        super().__init__(model)
+        self._cumulative_cost_usd: float = 0.0
 
     @property
     def name(self) -> str:
@@ -62,12 +108,17 @@ class CodexProvider(AgentProvider):
 
         if event_type == "turn.completed":
             usage = data.get("usage", {})
+            input_tok = usage.get("input_tokens", 0)
+            output_tok = usage.get("output_tokens", 0)
+            cached_tok = usage.get("cached_input_tokens", 0)
+            turn_cost = _estimate_cost_usd(input_tok, cached_tok, output_tok, self.model)
+            self._cumulative_cost_usd += turn_cost
             events.append(
                 AgentCostEvent(
-                    # Codex does not report dollar cost
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=usage.get("output_tokens", 0),
-                    cached_tokens=usage.get("cached_input_tokens", 0),
+                    cost_usd=self._cumulative_cost_usd,
+                    input_tokens=input_tok,
+                    output_tokens=output_tok,
+                    cached_tokens=cached_tok,
                 )
             )
 
