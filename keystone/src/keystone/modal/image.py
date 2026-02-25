@@ -76,7 +76,9 @@ def create_modal_image() -> modal.Image:
         )
         .apt_install("nodejs")
         # Install devcontainer CLI and agent CLIs
-        .run_commands("npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex")
+        .run_commands(
+            "npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex opencode-ai@latest"
+        )
         # Add scripts natively
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
         .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)

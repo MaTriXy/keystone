@@ -88,6 +88,7 @@ def main() -> None:
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("command", nargs="?", default="exec", help="Subcommand (exec)")
     parser.add_argument("--sandbox", type=str, default="danger-full-access")
+    parser.add_argument("--skip-git-repo-check", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("prompt", nargs="?", default="")
     args = parser.parse_args()
