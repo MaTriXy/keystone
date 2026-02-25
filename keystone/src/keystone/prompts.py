@@ -58,55 +58,10 @@ Instructions:
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
 
-2. Copy the timestamp helper script into .devcontainer/:
-   ```bash
-   cp /timestamp_process_output.pl .devcontainer/
-   ```
-
-   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
-   Usage: `/timestamp_process_output.pl [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]`
-
-   Options:
-   - `--logfile FILE`: Write timestamped output to FILE (always includes timestamps and elapsed time)
-   - `--stamp-stdout`: Add timestamps to stdout (default: pass through unchanged)
-   - `--stamp-stderr`: Add timestamps to stderr (default: pass through unchanged)
-
-   Example output (with --stamp-stdout or in logfile):
-   ```
-   2026-02-02T17:28:47-0800	0.000	STDOUT	Running tests...
-   2026-02-02T17:28:47-0800	0.052	STDERR	Warning: deprecated function
-   2026-02-02T17:28:48-0800	1.234	STDOUT	Tests passed!
-   ```
-
-   The format is: `ISO_TIMESTAMP<tab>ELAPSED_SECONDS<tab>STDOUT|STDERR<tab>original_line`
-   This makes it trivial to filter/parse with grep, cut, awk, etc.
-
-   Use it in run_all_tests.sh like this:
-   ```bash
-   /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
-       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
-   ```
-
-   Or prefix your own commands, like this:
-```bash
-/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
-  devcontainer build \
-    --image-name "project_image-$(date +%Y%m%d-%H%M%S)" \
-    --workspace-folder .
-```
-
-   IMPORTANT: Your Dockerfile must include perl for this script to work:
-   ```dockerfile
-   RUN apt-get update && apt-get install -y perl-base
-   ```
-
-3. Create a .devcontainer/Dockerfile alongside that.
+2. Create a .devcontainer/Dockerfile alongside that.
 
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
-# Set up timestamp helper script.
-COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
-
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
@@ -205,14 +160,13 @@ For example, you might want to `RUN apt-get install` must-have core dependencies
 and have subsequent layers of `RUN apt-get install` for dependencies you later discover are necessary.
 This way, the layer caching for the early `RUN apt-get install` will be reused when you later add dependencies.
 
-4. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
+3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
 This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
    a. run_all_tests.sh takes no arguments.
    b. It always writes test artifacts to /test_artifacts inside the container filesystem.
    c. /test_artifacts should be populated with artifacts from running the tests:
-      i. Run long-running comands prefixed with `/timestamp_process_output.pl --logfile /test_artifacts/COMMAND_NAME.log COMMAND arg1 arg2 ...`.
-      ii. Create JUnit XML test reports in /test_artifacts/junit/.
+      i. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
           Examples for common frameworks:
@@ -225,7 +179,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
             Command: `cargo nextest run --profile default`
             Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
-      iii. A file called /test_artifacts/final_result.json stating success/failure.
+      ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitly verify this behavior, though).
@@ -293,8 +247,7 @@ Verify your work using commands like these:
 1. To build your image:
 ```bash
 IMAGE_NAME="project_image-$(date +%Y%m%d-%H%M%S)"
-/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
-  devcontainer build \
+devcontainer build \
   --image-name "$IMAGE_NAME" \
   --workspace-folder .
 ```
@@ -328,7 +281,6 @@ LOCAL_ADDENDUM = """
 IMPORTANT: You are running locally (not in a Modal sandbox).
 The pre-generated helper files are in your current working directory, NOT at the filesystem root:
 - Use `cp ./devcontainer.json .devcontainer/devcontainer.json`  (NOT `cp /devcontainer.json`)
-- Use `cp ./timestamp_process_output.pl .devcontainer/`         (NOT `cp /timestamp_process_output.pl`)
 """
 
 OLD_PART = """
