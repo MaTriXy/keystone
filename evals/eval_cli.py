@@ -98,79 +98,78 @@ def run(
 ) -> None:
     """Run the eval harness on a list of repos.
 
-    There are two modes:
-
-    1. **Config file mode** (``--config_file``): Load an ``EvalRunConfig`` JSON
-       file. Repos are archived once and shared across all eval configs.
-
-    2. **CLI flag mode**: Build a single ``EvalConfig`` from CLI flags.
+    Provide ``--config_file`` to load an ``EvalRunConfig`` JSON file, or pass
+    individual CLI flags to build an equivalent single-config run.  Either way
+    the same code path is used.  CLI flags like ``--no_cache_replay`` and
+    ``--require_cache_hit`` are applied as overrides on top of the config file.
     """
+    # --- Build run_config from either a config file or CLI flags ----------
     if config_file is not None:
         raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
         run_config = EvalRunConfig(**raw)
-        effective_limit = limit if limit is not None else run_config.limit
+    else:
+        if repo_list_path is None:
+            console.print("[red]Error:[/red] --repo_list_path is required (or use --config_file)")
+            raise typer.Exit(1)
+        if s3_output_prefix is None:
+            console.print("[red]Error:[/red] --s3_output_prefix is required (or use --config_file)")
+            raise typer.Exit(1)
 
-        resolved_configs = [
-            run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)
-        ]
-
-        # Print plan
-        console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
-        console.print(f"  Repos: {run_config.repo_list_path}")
-        console.print(f"  S3 output: {run_config.s3_output_prefix}")
-        console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")
-        for cfg in resolved_configs:
-            console.print(
-                f"  - {cfg.name}: provider={cfg.agent_config.provider}, "
-                f"model={cfg.agent_config.model.value if cfg.agent_config.model else 'default'}"
-            )
-
-        outputs = eval_flow(
-            repo_list_path=run_config.repo_list_path,
-            eval_configs=resolved_configs,
-            s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
-            limit=effective_limit,
+        run_config = EvalRunConfig(
+            repo_list_path=str(repo_list_path),
+            s3_output_prefix=s3_output_prefix,
+            s3_repo_cache_prefix=s3_repo_cache_prefix,
+            limit=limit,
+            configs=[
+                EvalConfig(
+                    name="cli",
+                    agent_config=AgentConfig(
+                        provider=provider,
+                        max_budget_usd=max_budget_usd,
+                        timeout_minutes=timeout_minutes,
+                        log_db=log_db,
+                        docker_cache_secret=docker_cache_secret,
+                        model=model,
+                    ),
+                    max_workers=max_workers,
+                    trials_per_repo=trials_per_repo,
+                ),
+            ],
         )
 
-        _print_results(outputs, resolved_configs)
-        return
+    effective_limit = limit if limit is not None else run_config.limit
 
-    # CLI flag mode
-    if repo_list_path is None:
-        console.print("[red]Error:[/red] --repo_list_path is required (or use --config_file)")
-        raise typer.Exit(1)
-    if s3_output_prefix is None:
-        console.print("[red]Error:[/red] --s3_output_prefix is required (or use --config_file)")
-        raise typer.Exit(1)
+    resolved_configs = [
+        run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)
+    ]
 
-    agent_config = AgentConfig(
-        provider=provider,
-        max_budget_usd=max_budget_usd,
-        timeout_minutes=timeout_minutes,
-        log_db=log_db,
-        require_cache_hit=require_cache_hit,
-        no_cache_replay=no_cache_replay,
-        docker_cache_secret=docker_cache_secret,
-        model=model,
-    )
+    # Apply CLI overrides to all configs
+    if no_cache_replay:
+        for cfg in resolved_configs:
+            cfg.agent_config = cfg.agent_config.model_copy(update={"no_cache_replay": True})
+    if require_cache_hit:
+        for cfg in resolved_configs:
+            cfg.agent_config = cfg.agent_config.model_copy(update={"require_cache_hit": True})
 
-    eval_config = EvalConfig(
-        name="cli",
-        agent_config=agent_config,
-        max_workers=max_workers,
-        trials_per_repo=trials_per_repo,
-        s3_output_prefix=s3_output_prefix,
-        s3_repo_cache_prefix=s3_repo_cache_prefix,
-    )
+    # Print plan
+    console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
+    console.print(f"  Repos: {run_config.repo_list_path}")
+    console.print(f"  S3 output: {run_config.s3_output_prefix}")
+    console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")
+    for cfg in resolved_configs:
+        console.print(
+            f"  - {cfg.name}: provider={cfg.agent_config.provider}, "
+            f"model={cfg.agent_config.model.value if cfg.agent_config.model else 'default'}"
+        )
 
     outputs = eval_flow(
-        repo_list_path=str(repo_list_path),
-        eval_configs=[eval_config],
-        s3_repo_cache_prefix=s3_repo_cache_prefix,
-        limit=limit,
+        repo_list_path=run_config.repo_list_path,
+        eval_configs=resolved_configs,
+        s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
+        limit=effective_limit,
     )
 
-    _print_results(outputs, [eval_config])
+    _print_results(outputs, resolved_configs)
 
 
 if __name__ == "__main__":
