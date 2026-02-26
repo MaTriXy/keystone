@@ -5,14 +5,13 @@ import os
 import subprocess
 import threading
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
-# FIXME: Use Pydantic instead.
-@dataclass
-class ProcessResult:
+class ProcessResult(BaseModel):
     """Result of a process run with captured output."""
 
     returncode: int
