@@ -167,6 +167,12 @@ class LocalAgentRunner(AgentRunner):
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir, filter="data")
 
+        # Save a clean copy for guardrail.sh to verify the agent didn't modify source files
+        clean_dir = self._work_dir / ".project_clean"
+        clean_dir.mkdir()
+        with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
+            tar.extractall(clean_dir, filter="data")
+
         # Initialize a git repo so agents that require one (e.g. codex) work correctly.
         subprocess.run(
             ["git", "init"],

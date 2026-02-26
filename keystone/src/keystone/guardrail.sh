@@ -1,8 +1,6 @@
 #!/bin/bash
 # guardrail.sh — Agent self-check tool for validating devcontainer work.
 #
-# FIXME: This script should copy the .devcontainer directory onto a clean copy of the project and devcontainer build from there, to make sure the agent didn't change anything else.  This probably means we want to write a clean copy of the repo somewhere inside the image before starting the agent.
-#
 # Run this script from the project root to get structured feedback about
 # common mistakes *before* the final verification step. It checks:
 #   1. Required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
@@ -165,11 +163,34 @@ echo ""
 echo "[4/4] Attempting Docker build..."
 
 if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]; then
+    # Build from a clean copy of the project with only .devcontainer/ overlaid.
+    # This verifies the agent didn't modify source files outside .devcontainer/.
+    if [ -d "/project_clean" ]; then
+        CLEAN_SRC="/project_clean"
+    elif [ -d ".project_clean" ]; then
+        CLEAN_SRC=".project_clean"
+    else
+        CLEAN_SRC=""
+    fi
+
+    if [ -n "$CLEAN_SRC" ]; then
+        BUILD_DIR=$(mktemp -d)
+        cp -r "$CLEAN_SRC/." "$BUILD_DIR/"
+        rm -rf "$BUILD_DIR/.devcontainer"
+        cp -r .devcontainer/ "$BUILD_DIR/.devcontainer"
+        WORKSPACE_FOLDER="$BUILD_DIR"
+    else
+        BUILD_DIR=""
+        WORKSPACE_FOLDER="."
+    fi
+
     IMAGE_NAME="guardrail-check-$(date +%s)"
     BUILD_OUTPUT=$(devcontainer build \
         --image-name "$IMAGE_NAME" \
-        --workspace-folder . 2>&1)
+        --workspace-folder "$WORKSPACE_FOLDER" 2>&1)
     BUILD_EXIT=$?
+
+    [ -n "$BUILD_DIR" ] && rm -rf "$BUILD_DIR"
 
     if [ $BUILD_EXIT -eq 0 ]; then
         pass "Docker image built successfully"

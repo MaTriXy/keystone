@@ -265,6 +265,13 @@ su agent -c "$(printf 'echo %q | docker login --username %q --password-stdin %q'
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="upload"
         ).wait()
 
+        # Save clean copy for guardrail.sh to verify the agent didn't modify source files
+        run_modal_command(sb, "rm", "-rf", "/project_clean", name="upload").wait()
+        run_modal_command(sb, "mkdir", "-p", "/project_clean", name="upload").wait()
+        run_modal_command(
+            sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project_clean", name="upload"
+        ).wait()
+
         # Write pre-generated devcontainer.json for the agent to copy into .devcontainer/.
         # When docker cache is configured, we generate it inside the sandbox so it can
         # reference $DOCKER_BUILD_CACHE_REGISTRY_URL from the injected secret.
@@ -323,6 +330,7 @@ ENDJSON
         run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project_clean", name="upload").wait()
 
     def run(
         self,
