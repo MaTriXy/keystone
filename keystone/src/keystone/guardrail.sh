@@ -133,7 +133,7 @@ if [ -n "$BUILT_IMAGE" ]; then
     ARTIFACTS_DIR=$(mktemp -d)
     CONTAINER_NAME="guardrail-run-$(date +%s)"
 
-    docker run --name "$CONTAINER_NAME" "$BUILT_IMAGE" /run_all_tests.sh
+    docker run --network=host --name "$CONTAINER_NAME" "$BUILT_IMAGE" /run_all_tests.sh
     RUN_EXIT=$?
 
     docker cp "$CONTAINER_NAME:/test_artifacts/." "$ARTIFACTS_DIR/" 2>/dev/null || true

@@ -16,6 +16,9 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
+IMAGE_CACHE_BUST = "2026-02-26T22:50:00"  # bump to force Modal image rebuild
+
+
 def create_modal_image() -> modal.Image:
     """Create the Modal image with Docker and Claude CLI installed."""
 
@@ -83,6 +86,8 @@ def create_modal_image() -> modal.Image:
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
         .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)
         .add_local_file(TIMESTAMP_SCRIPT_PATH, "/timestamp_process_output.pl", copy=True)
+        # Cache bust: bump IMAGE_CACHE_BUST to force rebuild of layers below
+        .run_commands(f"echo 'image cache bust: {IMAGE_CACHE_BUST}'")
         # Fake agents for testing (deterministic, no LLM dependency)
         .add_local_file(
             FAKE_CLAUDE_AGENT_SCRIPT_PATH, "/usr/local/bin/fake_claude_agent.py", copy=True
