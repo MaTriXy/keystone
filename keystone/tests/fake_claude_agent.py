@@ -117,50 +117,51 @@ def main() -> None:
         }
         print(json.dumps(assistant_msg))
 
-    # Run guardrail.sh to validate the generated files (if it exists in the workspace).
+    # Run guardrail.sh to validate the generated files.
     # This ensures the guardrail script correctly validates agent output on modal.
     guardrail_path = Path("guardrail.sh")
-    if guardrail_path.exists():
-        guardrail_status = {
-            "type": "assistant",
-            "message": {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Running guardrail.sh self-check.",
-                    }
-                ]
-            },
-        }
-        print(json.dumps(guardrail_status))
+    assert guardrail_path.exists(), f"guardrail.sh not found in {Path.cwd()}"
 
-        guardrail_result = subprocess.run(
-            ["bash", str(guardrail_path)],
-            capture_output=True,
-            text=True,
+    guardrail_status = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Running guardrail.sh self-check.",
+                }
+            ]
+        },
+    }
+    print(json.dumps(guardrail_status))
+
+    guardrail_result = subprocess.run(
+        ["bash", str(guardrail_path)],
+        capture_output=True,
+        text=True,
+    )
+
+    if guardrail_result.returncode != 0:
+        print(
+            f"FATAL: guardrail.sh failed (exit {guardrail_result.returncode}):",
+            file=sys.stderr,
         )
+        print(guardrail_result.stdout, file=sys.stderr)
+        print(guardrail_result.stderr, file=sys.stderr)
+        sys.exit(1)
 
-        if guardrail_result.returncode != 0:
-            print(
-                f"FATAL: guardrail.sh failed (exit {guardrail_result.returncode}):",
-                file=sys.stderr,
-            )
-            print(guardrail_result.stdout, file=sys.stderr)
-            print(guardrail_result.stderr, file=sys.stderr)
-            sys.exit(1)
-
-        guardrail_pass_status = {
-            "type": "assistant",
-            "message": {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Guardrail self-check passed.",
-                    }
-                ]
-            },
-        }
-        print(json.dumps(guardrail_pass_status))
+    guardrail_pass_status = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Guardrail self-check passed.",
+                }
+            ]
+        },
+    }
+    print(json.dumps(guardrail_pass_status))
 
     result = {
         "type": "result",
