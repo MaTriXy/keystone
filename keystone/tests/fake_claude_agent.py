@@ -8,6 +8,8 @@ Usage: fake_claude_agent.py --dangerously-skip-permissions -p PROMPT --output-fo
 
 import argparse
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 # The devcontainer files to generate (following the format required by prompts.py)
@@ -114,6 +116,51 @@ def main() -> None:
             "message": {"content": [{"type": "text", "text": status}]},
         }
         print(json.dumps(assistant_msg))
+
+    # Run guardrail.sh to validate the generated files (if it exists in the workspace).
+    # This ensures the guardrail script correctly validates agent output on modal.
+    guardrail_path = Path("guardrail.sh")
+    if guardrail_path.exists():
+        guardrail_status = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Running guardrail.sh self-check.",
+                    }
+                ]
+            },
+        }
+        print(json.dumps(guardrail_status))
+
+        guardrail_result = subprocess.run(
+            ["bash", str(guardrail_path)],
+            capture_output=True,
+            text=True,
+        )
+
+        if guardrail_result.returncode != 0:
+            print(
+                f"FATAL: guardrail.sh failed (exit {guardrail_result.returncode}):",
+                file=sys.stderr,
+            )
+            print(guardrail_result.stdout, file=sys.stderr)
+            print(guardrail_result.stderr, file=sys.stderr)
+            sys.exit(1)
+
+        guardrail_pass_status = {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Guardrail self-check passed.",
+                    }
+                ]
+            },
+        }
+        print(json.dumps(guardrail_pass_status))
 
     result = {
         "type": "result",
