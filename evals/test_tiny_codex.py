@@ -35,6 +35,7 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
     output_dir.mkdir()
 
     run_config = EvalRunConfig(
+        description="Tiny codex smoke test: single repo, codex default model.",
         repo_list_path=str(REPOS_JSONL),
         s3_output_prefix=output_dir.as_uri() + "/",
         s3_repo_cache_prefix=(tmp_path / "repo_cache").as_uri() + "/",

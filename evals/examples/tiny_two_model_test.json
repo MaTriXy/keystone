@@ -1,5 +1,6 @@
 {
   // Minimal eval: 2 cheap models × 2 repos × 2 trials
+  "description": "Minimal smoke test: 2 cheap models x 2 repos x 2 trials.",
   "repo_list_path": "evals/examples/repos_tiny.jsonl",
   // Might want to do this first:
   // rm -rf /tmp/keystone-evals/tiny-test_v1

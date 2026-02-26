@@ -5,11 +5,9 @@ from pathlib import Path
 
 import json5
 import typer
-from config import AgentConfig, EvalConfig, EvalOutput, EvalRunConfig, LLMModel
+from config import EvalConfig, EvalOutput, EvalRunConfig
 from flow import eval_flow
 from rich.console import Console
-
-DEFAULT_LOG_PATH = Path.home() / ".imbue_keystone" / "log.sqlite"
 
 # Configure logging: WARNING for third-party, INFO for our code and prefect
 logging.basicConfig(
@@ -48,94 +46,23 @@ def _print_results(outputs: list[EvalOutput], eval_configs: list[EvalConfig]) ->
 
 @app.command()
 def run(
-    config_file: Path | None = typer.Option(
-        None,
+    config_file: Path = typer.Option(
+        ...,
         "--config_file",
         help="Path to JSON config file (EvalRunConfig).",
     ),
-    repo_list_path: Path | None = typer.Option(
-        None, "--repo_list_path", help="Path to repo_list.jsonl"
-    ),
-    s3_output_prefix: str | None = typer.Option(
-        None,
-        "--s3_output_prefix",
-        help="S3 prefix for per-repo results (e.g. s3://bucket/evals/2026-02-20/)",
-    ),
-    s3_repo_cache_prefix: str = typer.Option(
-        "s3://int8-datasets/keystone/evals/repo-tarballs/",
-        "--s3_repo_cache_prefix",
-        help="S3 prefix for cached repo tarballs",
-    ),
-    provider: str = typer.Option(
-        "claude", "--provider", help="LLM provider name (claude, codex, or opencode)"
-    ),
-    max_budget_usd: float = typer.Option(
-        1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
-    ),
-    timeout_minutes: int = typer.Option(
-        60, "--timeout_minutes", help="Timeout per repo in minutes"
-    ),
-    log_db: str = typer.Option(
-        str(DEFAULT_LOG_PATH), "--log_db", help="Database for logging/caching"
-    ),
-    max_workers: int = typer.Option(4, "--max_workers", help="Max parallel workers"),
-    trials_per_repo: int = typer.Option(
-        1, "--trials_per_repo", help="Number of trials per repo (>1 disables caching)"
-    ),
-    model: LLMModel | None = typer.Option(
-        None,
-        "--model",
-        help="LLM model to use",
-    ),
-    require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
-    docker_cache_secret: str = typer.Option(
-        "keystone-docker-registry-config",
-        "--docker_cache_secret",
-        help="Modal secret name for Docker build cache registry credentials",
-    ),
+    require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
     """Run the eval harness on a list of repos.
 
-    Provide ``--config_file`` to load an ``EvalRunConfig`` JSON file, or pass
-    individual CLI flags to build an equivalent single-config run.  Either way
-    the same code path is used.  CLI flags like ``--no_cache_replay`` and
-    ``--require_cache_hit`` are applied as overrides on top of the config file.
+    Provide ``--config_file`` pointing to an ``EvalRunConfig`` JSON file.
+    CLI flags ``--no_cache_replay``, ``--require_cache_hit``, and ``--limit``
+    are applied as overrides on top of the config file.
     """
-    # --- Build run_config from either a config file or CLI flags ----------
-    if config_file is not None:
-        raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
-        run_config = EvalRunConfig(**raw)
-    else:
-        if repo_list_path is None:
-            console.print("[red]Error:[/red] --repo_list_path is required (or use --config_file)")
-            raise typer.Exit(1)
-        if s3_output_prefix is None:
-            console.print("[red]Error:[/red] --s3_output_prefix is required (or use --config_file)")
-            raise typer.Exit(1)
-
-        run_config = EvalRunConfig(
-            repo_list_path=str(repo_list_path),
-            s3_output_prefix=s3_output_prefix,
-            s3_repo_cache_prefix=s3_repo_cache_prefix,
-            limit=limit,
-            configs=[
-                EvalConfig(
-                    name="cli",
-                    agent_config=AgentConfig(
-                        provider=provider,
-                        max_budget_usd=max_budget_usd,
-                        timeout_minutes=timeout_minutes,
-                        log_db=log_db,
-                        docker_cache_secret=docker_cache_secret,
-                        model=model,
-                    ),
-                    max_workers=max_workers,
-                    trials_per_repo=trials_per_repo,
-                ),
-            ],
-        )
+    raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
+    run_config = EvalRunConfig(**raw)
 
     effective_limit = limit if limit is not None else run_config.limit
 
@@ -153,6 +80,7 @@ def run(
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
+    console.print(f"  Description: {run_config.description}")
     console.print(f"  Repos: {run_config.repo_list_path}")
     console.print(f"  S3 output: {run_config.s3_output_prefix}")
     console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")

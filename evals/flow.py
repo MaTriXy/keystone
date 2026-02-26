@@ -499,6 +499,7 @@ def _run_eval_phase(
 
     output = EvalOutput(
         keystone_version=version_info.model_dump(),
+        eval_config=eval_config.model_dump(),
         repos=pinned_repos,
         results=results,
     )
@@ -562,6 +563,7 @@ def _collect_eval_results(
 
     output = EvalOutput(
         keystone_version=version_info.model_dump(),
+        eval_config=eval_config.model_dump(),
         repos=pinned_repos,
         results=results,
     )

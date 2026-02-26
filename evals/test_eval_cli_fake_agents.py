@@ -129,6 +129,7 @@ def test_eval_cli_fake_agents_config_file(
 
     # Write the EvalRunConfig JSON
     run_config = EvalRunConfig(
+        description="Fake agent integration test: 4 configs x 1 repo.",
         repo_list_path=str(repo_list_path),
         s3_output_prefix=s3_output_dir.as_uri() + "/",
         s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",

@@ -126,6 +126,10 @@ class EvalOutput(BaseModel):
     """Output of the entire eval run."""
 
     keystone_version: dict[str, Any]
+    eval_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Snapshot of the EvalConfig used for this run.",
+    )
     repos: list[RepoEntry]  # Input repos with commit_hash pinned
     results: list[RepoResult]
 
@@ -143,6 +147,10 @@ class EvalRunConfig(BaseModel):
     are agent-independent).  Individual configs can still override either.
     """
 
+    description: str = Field(
+        ...,
+        description="Free-text summary of what this experiment is about.",
+    )
     repo_list_path: str = Field(..., description="Path to repo_list.jsonl")
     configs: list[EvalConfig] = Field(..., description="List of eval configurations to run")
     limit: int | None = Field(default=None, description="Limit to first N repos")
