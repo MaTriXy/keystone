@@ -63,6 +63,7 @@ select = [
     "PTH",    # flake8-use-pathlib
     "PLC",    # pylint conventions
     "RUF",    # ruff-specific rules
+    "TID",    # flake8-tidy-imports (banned-api)
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -72,3 +73,6 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["keystone"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses" = {msg = "Use pydantic.BaseModel instead of @dataclass."}
