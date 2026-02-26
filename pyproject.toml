@@ -24,6 +24,7 @@ dev = [
 target-version = "py312"
 line-length = 100
 exclude = ["github_datasets", "samples", "prototypes"]
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = [
