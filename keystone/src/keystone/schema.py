@@ -66,7 +66,8 @@ class TokenSpending(BaseModel):
 class InferenceCost(BaseModel):
     """Cumulative inference cost at a point in time."""
 
-    cost_usd: float = 0.0
+    cost_usd: float = 0.0  # As reported by the API (may be 0 on non-zero exit)
+    cost_usd_computed: float = 0.0  # Computed from token counts + pricing table
     token_spending: TokenSpending = TokenSpending()
 
 

@@ -40,6 +40,7 @@ from keystone.llm_provider import (
     AgentToolResultEvent,
     get_provider,
 )
+from keystone.llm_provider.pricing import estimate_cost_usd
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
@@ -572,6 +573,13 @@ def bootstrap(
             error_messages=agent_errors,
             cost=InferenceCost(
                 cost_usd=total_cost_usd,
+                cost_usd_computed=estimate_cost_usd(
+                    input_tokens=token_spending.input,
+                    cached_tokens=token_spending.cached,
+                    output_tokens=token_spending.output,
+                    cache_creation_tokens=token_spending.cache_creation,
+                    model=model.value if model else None,
+                ),
                 token_spending=token_spending,
             ),
         ),
