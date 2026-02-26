@@ -94,7 +94,9 @@ class VerificationResult(BaseModel):
     image_build_seconds: float | None = None
     test_execution_seconds: float | None = None
 
-    # FIXME: I thought we had ints in this object counting the number of passed, failed, and skipped tests to summarize the list below.  Did they get taken out?  Please add them back.
+    tests_passed: int = 0
+    tests_failed: int = 0
+    tests_skipped: int = 0
 
     # All test results from JUnit XML reports
     test_results: list[TestResult] = []
