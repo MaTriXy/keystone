@@ -48,7 +48,6 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
                     timeout_minutes=20,
                 ),
                 trials_per_repo=1,
-                max_workers=1,
             ),
         ],
     )

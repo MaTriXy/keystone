@@ -13,7 +13,6 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "max_workers": 2
     },
     {
       "name": "opencode-opus",
@@ -23,7 +22,6 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "max_workers": 2
     },
     {
       "name": "opencode-codex-mini",
@@ -33,7 +31,6 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "max_workers": 2
     },
     {
       "name": "opencode-codex",
@@ -43,7 +40,6 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "max_workers": 2
     }
   ]
 }

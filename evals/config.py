@@ -95,7 +95,6 @@ class EvalConfig(BaseModel):
     name: str | None = Field(default=None, description="Name for this eval configuration")
 
     agent_config: AgentConfig = Field(default_factory=AgentConfig)
-    max_workers: int = Field(default=4, description="Max parallel workers")
     trials_per_repo: int = Field(
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",

@@ -123,7 +123,6 @@ def test_eval_cli_fake_agents_config_file(
                     provider=provider,
                     model=model,
                 ),
-                max_workers=1,
             )
         )
 

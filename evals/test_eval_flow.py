@@ -102,7 +102,6 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     eval_config = EvalConfig(
         name="fake-agent",
         agent_config=agent_config,
-        max_workers=1,  # Serial for easier debugging
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 
@@ -184,7 +183,6 @@ def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -
     eval_config = EvalConfig(
         name="modal-test",
         agent_config=agent_config,
-        max_workers=2,  # Run both repos in parallel
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 

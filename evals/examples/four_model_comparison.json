@@ -13,7 +13,6 @@
         "timeout_minutes": 60
       },
       "trials_per_repo": 1,
-      "max_workers": 8
     },
     {
       "name": "claude-haiku",
@@ -24,7 +23,6 @@
         "timeout_minutes": 60
       },
       "trials_per_repo": 1,
-      "max_workers": 8
     },
     {
       "name": "codex-gpt-5.2",
@@ -35,7 +33,6 @@
         "timeout_minutes": 60
       },
       "trials_per_repo": 1,
-      "max_workers": 8
     },
     {
       "name": "codex-mini-gpt-5.1",
@@ -46,7 +43,6 @@
         "timeout_minutes": 60
       },
       "trials_per_repo": 1,
-      "max_workers": 8
     }
   ]
 }

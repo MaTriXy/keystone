@@ -16,7 +16,6 @@
         "timeout_minutes": 20
       },
       "trials_per_repo": 1,
-      "max_workers": 4
     },
     {
       "name": "claude-haiku",
@@ -27,7 +26,6 @@
         "timeout_minutes": 20
       },
       "trials_per_repo": 1,
-      "max_workers": 4
     },
     {
       "name": "codex-premium",
@@ -38,7 +36,6 @@
         "timeout_minutes": 30
       },
       "trials_per_repo": 1,
-      "max_workers": 4
     },
     {
       "name": "codex-mini",
@@ -49,7 +46,6 @@
         "timeout_minutes": 30
       },
       "trials_per_repo": 1,
-      "max_workers": 4
     }
   ]
 }
