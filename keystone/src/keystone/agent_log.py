@@ -160,12 +160,11 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
         # Check if column exists (works for SQLite and PostgreSQL)
         # Validate identifiers to prevent SQL injection (PRAGMA and ALTER TABLE
         # don't support parameter binding for identifiers).
-        # FIXME: validation rejects valid SQL types with spaces or parens (e.g.
-        # VARCHAR(255), DECIMAL(10,2)) — table and column need strict validation
-        # but column_type should be checked separately with a broader allowlist.
-        for name in (table, column, column_type):
+        for name in (table, column):
             if not all(ch.isalnum() or ch == "_" for ch in name):
                 raise ValueError(f"Invalid SQL identifier: {name!r}")
+        if not all(ch.isalnum() or ch in "_, ()" for ch in column_type):
+            raise ValueError(f"Invalid SQL type: {column_type!r}")
 
         if engine.dialect.name == "sqlite":
             result = conn.execute(text(f"PRAGMA table_info({table})"))
