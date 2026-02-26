@@ -4,11 +4,8 @@
 # Run this script from the project root to get structured feedback about
 # common mistakes *before* the final verification step. It checks:
 #   1. Required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
-#   2. Dockerfile basic structure (FROM, test_artifacts, COPY run_all_tests.sh)
-#   3. run_all_tests.sh basic structure (JUnit output, final_result.json)
-#   4. Docker image builds successfully
-# FIXME: Add step 5: run the run_all_tests.sh script and check that everything passes and it produces junit xml in the right place.
-
+#   2. Docker image builds successfully (from a clean copy of the project)
+#   3. Tests pass and produce JUnit XML + final_result.json
 #
 # Exit code 0 = all checks pass, non-zero = at least one check failed.
 # Output is structured feedback the agent can act on.
@@ -17,6 +14,7 @@ set -uo pipefail
 
 ERRORS=0
 WARNINGS=0
+BUILT_IMAGE=""
 
 pass() {
     echo "  PASS: $1"
@@ -40,7 +38,7 @@ echo ""
 # ------------------------------------------------------------------
 # 1. Required files exist
 # ------------------------------------------------------------------
-echo "[1/4] Checking required files..."
+echo "[1/3] Checking required files..."
 
 if [ -d ".devcontainer" ]; then
     pass ".devcontainer/ directory exists"
@@ -74,93 +72,9 @@ fi
 echo ""
 
 # ------------------------------------------------------------------
-# 2. Dockerfile structure checks
+# 2. Docker build check
 # ------------------------------------------------------------------
-# FIXME: If we actually run the run all tests script from a built Docker image, we don't need all of these tests. 
-echo "[2/4] Checking Dockerfile structure..."
-
-if [ -f ".devcontainer/Dockerfile" ]; then
-    # Check for FROM instruction
-    if grep -qiE '^FROM ' .devcontainer/Dockerfile; then
-        pass "Dockerfile has a FROM instruction"
-    else
-        fail "Dockerfile is missing a FROM instruction. Every Dockerfile must start with FROM."
-    fi
-
-    # Check for test_artifacts directory creation
-    if grep -q 'test_artifacts' .devcontainer/Dockerfile; then
-        pass "Dockerfile references test_artifacts directory"
-    else
-        fail "Dockerfile does not create /test_artifacts directory. Add: RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts"
-    fi
-
-    # Check for COPY run_all_tests.sh (should be near end)
-    if grep -qE 'COPY.*run_all_tests\.sh' .devcontainer/Dockerfile; then
-        pass "Dockerfile copies run_all_tests.sh"
-    else
-        fail "Dockerfile does not COPY run_all_tests.sh. Add at the end: COPY .devcontainer/run_all_tests.sh /run_all_tests.sh"
-    fi
-
-    # Check for WORKDIR
-    if grep -qE '^WORKDIR ' .devcontainer/Dockerfile; then
-        pass "Dockerfile sets WORKDIR"
-    else
-        warn "Dockerfile does not set WORKDIR. Consider adding WORKDIR /project_src or similar."
-    fi
-
-    # Check for 'COPY . .' anti-pattern (should use explicit copies)
-    if grep -qE '^COPY \. \.' .devcontainer/Dockerfile; then
-        warn "Dockerfile uses 'COPY . .' which copies everything including .devcontainer/. Use explicit COPY commands for source files instead."
-    fi
-else
-    echo "  (skipped — no Dockerfile)"
-fi
-
-echo ""
-
-# ------------------------------------------------------------------
-# 3. run_all_tests.sh structure checks
-# ------------------------------------------------------------------
-echo "[3/4] Checking run_all_tests.sh structure..."
-
-if [ -f ".devcontainer/run_all_tests.sh" ]; then
-    # Check for shebang
-    if head -1 .devcontainer/run_all_tests.sh | grep -q '^#!/'; then
-        pass "run_all_tests.sh has a shebang line"
-    else
-        fail "run_all_tests.sh is missing a shebang (e.g., #!/bin/bash). Add one at the top."
-    fi
-
-    # Check for JUnit XML output
-    if grep -q 'junit' .devcontainer/run_all_tests.sh; then
-        pass "run_all_tests.sh references junit output"
-    else
-        fail "run_all_tests.sh does not reference junit XML. Tests must produce JUnit XML in /test_artifacts/junit/*.xml"
-    fi
-
-    # Check for final_result.json
-    if grep -q 'final_result.json' .devcontainer/run_all_tests.sh; then
-        pass "run_all_tests.sh writes final_result.json"
-    else
-        fail "run_all_tests.sh does not write final_result.json. Must write to /test_artifacts/final_result.json"
-    fi
-
-    # Check for test_artifacts directory
-    if grep -q 'test_artifacts' .devcontainer/run_all_tests.sh; then
-        pass "run_all_tests.sh uses /test_artifacts directory"
-    else
-        fail "run_all_tests.sh does not reference /test_artifacts. All test artifacts must go to /test_artifacts/"
-    fi
-else
-    echo "  (skipped — no run_all_tests.sh)"
-fi
-
-echo ""
-
-# ------------------------------------------------------------------
-# 4. Docker build check
-# ------------------------------------------------------------------
-echo "[4/4] Attempting Docker build..."
+echo "[2/3] Attempting Docker build..."
 
 if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]; then
     # Build from a clean copy of the project with only .devcontainer/ overlaid.
@@ -191,8 +105,7 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
 
         if [ $BUILD_EXIT -eq 0 ]; then
             pass "Docker image built successfully"
-            # Clean up the test image
-            docker rmi "$IMAGE_NAME" >/dev/null 2>&1 || true
+            BUILT_IMAGE="$IMAGE_NAME"
         else
             fail "Docker build FAILED (exit code $BUILD_EXIT). Build output:"
             echo "--- BUILD OUTPUT START ---"
@@ -207,6 +120,47 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
     fi
 else
     echo "  (skipped — missing Dockerfile or devcontainer.json)"
+fi
+
+echo ""
+
+# ------------------------------------------------------------------
+# 3. Test run check
+# ------------------------------------------------------------------
+echo "[3/3] Running tests..."
+
+if [ -n "$BUILT_IMAGE" ]; then
+    ARTIFACTS_DIR=$(mktemp -d)
+    CONTAINER_NAME="guardrail-run-$(date +%s)"
+
+    docker run --name "$CONTAINER_NAME" "$BUILT_IMAGE" /run_all_tests.sh
+    RUN_EXIT=$?
+
+    docker cp "$CONTAINER_NAME:/test_artifacts/." "$ARTIFACTS_DIR/" 2>/dev/null || true
+    docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rmi "$BUILT_IMAGE" >/dev/null 2>&1 || true
+
+    if [ $RUN_EXIT -eq 0 ]; then
+        pass "Tests passed (exit 0)"
+    else
+        fail "Tests FAILED (exit code $RUN_EXIT)"
+    fi
+
+    if ls "$ARTIFACTS_DIR/junit/"*.xml >/dev/null 2>&1; then
+        pass "JUnit XML found in /test_artifacts/junit/"
+    else
+        fail "No JUnit XML found in /test_artifacts/junit/*.xml"
+    fi
+
+    if [ -f "$ARTIFACTS_DIR/final_result.json" ]; then
+        pass "final_result.json found in /test_artifacts/"
+    else
+        fail "final_result.json not found in /test_artifacts/"
+    fi
+
+    rm -rf "$ARTIFACTS_DIR"
+else
+    echo "  (skipped — image not built)"
 fi
 
 echo ""
