@@ -119,7 +119,7 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
         fi
     fi
 else
-    echo "  (skipped — missing Dockerfile or devcontainer.json)"
+    fail "Dockerfile or devcontainer.json is missing — cannot attempt Docker build."
 fi
 
 echo ""
@@ -160,7 +160,7 @@ if [ -n "$BUILT_IMAGE" ]; then
 
     rm -rf "$ARTIFACTS_DIR"
 else
-    echo "  (skipped — image not built)"
+    fail "Docker image was not built — cannot run tests."
 fi
 
 echo ""
