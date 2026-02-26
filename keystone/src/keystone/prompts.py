@@ -242,7 +242,20 @@ Include anything you wish you had been told at the start. Examples:
 
 Please don't forget to emit the summary at the end.
 
-Verify your work using commands like these:
+IMPORTANT: Before doing your final verification, run the guardrail check script to catch common mistakes:
+```bash
+bash ./guardrail.sh
+```
+This script validates that:
+- All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
+- Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
+- run_all_tests.sh has correct structure (JUnit output, final_result.json)
+- The Docker image builds successfully
+
+Run this script after creating your files, and fix any reported errors before proceeding.
+If the guardrail reports a build failure, read the error output carefully and fix the issue.
+
+Then verify your work using commands like these:
 
 1. To build your image:
 ```bash

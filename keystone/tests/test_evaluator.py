@@ -1,0 +1,252 @@
+"""Tests for the LLM evaluator module."""
+
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from keystone.evaluator import EVALUATOR_MODEL, evaluate_agent_work
+from keystone.schema import EvaluatorResult
+
+
+def _make_generated_files(
+    has_devcontainer: bool = True,
+    has_dockerfile: bool = True,
+    has_run_all_tests: bool = True,
+) -> dict[str, str | None]:
+    """Create test generated files dict."""
+    return {
+        "devcontainer_json": '{"build": {"dockerfile": "Dockerfile"}}'
+        if has_devcontainer
+        else None,
+        "dockerfile": (
+            "FROM python:3.12\nWORKDIR /project_src\n"
+            "RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts\n"
+            "COPY .devcontainer/run_all_tests.sh /run_all_tests.sh\n"
+        )
+        if has_dockerfile
+        else None,
+        "run_all_tests_sh": (
+            "#!/bin/bash\nset -euo pipefail\n"
+            "pytest --junitxml=/test_artifacts/junit/pytest.xml\n"
+            "echo '{\"success\": true}' > /test_artifacts/final_result.json\n"
+        )
+        if has_run_all_tests
+        else None,
+    }
+
+
+def test_evaluator_skips_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should skip gracefully when ANTHROPIC_API_KEY is not set."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    result = evaluate_agent_work(
+        generated_files=_make_generated_files(),
+        agent_summary="Created devcontainer with pytest support",
+        status_messages=["Exploring repo", "Creating Dockerfile"],
+        verification_success=True,
+        verification_error=None,
+    )
+
+    assert result.passed is True
+    assert "Skipped" in result.reasoning
+
+
+def test_evaluator_passes_complete_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should pass when all files are present and agent completed work."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [
+        MagicMock(
+            text=json.dumps(
+                {
+                    "passed": True,
+                    "reasoning": "Agent created all required files with proper structure.",
+                    "issues": [],
+                }
+            )
+        )
+    ]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_agent_work(
+            generated_files=_make_generated_files(),
+            agent_summary="Created devcontainer with pytest support",
+            status_messages=["Exploring repo", "Creating Dockerfile", "Completed setup"],
+            verification_success=True,
+            verification_error=None,
+        )
+
+    assert result.passed is True
+    assert result.model == EVALUATOR_MODEL
+    assert result.cost_usd > 0
+
+    # Verify the API was called with the right model
+    call_kwargs = mock_client.messages.create.call_args
+    assert call_kwargs.kwargs["model"] == EVALUATOR_MODEL
+
+
+def test_evaluator_fails_missing_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should fail when required files are missing."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [
+        MagicMock(
+            text=json.dumps(
+                {
+                    "passed": False,
+                    "reasoning": "Agent did not create Dockerfile or run_all_tests.sh.",
+                    "issues": ["Missing Dockerfile", "Missing run_all_tests.sh"],
+                }
+            )
+        )
+    ]
+    mock_response.usage = MagicMock(input_tokens=80, output_tokens=40)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_agent_work(
+            generated_files=_make_generated_files(has_dockerfile=False, has_run_all_tests=False),
+            agent_summary=None,
+            status_messages=["Exploring repo", "Giving up - too complex"],
+            verification_success=False,
+            verification_error="Build failed: no Dockerfile",
+        )
+
+    assert result.passed is False
+    assert len(result.issues) == 2
+
+
+def test_evaluator_handles_json_in_code_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should parse JSON even when wrapped in markdown code blocks."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [
+        MagicMock(text='```json\n{"passed": true, "reasoning": "All good", "issues": []}\n```')
+    ]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_agent_work(
+            generated_files=_make_generated_files(),
+            agent_summary="Done",
+            status_messages=[],
+            verification_success=True,
+            verification_error=None,
+        )
+
+    assert result.passed is True
+
+
+def test_evaluator_handles_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should handle API errors gracefully (non-blocking)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = Exception("API rate limit")
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_agent_work(
+            generated_files=_make_generated_files(),
+            agent_summary="Done",
+            status_messages=[],
+            verification_success=True,
+            verification_error=None,
+        )
+
+    # Should pass (non-blocking) with error explanation
+    assert result.passed is True
+    assert "failed" in result.reasoning.lower()
+
+
+def test_evaluator_handles_invalid_json_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should handle non-JSON responses from the LLM."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="I think everything looks good but I'm not sure.")]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_agent_work(
+            generated_files=_make_generated_files(),
+            agent_summary="Done",
+            status_messages=[],
+            verification_success=True,
+            verification_error=None,
+        )
+
+    # Should fail since we can't parse the response
+    assert result.passed is False
+    assert "not valid JSON" in result.reasoning
+
+
+def test_evaluator_truncates_long_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluator should truncate very long file contents to save tokens."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [
+        MagicMock(text=json.dumps({"passed": True, "reasoning": "Looks good", "issues": []}))
+    ]
+    mock_response.usage = MagicMock(input_tokens=500, output_tokens=30)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    long_dockerfile = "FROM python:3.12\n" + "RUN echo 'line'\n" * 500
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        evaluate_agent_work(
+            generated_files={
+                "devcontainer_json": '{"build": {}}',
+                "dockerfile": long_dockerfile,
+                "run_all_tests_sh": "#!/bin/bash\nexit 0\n",
+            },
+            agent_summary="Done",
+            status_messages=[],
+            verification_success=True,
+            verification_error=None,
+        )
+
+    # Check the message was constructed with truncated content
+    call_kwargs = mock_client.messages.create.call_args
+    user_content = call_kwargs.kwargs["messages"][0]["content"]
+    assert "truncated" in user_content
+
+
+def test_evaluator_result_model() -> None:
+    """Test EvaluatorResult model construction."""
+    result = EvaluatorResult(
+        passed=True,
+        reasoning="All files present and correct",
+        issues=[],
+        model="claude-haiku-4-5-20251001",
+        cost_usd=0.001,
+    )
+    assert result.passed is True
+    assert result.model == "claude-haiku-4-5-20251001"
+
+    # Test with issues
+    result_fail = EvaluatorResult(
+        passed=False,
+        reasoning="Missing files",
+        issues=["No Dockerfile", "No test script"],
+    )
+    assert result_fail.passed is False
+    assert len(result_fail.issues) == 2

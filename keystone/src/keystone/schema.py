@@ -121,6 +121,16 @@ class GeneratedFiles(BaseModel):
     run_all_tests_sh: str | None = None
 
 
+class EvaluatorResult(BaseModel):
+    """Result from the LLM evaluator that checks agent completeness."""
+
+    passed: bool
+    reasoning: str
+    issues: list[str] = []
+    model: str = ""
+    cost_usd: float = 0.0
+
+
 class BootstrapResult(BaseModel):
     """The final result of the entire bootstrap process."""
 
@@ -130,6 +140,8 @@ class BootstrapResult(BaseModel):
     agent: AgentExecution
 
     verification: VerificationResult | None = None
+
+    evaluator: EvaluatorResult | None = None
 
     generated_files: GeneratedFiles | None = None
 

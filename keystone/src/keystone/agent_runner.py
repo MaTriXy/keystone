@@ -19,6 +19,8 @@ from keystone.process_runner import run_process
 from keystone.prompts import generate_devcontainer_json
 from keystone.schema import StreamEvent, VerificationResult
 
+GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
+
 logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
@@ -178,6 +180,11 @@ class LocalAgentRunner(AgentRunner):
         dest_pl = self._work_dir / "timestamp_process_output.pl"
         dest_pl.write_bytes(TIMESTAMP_SCRIPT_PATH.read_bytes())
         dest_pl.chmod(0o755)
+
+        # Copy guardrail script into workspace for agent self-checks
+        dest_guardrail = self._work_dir / "guardrail.sh"
+        dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
+        dest_guardrail.chmod(0o755)
 
         events: list[StreamEvent] = []
 

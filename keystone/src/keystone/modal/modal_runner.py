@@ -18,6 +18,7 @@ from typing import Any, Literal
 import modal
 
 from keystone.agent_runner import (
+    GUARDRAIL_SCRIPT_PATH,
     TIMEOUT_EXIT_CODE,
     AgentRunner,
 )
@@ -313,6 +314,11 @@ ENDJSON
             "/project/timestamp_process_output.pl",
             name="upload",
         ).wait()
+
+        # Upload guardrail.sh for agent self-checks
+        with sb.open("/project/guardrail.sh", "wb") as f:
+            f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
+        run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
 

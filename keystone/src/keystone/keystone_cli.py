@@ -23,6 +23,7 @@ from keystone.constants import (
     STATUS_MARKER,
     SUMMARY_MARKER,
 )
+from keystone.evaluator import evaluate_agent_work
 from keystone.git_utils import (
     create_git_archive_bytes,
     get_git_tree_hash,
@@ -46,6 +47,7 @@ from keystone.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
+    EvaluatorResult,
     GeneratedFiles,
     InferenceCost,
     LLMModel,
@@ -461,6 +463,30 @@ def bootstrap(
         run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
     )
 
+    # Run LLM evaluator to check if agent completed its task
+    evaluator_result: EvaluatorResult | None = None
+    try:
+        logging.info("Running LLM evaluator to check agent completeness...")
+        evaluator_result = evaluate_agent_work(
+            generated_files={
+                "devcontainer_json": generated_files.devcontainer_json,
+                "dockerfile": generated_files.dockerfile,
+                "run_all_tests_sh": generated_files.run_all_tests_sh,
+            },
+            agent_summary=agent_summary.message if agent_summary else None,
+            status_messages=[m.message for m in status_messages],
+            verification_success=verification_success,
+            verification_error=verification_error,
+        )
+        if evaluator_result.passed:
+            console.print(f"[green]Evaluator:[/green] PASSED - {evaluator_result.reasoning}")
+        else:
+            console.print(f"[red]Evaluator:[/red] FAILED - {evaluator_result.reasoning}")
+            for issue in evaluator_result.issues:
+                console.print(f"  - {issue}")
+    except Exception as e:
+        logging.warning(f"Evaluator failed (non-blocking): {e}")
+
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
@@ -481,6 +507,7 @@ def bootstrap(
             ),
         ),
         verification=verification,
+        evaluator=evaluator_result,
         generated_files=generated_files,
     )
 
