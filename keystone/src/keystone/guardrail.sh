@@ -173,39 +173,37 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
         CLEAN_SRC=""
     fi
 
-    if [ -n "$CLEAN_SRC" ]; then
+    if [ -z "$CLEAN_SRC" ]; then
+        fail "No clean project copy found (expected /project_clean or .project_clean). Cannot verify build isolation."
+    else
         BUILD_DIR=$(mktemp -d)
         cp -r "$CLEAN_SRC/." "$BUILD_DIR/"
         rm -rf "$BUILD_DIR/.devcontainer"
         cp -r .devcontainer/ "$BUILD_DIR/.devcontainer"
-        WORKSPACE_FOLDER="$BUILD_DIR"
-    else
-        BUILD_DIR=""
-        WORKSPACE_FOLDER="."
-    fi
 
-    IMAGE_NAME="guardrail-check-$(date +%s)"
-    BUILD_OUTPUT=$(devcontainer build \
-        --image-name "$IMAGE_NAME" \
-        --workspace-folder "$WORKSPACE_FOLDER" 2>&1)
-    BUILD_EXIT=$?
+        IMAGE_NAME="guardrail-check-$(date +%s)"
+        BUILD_OUTPUT=$(devcontainer build \
+            --image-name "$IMAGE_NAME" \
+            --workspace-folder "$BUILD_DIR" 2>&1)
+        BUILD_EXIT=$?
 
-    [ -n "$BUILD_DIR" ] && rm -rf "$BUILD_DIR"
+        rm -rf "$BUILD_DIR"
 
-    if [ $BUILD_EXIT -eq 0 ]; then
-        pass "Docker image built successfully"
-        # Clean up the test image
-        docker rmi "$IMAGE_NAME" >/dev/null 2>&1 || true
-    else
-        fail "Docker build FAILED (exit code $BUILD_EXIT). Build output:"
-        echo "--- BUILD OUTPUT START ---"
-        echo "$BUILD_OUTPUT" | tail -50
-        echo "--- BUILD OUTPUT END ---"
-        echo ""
-        echo "  Hints:"
-        echo "  - Check that all COPY source paths exist relative to the project root"
-        echo "  - Check that all package names in apt-get/pip/npm install are correct"
-        echo "  - Check that the base image in FROM is valid and accessible"
+        if [ $BUILD_EXIT -eq 0 ]; then
+            pass "Docker image built successfully"
+            # Clean up the test image
+            docker rmi "$IMAGE_NAME" >/dev/null 2>&1 || true
+        else
+            fail "Docker build FAILED (exit code $BUILD_EXIT). Build output:"
+            echo "--- BUILD OUTPUT START ---"
+            echo "$BUILD_OUTPUT" | tail -50
+            echo "--- BUILD OUTPUT END ---"
+            echo ""
+            echo "  Hints:"
+            echo "  - Check that all COPY source paths exist relative to the project root"
+            echo "  - Check that all package names in apt-get/pip/npm install are correct"
+            echo "  - Check that the base image in FROM is valid and accessible"
+        fi
     fi
 else
     echo "  (skipped — missing Dockerfile or devcontainer.json)"
