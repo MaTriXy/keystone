@@ -11,6 +11,7 @@
       "name": "codex-default",
       "agent_config": {
         "provider": "codex",
+        "evaluator": true,
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },

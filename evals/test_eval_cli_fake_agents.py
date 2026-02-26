@@ -119,6 +119,7 @@ def test_eval_cli_fake_agents_config_file(
                 agent_config=AgentConfig(
                     max_budget_usd=1.0,
                     timeout_minutes=1,
+                    evaluator=True,
                     agent_cmd=agent_cmd,
                     provider=provider,
                     model=model,

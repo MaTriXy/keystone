@@ -81,6 +81,12 @@ class AgentConfig(BaseModel):
         description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
     )
 
+    # Evaluator (LLM fix-up pass after verification failure)
+    evaluator: bool = Field(
+        ...,
+        description="Enable or disable the LLM evaluator fix-up pass.",
+    )
+
     # Docker build cache (Modal secret name)
     docker_cache_secret: str = Field(
         default="keystone-docker-registry-config",
@@ -94,7 +100,7 @@ class EvalConfig(BaseModel):
     # Optional human-readable name for this eval configuration
     name: str | None = Field(default=None, description="Name for this eval configuration")
 
-    agent_config: AgentConfig = Field(default_factory=AgentConfig)
+    agent_config: AgentConfig = Field(...)
     trials_per_repo: int = Field(
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",

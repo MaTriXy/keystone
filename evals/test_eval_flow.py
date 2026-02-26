@@ -96,6 +96,7 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     agent_config = AgentConfig(
         max_budget_usd=1.0,
         timeout_minutes=5,
+        evaluator=True,
         agent_cmd=f"python {FAKE_CLAUDE_AGENT}",
     )
 
@@ -176,6 +177,7 @@ def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -
     agent_config = AgentConfig(
         max_budget_usd=1.0,
         timeout_minutes=10,
+        evaluator=True,
         agent_cmd="claude",
         log_db=str(DEFAULT_TESTING_LOG_PATH),
     )

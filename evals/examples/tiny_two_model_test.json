@@ -11,6 +11,7 @@
       "name": "claude-haiku",
       "agent_config": {
         "provider": "claude",
+        "evaluator": true,
         "model": "claude-haiku-4-5-20251001",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
@@ -21,6 +22,7 @@
       "name": "codex-mini",
       "agent_config": {
         "provider": "codex",
+        "evaluator": true,
         "model": "gpt-5.1-codex-mini",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
