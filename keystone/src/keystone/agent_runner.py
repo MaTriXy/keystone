@@ -17,7 +17,7 @@ from keystone.llm_provider import AgentProvider
 from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import StreamEvent, VerificationResult
+from keystone.schema import StreamEvent, StreamType, VerificationResult
 
 GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
 
@@ -150,7 +150,7 @@ class LocalAgentRunner(AgentRunner):
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
-                stream="stderr",
+                stream=StreamType.STDERR,
                 line="Error: Docker is required for local agent execution but not available.",
             )
             self._exit_code = 1
@@ -158,7 +158,7 @@ class LocalAgentRunner(AgentRunner):
 
         # Extract archive to temp directory
         yield StreamEvent(
-            stream="stderr",
+            stream=StreamType.STDERR,
             line="Extracting project archive to working directory...",
         )
         # FIXME: if an exception escapes before cleanup() is called, this temp dir
@@ -191,10 +191,10 @@ class LocalAgentRunner(AgentRunner):
         events: list[StreamEvent] = []
 
         def collect_stdout(line: str) -> None:
-            events.append(StreamEvent(stream="stdout", line=line))
+            events.append(StreamEvent(stream=StreamType.STDOUT, line=line))
 
         def collect_stderr(line: str) -> None:
-            events.append(StreamEvent(stream="stderr", line=line))
+            events.append(StreamEvent(stream=StreamType.STDERR, line=line))
 
         full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
         full_cmd = self._with_timeout(time_limit_seconds, full_cmd)

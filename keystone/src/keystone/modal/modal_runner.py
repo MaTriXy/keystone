@@ -25,7 +25,7 @@ from keystone.agent_runner import (
 from keystone.llm_provider import AgentProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import StreamEvent, VerificationResult
+from keystone.schema import StreamEvent, StreamType, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,9 @@ class ManagedProcess:
                     else:
                         logger.info(f"[{self.prefix}] STDOUT: {clean_line}")
                     if self._queue is not None:
-                        self._queue.put(StreamEvent(stream=stream_name, line=clean_line))
+                        self._queue.put(
+                            StreamEvent(stream=StreamType(stream_name), line=clean_line)
+                        )
         except Exception:
             # Stream closed due to sandbox termination - this is expected
             pass

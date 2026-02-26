@@ -13,7 +13,7 @@ from keystone.agent_log import (
     CacheKey,
     CLIRunRecord,
 )
-from keystone.schema import AgentConfig, StreamEvent
+from keystone.schema import AgentConfig, StreamEvent, StreamType
 
 
 @pytest.fixture
@@ -74,8 +74,8 @@ def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
         timestamp=datetime.now(UTC),
         cache_key=cache_key,
         events=[
-            StreamEvent(stream="stdout", line="hello"),
-            StreamEvent(stream="stderr", line="world"),
+            StreamEvent(stream=StreamType.STDOUT, line="hello"),
+            StreamEvent(stream=StreamType.STDERR, line="world"),
         ],
         devcontainer_tarball=b"tarball data",
         return_code=0,
@@ -109,7 +109,7 @@ def test_cache_only_returns_successful_runs(temp_db: Path) -> None:
         cli_run_id=agent_log.generate_run_id(),
         timestamp=datetime.now(UTC),
         cache_key=cache_key,
-        events=[StreamEvent(stream="stderr", line="error")],
+        events=[StreamEvent(stream=StreamType.STDERR, line="error")],
         devcontainer_tarball=b"",
         return_code=1,  # Failed
         claude_dir_tarball=None,

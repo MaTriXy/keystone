@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel
 
@@ -12,6 +11,13 @@ class StreamType(str, Enum):
 
     STDOUT = "stdout"
     STDERR = "stderr"
+
+
+class StreamEvent(BaseModel):
+    """A single event from the agent's output stream."""
+
+    stream: StreamType
+    line: str
 
 
 class LLMModel(str, Enum):
@@ -28,14 +34,6 @@ class LLMModel(str, Enum):
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
     OPENCODE_CODEX_MINI = "openai/gpt-5.1-codex-mini"
     OPENCODE_CODEX = "openai/gpt-5.2-codex"
-
-
-class StreamEvent(BaseModel):
-    """A single event from the agent's output stream."""
-
-    # FIXME: Use the enum above.  Also, move this type up next to that enum.
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 class AgentConfig(BaseModel):
