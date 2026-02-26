@@ -115,7 +115,8 @@ class LocalAgentRunner(AgentRunner):
 
     def __init__(self) -> None:
         self._exit_code: int = 1
-        self._work_dir: Path | None = None  # Temp dir from git archive
+        self._work_dir: Path | None = None
+        self._work_dir_td: tempfile.TemporaryDirectory | None = None
 
     def _check_docker_available(self) -> bool:
         """Check if Docker is available locally."""
@@ -161,9 +162,8 @@ class LocalAgentRunner(AgentRunner):
             stream=StreamType.STDERR,
             line="Extracting project archive to working directory...",
         )
-        # FIXME: if an exception escapes before cleanup() is called, this temp dir
-        # leaks permanently. Should use tempfile.TemporaryDirectory as a context manager.
-        self._work_dir = Path(tempfile.mkdtemp(prefix="keystone-agent-"))
+        self._work_dir_td = tempfile.TemporaryDirectory(prefix="keystone-agent-")
+        self._work_dir = Path(self._work_dir_td.name)
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir, filter="data")
 
@@ -351,6 +351,7 @@ class LocalAgentRunner(AgentRunner):
 
     def cleanup(self) -> None:
         """Clean up the temporary work directory."""
-        if self._work_dir is not None and self._work_dir.exists():
-            shutil.rmtree(self._work_dir, ignore_errors=True)
+        if self._work_dir_td is not None:
+            self._work_dir_td.cleanup()
+            self._work_dir_td = None
             self._work_dir = None
