@@ -185,6 +185,47 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
             conn.commit()
 
 
+def rename_column_if_exists(
+    engine: Engine, table: str, old_column: str, new_column: str, column_type: str
+) -> None:
+    """Rename a column if the old name exists and the new name doesn't.
+
+    For SQLite < 3.25 (no ALTER TABLE RENAME COLUMN), adds the new column,
+    copies data, and leaves the old column in place.
+
+    Args:
+        engine: SQLAlchemy engine
+        table: Table name
+        old_column: Old column name
+        new_column: New column name
+        column_type: SQL type for the column (e.g., 'TEXT', 'BLOB')
+    """
+    for name in (table, old_column, new_column):
+        if not all(ch.isalnum() or ch == "_" for ch in name):
+            raise ValueError(f"Invalid SQL identifier: {name!r}")
+
+    with engine.connect() as conn:
+        if engine.dialect.name == "sqlite":
+            result = conn.execute(text(f"PRAGMA table_info({table})"))
+            columns = {row[1] for row in result}
+            if not columns or old_column not in columns or new_column in columns:
+                return
+            # SQLite 3.25+ supports RENAME COLUMN
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {table} RENAME COLUMN {old_column} TO {new_column}")
+                )
+            except Exception:
+                # Fallback: add new column and copy data
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {new_column} {column_type}"))
+                conn.execute(text(f"UPDATE {table} SET {new_column} = {old_column}"))
+            conn.commit()
+        else:
+            # PostgreSQL
+            conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {old_column} TO {new_column}"))
+            conn.commit()
+
+
 def _create_engine(db_url: str) -> Engine:
     """Create SQLAlchemy engine from URL or path.
 
@@ -282,8 +323,11 @@ class AgentLog:
 
     def log_agent_run(self, record: AgentRunRecord) -> None:
         """Log an agent execution."""
-        # Ensure new columns exist (schema migration for older databases)
+        # Schema migrations for older databases
         ensure_column_exists(self._engine, "agent_run", "version_info_json", "TEXT")
+        rename_column_if_exists(
+            self._engine, "agent_run", "claude_dir_tarball", "agent_dir_tarball", "BLOB"
+        )
         ensure_column_exists(self._engine, "agent_run", "agent_dir_tarball", "BLOB")
 
         # Use current version if not provided
@@ -316,6 +360,11 @@ class AgentLog:
         Only runs with return_code == 0 are considered for replay.
         """
         cache_hash = cache_key.compute_hash()
+        # Schema migration: rename old column if needed, ensure new column exists
+        rename_column_if_exists(
+            self._engine, "agent_run", "claude_dir_tarball", "agent_dir_tarball", "BLOB"
+        )
+        ensure_column_exists(self._engine, "agent_run", "agent_dir_tarball", "BLOB")
         query = text("""
             SELECT cli_run_id, timestamp,
                    git_tree_hash, prompt_hash, agent_config_json, cache_version,
