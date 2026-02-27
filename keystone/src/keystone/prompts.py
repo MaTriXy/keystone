@@ -43,7 +43,7 @@ We need to build an appropriate dev container, Dockerfile, and test runner in wh
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
 
-Your task is to create and populate a .devcontainer/... folder at the root of the project's code tree.
+Your task is to create and populate a .devcontainer/... folder with the appropriate Dockerfile at the root of the project's code tree.
 
 IMPORTANT: Only your changes inside .devcontainer/... will be preserved.
 When we capture your work, we extract only the .devcontainer/ directory and reapply it to the original repo.
