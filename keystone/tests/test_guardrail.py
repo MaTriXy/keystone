@@ -1,5 +1,6 @@
 """Tests for the guardrail.sh validation script."""
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,8 +14,6 @@ def workspace(tmp_path: Path) -> Path:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     # Copy a minimal Python project
-    import shutil
-
     shutil.copytree(SAMPLES_DIR / "python_project", project_dir, dirs_exist_ok=True)
     init_git_repo(project_dir)
 
