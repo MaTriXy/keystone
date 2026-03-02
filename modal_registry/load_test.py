@@ -34,9 +34,9 @@ REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
 # build pushes cache layers, the remaining 199 should get cache hits and never
 # touch Docker Hub for the base image layers.
 DOCKERFILE_CONTENT = """\
-FROM alpine:3.19
+FROM python:3.12-slim
 RUN echo "load-test-sentinel" > /stamp.txt
-RUN apk add --no-cache curl
+RUN pip install --no-cache-dir requests
 """
 
 # Script that runs inside each sandbox: starts Docker, logs in, builds with cache.
