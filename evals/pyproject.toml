@@ -15,6 +15,9 @@ dependencies = [
     "s3fs>=2024.0",
     "pytest>=8.0",
     "pyarrow>=14.0",
+    "ipywidgets>=8.1.8",
+    "anywidget>=0.9.21",
+    "ipyaggrid>=0.5.4",
 ]
 
 [tool.uv.sources]
