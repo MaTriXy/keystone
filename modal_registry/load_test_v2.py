@@ -14,6 +14,7 @@ Prerequisites:
 """
 
 import argparse
+import contextlib
 import sys
 import textwrap
 
@@ -216,11 +217,12 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
             text = line.strip()
             if text.startswith("@@@ RESULT"):
                 # Parse: @@@ RESULT iter=1 exit=0 ms=12345 rate_limited=0 @@@
-                parts = {}
+                parts: dict[str, int] = {}
                 for token in text.split():
                     if "=" in token:
                         k, v = token.split("=", 1)
-                        parts[k] = int(v)
+                        with contextlib.suppress(ValueError):
+                            parts[k] = int(v)
                 results.append(parts)
                 rl = parts.get("rate_limited", 0)
                 ec = parts.get("exit", -1)
