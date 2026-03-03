@@ -111,20 +111,8 @@ def _token() -> str:
     return token
 
 
-def _cache_key(query: str, variables: dict) -> str:
-    """Deterministic hash for a query + variables pair."""
-    blob = json.dumps({"q": query, "v": variables}, sort_keys=True)
-    return hashlib.sha256(blob.encode()).hexdigest()[:16]
-
-
-def _graphql(query: str, variables: dict, token: str, *, use_cache: bool = True) -> dict:
-    """Execute a GraphQL query against GitHub, with optional disk cache."""
-    key = _cache_key(query, variables)
-    cache_path = CACHE_DIR / f"{key}.json"
-
-    if use_cache and cache_path.exists():
-        return json.loads(cache_path.read_text())
-
+def _graphql(query: str, variables: dict, token: str) -> dict:
+    """Execute a GraphQL query against GitHub."""
     resp = requests.post(
         GITHUB_GRAPHQL_URL,
         json={"query": query, "variables": variables},
@@ -135,12 +123,13 @@ def _graphql(query: str, variables: dict, token: str, *, use_cache: bool = True)
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"GraphQL errors: {json.dumps(data['errors'], indent=2)}")
-
-    if use_cache:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(data))
-
     return data
+
+
+def _cache_path_for(lang: str, star_min: int, star_max: int, per_query: int) -> Path:
+    """Stable cache path keyed on the search parameters (not the timestamp)."""
+    key = hashlib.sha256(f"{lang}:{star_min}:{star_max}:{per_query}".encode()).hexdigest()[:16]
+    return CACHE_DIR / f"{key}.json"
 
 
 def _since_iso(days_ago: int = 90) -> str:
@@ -208,28 +197,47 @@ def fetch_repos(
 
     for lang in languages:
         for star_min, star_max in star_buckets:
-            q = f"language:{lang} stars:{star_min}..{star_max} archived:false fork:false sort:updated"
             done += 1
+            cache_file = _cache_path_for(lang, star_min, star_max, per_query)
             print(
                 f"[{done}/{total_queries}] {lang} stars:{star_min}..{star_max}", end=" ", flush=True
             )
 
-            try:
-                data = _graphql(
-                    query,
-                    {"queryString": q, "first": per_query, "after": None},
-                    token,
-                    use_cache=use_cache,
+            # Check disk cache first
+            if use_cache and cache_file.exists():
+                data = json.loads(cache_file.read_text())
+                search = data["data"]["search"]
+                print(
+                    f"  (cached) found={search['repositoryCount']} fetched={len(search['edges'])}"
                 )
-            except Exception as e:
-                print(f"  ERROR: {e}")
-                continue
+            else:
+                q = f"language:{lang} stars:{star_min}..{star_max} archived:false fork:false sort:updated"
+                try:
+                    data = _graphql(
+                        query,
+                        {"queryString": q, "first": per_query, "after": None},
+                        token,
+                    )
+                except Exception as e:
+                    print(f"  ERROR: {e}")
+                    continue
 
-            search = data["data"]["search"]
-            rate = data["data"]["rateLimit"]
-            print(
-                f"  found={search['repositoryCount']} fetched={len(search['edges'])} rate_remaining={rate['remaining']}"
-            )
+                search = data["data"]["search"]
+                rate = data["data"]["rateLimit"]
+                print(
+                    f"  found={search['repositoryCount']} fetched={len(search['edges'])} rate_remaining={rate['remaining']}"
+                )
+
+                # Write cache
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache_file.write_text(json.dumps(data))
+
+                # Be nice to the API
+                if rate["remaining"] < 100:
+                    print(f"  Rate limit low ({rate['remaining']}), sleeping 60s...")
+                    time.sleep(60)
+                else:
+                    time.sleep(0.5)
 
             for edge in search["edges"]:
                 parsed = _parse_repo(edge["node"])
@@ -241,13 +249,6 @@ def fetch_repos(
                     continue
                 seen.add(parsed["repo"])
                 all_repos.append(parsed)
-
-            # Be nice to the API
-            if rate["remaining"] < 100:
-                print(f"  ⚠ Rate limit low ({rate['remaining']}), sleeping 60s...")
-                time.sleep(60)
-            else:
-                time.sleep(0.5)
 
     df = pd.DataFrame(all_repos)
     print(f"\nTotal unique repos fetched: {len(df)}")
