@@ -179,22 +179,35 @@ def run_load_test(num_builds: int, with_cache: bool) -> None:
             if exit_code != 0:
                 raise RuntimeError("Docker login failed")
 
-        # Create N project directories, each with its own devcontainer config.
-        # Each gets a unique devcontainer.json name so devcontainer CLI treats
-        # them as separate projects.
+        # Create all project directories in a single script to avoid
+        # hundreds of round-trips to the sandbox.
         print(f"Setting up {num_builds} project directories...", file=sys.stderr)
+        setup_lines = ["set -euo pipefail"]
         for i in range(num_builds):
-            project_dir = f"/projects/p{i}"
-            dc_dir = f"{project_dir}/.devcontainer"
-            _exec_script(sb, f"mkdir -p {dc_dir}", label="setup")
-            with sb.open(f"{dc_dir}/Dockerfile", "w") as f:
-                f.write(DOCKERFILE)
-            with sb.open(f"{dc_dir}/devcontainer.json", "w") as f:
-                f.write(DEVCONTAINER_JSON_TEMPLATE.format(index=i))
-            with sb.open(f"{project_dir}/README.md", "w") as f:
-                f.write(f"# load test project {i}\n")
+            dc_dir = f"/projects/p{i}/.devcontainer"
+            setup_lines.append(f"mkdir -p {dc_dir}")
+        _exec_script(sb, "\n".join(setup_lines), label="setup-dirs")
 
-        # Verify one of them
+        # Write shared Dockerfile once then copy to all projects
+        with sb.open("/tmp/_dockerfile", "w") as f:
+            f.write(DOCKERFILE)
+        copy_lines = ["set -euo pipefail"]
+        for i in range(num_builds):
+            copy_lines.append(f"cp /tmp/_dockerfile /projects/p{i}/.devcontainer/Dockerfile")
+        _exec_script(sb, "\n".join(copy_lines), label="setup-dockerfiles")
+
+        # Write each devcontainer.json (unique name per project) via a single script
+        json_lines = ["set -euo pipefail"]
+        for i in range(num_builds):
+            # Escape for shell heredoc
+            json_content = DEVCONTAINER_JSON_TEMPLATE.format(index=i)
+            json_lines.append(
+                f"cat > /projects/p{i}/.devcontainer/devcontainer.json << 'DCJSON'\n"
+                f"{json_content}DCJSON"
+            )
+        _exec_script(sb, "\n".join(json_lines), label="setup-json")
+
+        # Verify
         exit_code, _ = _exec_script(
             sb,
             "ls /projects/p0/.devcontainer/Dockerfile /projects/p0/.devcontainer/devcontainer.json",
