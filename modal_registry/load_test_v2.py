@@ -129,24 +129,21 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
             if exit_code != 0:
                 raise RuntimeError("Docker login failed")
 
-        # Upload the minimal project
+        # Upload the minimal project by writing files directly via sandbox I/O
         print("Uploading test project...", file=sys.stderr)
-        setup_script = textwrap.dedent(f"""\
-            #!/bin/bash
-            set -euo pipefail
-            mkdir -p /project/.devcontainer
-
-            cat > /project/.devcontainer/Dockerfile << 'DOCKERFILE_EOF'
-            {DOCKERFILE}
-            DOCKERFILE_EOF
-
-            cat > /project/.devcontainer/devcontainer.json << 'JSON_EOF'
-            {DEVCONTAINER_JSON}
-            JSON_EOF
-
-            echo "# load test project" > /project/README.md
-        """)
-        exit_code, _ = _exec_script(sb, setup_script, label="setup")
+        _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
+        with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
+            f.write(DOCKERFILE)
+        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
+            f.write(DEVCONTAINER_JSON)
+        with sb.open("/project/README.md", "w") as f:
+            f.write("# load test project\n")
+        # Verify files exist
+        exit_code, _ = _exec_script(
+            sb,
+            "ls -la /project/.devcontainer/Dockerfile /project/.devcontainer/devcontainer.json",
+            label="setup",
+        )
         if exit_code != 0:
             raise RuntimeError("Project setup failed")
 
