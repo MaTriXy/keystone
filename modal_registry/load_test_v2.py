@@ -78,11 +78,13 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
     if with_cache:
         build_cmd = (
             'CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest"\n'
-            "    devcontainer build "
-            "--workspace-folder /project "
-            "--image-name loadtest:latest "
-            '"--cache-from" "type=registry,ref=$CACHE_REF" '
-            '"--cache-to" "type=registry,ref=$CACHE_REF,mode=max" '
+            "    docker build "
+            "--network=host "
+            '--cache-from "type=registry,ref=$CACHE_REF" '
+            '--cache-to "type=registry,ref=$CACHE_REF,mode=max" '
+            "-t loadtest:latest "
+            "-f /project/.devcontainer/Dockerfile "
+            "/project "
             "2>&1"
         )
     else:
