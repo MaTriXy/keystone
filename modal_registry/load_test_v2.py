@@ -1,13 +1,12 @@
 """Load test v2: reproduce Docker Hub rate limiting from a single IP.
 
-Unlike the original approach (multiple sandboxes with different IPs),
-this test uses a SINGLE Modal sandbox and launches many concurrent
-devcontainer builds simultaneously. Each build targets a unique image
-name, so Docker can't share layers between them and they all race to
-pull python:3.12-slim from Docker Hub at the same time from the same IP.
+Uses a SINGLE Modal sandbox to run sequential devcontainer builds, each
+followed by a full Docker prune. The entire build+prune loop runs as one
+bash script inside the sandbox (zero Python↔Modal round-trips in the hot
+loop), so the only time spent is actual Docker work.
 
 Usage:
-    cd modal_registry && uv run python load_test_v2.py [--builds 50] [--with-cache]
+    cd modal_registry && uv run python load_test_v2.py [--iterations 50] [--with-cache]
 
 Prerequisites:
     - Modal configured (modal token set)
@@ -17,9 +16,6 @@ Prerequisites:
 import argparse
 import sys
 import textwrap
-import threading
-import time
-from dataclasses import dataclass, field
 
 import modal
 
@@ -36,14 +32,14 @@ DOCKERFILE = textwrap.dedent("""\
     RUN echo "built"
 """)
 
-DEVCONTAINER_JSON_TEMPLATE = """\
-{{
-  "name": "load-test-{index}",
-  "build": {{
+DEVCONTAINER_JSON = """\
+{
+  "name": "load-test",
+  "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
-  }}
-}}
+  }
+}
 """
 
 RATE_LIMIT_PHRASES = [
@@ -53,17 +49,6 @@ RATE_LIMIT_PHRASES = [
     "you have reached your pull rate limit",
     "retry-after",
 ]
-
-
-@dataclass
-class BuildResult:
-    """Result from a single concurrent build."""
-
-    index: int
-    exit_code: int
-    duration_secs: float
-    rate_limited: bool
-    output: str = field(repr=False)
 
 
 def _exec_script(
@@ -89,50 +74,71 @@ def _exec_script(
     return exit_code, "\n".join(output_lines)
 
 
-def _run_one_build(
-    sb: modal.Sandbox,
-    index: int,
-    with_cache: bool,
-) -> BuildResult:
-    """Run a single devcontainer build inside the sandbox."""
-    label = f"build-{index:03d}"
-    project_dir = f"/projects/p{index}"
+def _build_loop_script(iterations: int, with_cache: bool) -> str:
+    """Generate a bash script that runs the entire build+prune loop.
 
+    The loop runs entirely inside the sandbox so there are no
+    Python↔Modal round-trips between iterations.  Each iteration:
+      1. devcontainer build (pulls base image from Docker Hub)
+      2. docker system prune -af + docker buildx prune -af
+    Results are printed as structured lines for parsing.
+    """
     if with_cache:
         build_cmd = (
-            f'CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest" && '
-            f"devcontainer build "
-            f"--workspace-folder {project_dir} "
-            f"--image-name loadtest-{index}:latest "
-            f'--cache-from "type=registry,ref=$CACHE_REF" '
-            f'--cache-to "type=registry,ref=$CACHE_REF,mode=max" '
-            f"2>&1"
+            'CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest"\n'
+            "    devcontainer build "
+            "--workspace-folder /project "
+            "--image-name loadtest:latest "
+            '"--cache-from" "type=registry,ref=$CACHE_REF" '
+            '"--cache-to" "type=registry,ref=$CACHE_REF,mode=max" '
+            "2>&1"
         )
     else:
         build_cmd = (
-            f"devcontainer build "
-            f"--workspace-folder {project_dir} "
-            f"--image-name loadtest-{index}:latest "
-            f"2>&1"
+            "devcontainer build --workspace-folder /project --image-name loadtest:latest 2>&1"
         )
 
-    start = time.time()
-    exit_code, output = _exec_script(sb, build_cmd, label=label)
-    duration = time.time() - start
+    return textwrap.dedent(f"""\
+        #!/bin/bash
+        set -uo pipefail
 
-    rate_limited = any(phrase in output.lower() for phrase in RATE_LIMIT_PHRASES)
+        ITERATIONS={iterations}
 
-    return BuildResult(
-        index=index,
-        exit_code=exit_code,
-        duration_secs=round(duration, 1),
-        rate_limited=rate_limited,
-        output=output,
-    )
+        for i in $(seq 1 $ITERATIONS); do
+            echo "@@@ ITERATION $i/$ITERATIONS @@@"
+
+            START_NS=$(date +%s%N)
+            OUTPUT=$({build_cmd})
+            EXIT_CODE=$?
+            END_NS=$(date +%s%N)
+            ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
+
+            # Check for rate limiting
+            RATE_LIMITED=0
+            if echo "$OUTPUT" | grep -qiE '429 too many requests|toomanyrequests|rate.limit|pull rate limit|retry-after'; then
+                RATE_LIMITED=1
+            fi
+
+            echo "@@@ RESULT iter=$i exit=$EXIT_CODE ms=$ELAPSED_MS rate_limited=$RATE_LIMITED @@@"
+            if [ "$EXIT_CODE" -ne 0 ]; then
+                echo "@@@ OUTPUT_START @@@"
+                echo "$OUTPUT" | tail -30
+                echo "@@@ OUTPUT_END @@@"
+            fi
+
+            # Prune everything so next iteration must pull fresh
+            echo "@@@ PRUNING @@@"
+            docker system prune -af --volumes >/dev/null 2>&1
+            docker buildx prune -af >/dev/null 2>&1
+            echo "@@@ PRUNE_DONE @@@"
+        done
+
+        echo "@@@ ALL_DONE @@@"
+    """)
 
 
-def run_load_test(num_builds: int, with_cache: bool) -> None:
-    """Launch num_builds concurrent devcontainer builds in a single sandbox."""
+def run_load_test(iterations: int, with_cache: bool) -> None:
+    """Run sequential devcontainer builds in a single sandbox."""
     modal.enable_output()
 
     app = modal.App.lookup("keystone-load-test-v2", create_if_missing=True)
@@ -143,7 +149,8 @@ def run_load_test(num_builds: int, with_cache: bool) -> None:
         secrets.append(modal.Secret.from_name("keystone-docker-registry-config"))
 
     print(
-        f"Creating Modal sandbox (builds={num_builds}, with_cache={with_cache})...", file=sys.stderr
+        f"Creating Modal sandbox (iterations={iterations}, with_cache={with_cache})...",
+        file=sys.stderr,
     )
     sb = modal.Sandbox.create(
         app=app,
@@ -179,107 +186,93 @@ def run_load_test(num_builds: int, with_cache: bool) -> None:
             if exit_code != 0:
                 raise RuntimeError("Docker login failed")
 
-        # Create all project directories in a single script to avoid
-        # hundreds of round-trips to the sandbox.
-        print(f"Setting up {num_builds} project directories...", file=sys.stderr)
-        setup_lines = ["set -euo pipefail"]
-        for i in range(num_builds):
-            dc_dir = f"/projects/p{i}/.devcontainer"
-            setup_lines.append(f"mkdir -p {dc_dir}")
-        _exec_script(sb, "\n".join(setup_lines), label="setup-dirs")
-
-        # Write shared Dockerfile once then copy to all projects
-        with sb.open("/tmp/_dockerfile", "w") as f:
+        # Set up project directory
+        print("Setting up project...", file=sys.stderr)
+        _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
+        with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
             f.write(DOCKERFILE)
-        copy_lines = ["set -euo pipefail"]
-        for i in range(num_builds):
-            copy_lines.append(f"cp /tmp/_dockerfile /projects/p{i}/.devcontainer/Dockerfile")
-        _exec_script(sb, "\n".join(copy_lines), label="setup-dockerfiles")
+        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
+            f.write(DEVCONTAINER_JSON)
+        with sb.open("/project/README.md", "w") as f:
+            f.write("# load test project\n")
 
-        # Write each devcontainer.json (unique name per project) via a single script
-        json_lines = ["set -euo pipefail"]
-        for i in range(num_builds):
-            # Escape for shell heredoc
-            json_content = DEVCONTAINER_JSON_TEMPLATE.format(index=i)
-            json_lines.append(
-                f"cat > /projects/p{i}/.devcontainer/devcontainer.json << 'DCJSON'\n"
-                f"{json_content}DCJSON"
-            )
-        _exec_script(sb, "\n".join(json_lines), label="setup-json")
-
-        # Verify
-        exit_code, _ = _exec_script(
-            sb,
-            "ls /projects/p0/.devcontainer/Dockerfile /projects/p0/.devcontainer/devcontainer.json",
-            label="setup",
-        )
-        if exit_code != 0:
-            raise RuntimeError("Project setup failed")
-
-        # Launch all builds concurrently from threads (each calls sb.exec)
+        # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
-        print(f"Launching {num_builds} concurrent devcontainer builds...", file=sys.stderr)
-        print(f"{'=' * 60}", file=sys.stderr)
+        print(
+            f"Running {iterations} sequential build+prune cycles...",
+            file=sys.stderr,
+        )
+        print(f"{'=' * 60}\n", file=sys.stderr)
 
-        overall_start = time.time()
-        results: list[BuildResult] = []
-        lock = threading.Lock()
+        loop_script = _build_loop_script(iterations, with_cache)
+        with sb.open("/tmp/_load_test_loop.sh", "w") as f:
+            f.write(loop_script)
 
-        def _build_thread(idx: int) -> None:
-            result = _run_one_build(sb, idx, with_cache)
-            with lock:
-                results.append(result)
-                status = (
-                    "RATE LIMITED"
-                    if result.rate_limited
-                    else ("OK" if result.exit_code == 0 else "FAILED")
-                )
+        proc = sb.exec("bash", "/tmp/_load_test_loop.sh")
+
+        # Parse structured output as it streams
+        results: list[dict[str, int]] = []
+        for line in proc.stdout:
+            text = line.strip()
+            if text.startswith("@@@ RESULT"):
+                # Parse: @@@ RESULT iter=1 exit=0 ms=12345 rate_limited=0 @@@
+                parts = {}
+                for token in text.split():
+                    if "=" in token:
+                        k, v = token.split("=", 1)
+                        parts[k] = int(v)
+                results.append(parts)
+                rl = parts.get("rate_limited", 0)
+                ec = parts.get("exit", -1)
+                ms = parts.get("ms", 0)
+                status = "RATE LIMITED" if rl else ("OK" if ec == 0 else "FAILED")
                 print(
-                    f"  [{idx:03d}] {status} (exit={result.exit_code}, "
-                    f"{result.duration_secs:.1f}s)",
+                    f"  [{parts.get('iter', '?'):3}] {status} (exit={ec}, {ms / 1000:.1f}s)",
                     file=sys.stderr,
                 )
+            elif text.startswith("@@@ ITERATION"):
+                print(f"\n{text.strip('@ ')}", file=sys.stderr)
+            elif text.startswith("@@@"):
+                pass  # skip markers
+            else:
+                print(f"  {text}", file=sys.stderr)
+        for line in proc.stderr:
+            text = line.strip()
+            if text:
+                print(f"  [stderr] {text}", file=sys.stderr)
 
-        threads = [threading.Thread(target=_build_thread, args=(i,)) for i in range(num_builds)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        overall_duration = time.time() - overall_start
+        proc.wait()
 
         # Summary
-        results.sort(key=lambda r: r.index)
         print(f"\n{'=' * 60}", file=sys.stderr)
         print("LOAD TEST RESULTS", file=sys.stderr)
         print(f"{'=' * 60}", file=sys.stderr)
         total = len(results)
-        rate_limited_count = sum(1 for r in results if r.rate_limited)
-        failed_count = sum(1 for r in results if r.exit_code != 0)
+        rate_limited_count = sum(1 for r in results if r.get("rate_limited"))
+        failed_count = sum(1 for r in results if r.get("exit", 1) != 0)
         succeeded = total - failed_count
-        print(f"Total builds:      {total}", file=sys.stderr)
+        print(f"Total iterations:  {total}", file=sys.stderr)
         print(f"Succeeded:         {succeeded}", file=sys.stderr)
         print(f"Rate limited:      {rate_limited_count}", file=sys.stderr)
         print(f"Other failures:    {failed_count - rate_limited_count}", file=sys.stderr)
-        print(f"Overall duration:  {overall_duration:.1f}s", file=sys.stderr)
 
         if succeeded > 0:
-            ok_durations = sorted(r.duration_secs for r in results if r.exit_code == 0)
-            print(f"Build time (min):  {ok_durations[0]:.1f}s", file=sys.stderr)
-            print(
-                f"Build time (med):  {ok_durations[len(ok_durations) // 2]:.1f}s", file=sys.stderr
-            )
-            print(f"Build time (max):  {ok_durations[-1]:.1f}s", file=sys.stderr)
+            ok_ms = sorted(r["ms"] for r in results if r.get("exit") == 0)
+            print(f"Build time (min):  {ok_ms[0] / 1000:.1f}s", file=sys.stderr)
+            print(f"Build time (med):  {ok_ms[len(ok_ms) // 2] / 1000:.1f}s", file=sys.stderr)
+            print(f"Build time (max):  {ok_ms[-1] / 1000:.1f}s", file=sys.stderr)
+
+        total_ms = sum(r.get("ms", 0) for r in results)
+        print(f"Total build time:  {total_ms / 1000:.1f}s", file=sys.stderr)
 
         print(file=sys.stderr)
         for r in results:
-            flag = (
-                " ⚠️  RATE LIMITED"
-                if r.rate_limited
-                else (" ❌ FAILED" if r.exit_code != 0 else " ✅")
-            )
+            rl = r.get("rate_limited", 0)
+            ec = r.get("exit", -1)
+            ms = r.get("ms", 0)
+            flag = " ⚠️  RATE LIMITED" if rl else (" ❌ FAILED" if ec != 0 else " ✅")
             print(
-                f"  #{r.index:3d}: exit={r.exit_code} time={r.duration_secs:6.1f}s{flag}",
+                f"  #{r.get('iter', '?'):3}: exit={ec} time={ms / 1000:6.1f}s{flag}",
                 file=sys.stderr,
             )
 
@@ -289,9 +282,15 @@ def run_load_test(num_builds: int, with_cache: bool) -> None:
                 file=sys.stderr,
             )
         elif failed_count:
-            print(f"\n❌ {failed_count}/{total} builds failed (not rate-limited)", file=sys.stderr)
+            print(
+                f"\n❌ {failed_count}/{total} builds failed (not rate-limited)",
+                file=sys.stderr,
+            )
         else:
-            print("\n✅ All builds succeeded — no rate limiting observed", file=sys.stderr)
+            print(
+                "\n✅ All builds succeeded — no rate limiting observed",
+                file=sys.stderr,
+            )
 
     finally:
         print("\nTerminating sandbox...", file=sys.stderr)
@@ -301,10 +300,10 @@ def run_load_test(num_builds: int, with_cache: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Load test: reproduce Docker Hub rate limiting")
     parser.add_argument(
-        "--builds",
+        "--iterations",
         type=int,
         default=50,
-        help="Number of concurrent builds (default: 50)",
+        help="Number of build+prune cycles (default: 50)",
     )
     parser.add_argument(
         "--with-cache",
@@ -312,7 +311,7 @@ def main() -> None:
         help="Use the Modal registry cache (to test mitigation)",
     )
     args = parser.parse_args()
-    run_load_test(num_builds=args.builds, with_cache=args.with_cache)
+    run_load_test(iterations=args.iterations, with_cache=args.with_cache)
 
 
 if __name__ == "__main__":
