@@ -67,7 +67,7 @@ def _exec_script(
     return exit_code, "\n".join(output_lines)
 
 
-def _build_loop_script(iterations: int, with_cache: bool) -> str:
+def _build_loop_script(iterations: int) -> str:
     """Generate a bash script that runs the entire build+prune loop.
 
     The loop runs entirely inside the sandbox so there are no
@@ -75,22 +75,9 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
       1. devcontainer build (pulls base image from Docker Hub)
       2. docker system prune -af + docker buildx prune -af
     """
-    if with_cache:
-        build_cmd = (
-            'CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest"\n'
-            "    docker build "
-            "--network=host "
-            '--cache-from "type=registry,ref=$CACHE_REF" '
-            '--cache-to "type=registry,ref=$CACHE_REF,mode=max" '
-            "-t loadtest:latest "
-            "-f /project/.devcontainer/Dockerfile "
-            "/project "
-            "2>&1"
-        )
-    else:
-        build_cmd = (
-            "devcontainer build --workspace-folder /project --image-name loadtest:latest 2>&1"
-        )
+    # Both paths use devcontainer build; the --with-cache variant bakes
+    # --cache-from / --cache-to into devcontainer.json build.options.
+    build_cmd = "devcontainer build --workspace-folder /project --image-name loadtest:latest 2>&1"
 
     return textwrap.dedent(f"""\
         #!/bin/bash
@@ -198,10 +185,34 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
         _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
         with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
             f.write(DOCKERFILE)
-        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
-            f.write(DEVCONTAINER_JSON)
         with sb.open("/project/README.md", "w") as f:
             f.write("# load test project\n")
+
+        if with_cache:
+            # Write devcontainer.json from inside the sandbox so we can
+            # template in $DOCKER_BUILD_CACHE_REGISTRY_URL.
+            _exec_script(
+                sb,
+                "cat > /project/.devcontainer/devcontainer.json << DCEOF\n"
+                "{\n"
+                '  "name": "load-test",\n'
+                '  "build": {\n'
+                '    "dockerfile": "Dockerfile",\n'
+                '    "context": "..",\n'
+                '    "options": [\n'
+                '      "--network=host",\n'
+                '      "--cache-from=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest",\n'
+                '      "--cache-to=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest,mode=max",\n'
+                '      "--load"\n'
+                "    ]\n"
+                "  }\n"
+                "}\n"
+                "DCEOF",
+                label="setup-devcontainer",
+            )
+        else:
+            with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
+                f.write(DEVCONTAINER_JSON)
 
         # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
@@ -211,7 +222,7 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
         )
         print(f"{'=' * 60}\n", file=sys.stderr)
 
-        loop_script = _build_loop_script(iterations, with_cache)
+        loop_script = _build_loop_script(iterations)
         with sb.open("/tmp/_load_test_loop.sh", "w") as f:
             f.write(loop_script)
 
