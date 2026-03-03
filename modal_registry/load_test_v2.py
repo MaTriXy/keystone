@@ -121,9 +121,9 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
 
             echo "@@@ RESULT iter=$i exit=$EXIT_CODE ms=$ELAPSED_MS rate_limited=$RATE_LIMITED @@@"
             if [ "$EXIT_CODE" -ne 0 ]; then
-                echo "@@@ OUTPUT_START @@@"
-                echo "$OUTPUT" | tail -30
-                echo "@@@ OUTPUT_END @@@"
+                echo "$OUTPUT" | tail -20 | while IFS= read -r errline; do
+                    echo "@@@ ERR $errline"
+                done
             fi
 
             # Prune everything so next iteration must pull fresh
@@ -230,6 +230,8 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
                     f"  [{parts.get('iter', '?'):3}] {status} (exit={ec}, {ms / 1000:.1f}s)",
                     file=sys.stderr,
                 )
+            elif text.startswith("@@@ ERR"):
+                print(f"    {text[8:]}", file=sys.stderr)
             elif text.startswith("@@@ ITERATION"):
                 print(f"\n{text.strip('@ ')}", file=sys.stderr)
             elif text.startswith("@@@"):
