@@ -16,6 +16,7 @@ Prerequisites:
 import argparse
 import sys
 import textwrap
+import time
 
 import modal
 
@@ -161,7 +162,8 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
         if exit_code != 0:
             raise RuntimeError("Docker daemon failed to start")
 
-        # Docker login for cache registry (if enabled)
+        # Docker login for cache registry (if enabled).
+        # The registry may be cold-starting, so retry a few times.
         if with_cache:
             print("Logging into cache registry...", file=sys.stderr)
             login_cmd = (
@@ -171,9 +173,17 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
                 "--password-stdin "
                 '"$DOCKER_BUILD_CACHE_REGISTRY_URL"'
             )
-            exit_code, _ = _exec_script(sb, login_cmd, label="docker-login")
-            if exit_code != 0:
-                raise RuntimeError("Docker login failed")
+            for attempt in range(1, 6):
+                exit_code, _ = _exec_script(sb, login_cmd, label="docker-login")
+                if exit_code == 0:
+                    break
+                print(
+                    f"  Login attempt {attempt}/5 failed, retrying in 10s...",
+                    file=sys.stderr,
+                )
+                time.sleep(10)
+            else:
+                raise RuntimeError("Docker login failed after 5 attempts")
 
         # Set up project directory
         print("Setting up project...", file=sys.stderr)
