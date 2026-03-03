@@ -265,28 +265,13 @@
       'exit_code': 0,
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Simple Python project detected. Creating .devcontainer directory with Dockerfile and test runner.',
-        'Running guardrail check.',
-        'Build passed. Running container with --network=host to verify tests.',
+        'Creating the .devcontainer directory and required files.',
+        'Running guardrail check to validate setup.',
       ]),
-      'summary': "Everything worked. Simple Python project using uv for dependency management. Key fix: needed to set `PYTHONPATH=/project_src` in `run_all_tests.sh` so pytest could find `app.py` when tests import from it directly. The guardrail script's docker run command doesn't use `--network=host` so it shows a networking error in sandbox, but the build passes and manual runs with `--network=host` work correctly.",
+      'summary': 'Everything worked. Simple Python project with uv, pytest runs 2 tests successfully. Used uv for fast dependency installation with layer caching via pyproject.toml/uv.lock copied before source code.',
       'timed_out': False,
     }),
-    'cli_args': list([
-      '/Users/catherinekim/bootstrap_devcontainer/.venv/bin/pytest',
-      'keystone/tests/test_bootstrap.py::test_e2e_sample_projects[python_project]',
-      '-sv',
-      '--snapshot-update',
-    ]),
     'error_message': None,
-    'evaluator': dict({
-      'cost_usd': 0.0014472,
-      'issues': list([
-      ]),
-      'model': 'claude-haiku-4-5-20251001',
-      'passed': True,
-      'reasoning': "The agent successfully created all three required files with genuine, working implementations. The devcontainer.json is properly formatted, the Dockerfile is a substantial and well-structured image definition (not a stub) that handles dependency management with uv, creates necessary directories, and sets up the Python environment correctly. The run_all_tests.sh script is a complete test runner that properly generates JUnit XML output, sets PYTHONPATH correctly, and handles exit codes appropriately. The verification result confirms success, and the agent's explanation of the PYTHONPATH fix demonstrates understanding of the actual problem solved.",
-    }),
     'generated_files': dict({
       'devcontainer_json': '''
         {
@@ -304,7 +289,7 @@
   
       ''',
       'dockerfile': '''
-        FROM python:3.12-slim
+        FROM python:3.11-slim
         
         # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
@@ -320,16 +305,18 @@
         # Install dependencies first (without the project itself) to maximize layer caching.
         COPY pyproject.toml uv.lock /tmp/deps/
         ENV UV_PROJECT_ENVIRONMENT=/venv
-        RUN cd /tmp/deps && uv sync --locked --no-install-project && \
+        RUN cd /tmp/deps && \
+            uv sync --locked --no-install-project && \
             echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
         # Copy source code (these won't change during agent work)
         WORKDIR /project_src
         COPY app.py ./
         COPY tests/ ./tests/
+        COPY pyproject.toml uv.lock ./
         
-        # Ensure the venv is on PATH
-        ENV PATH="/venv/bin:$PATH"
+        # Install the project itself
+        RUN uv sync --locked
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -343,21 +330,25 @@
         mkdir -p /test_artifacts/junit
         
         cd /project_src
+        
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
         echo "Running pytest..."
-        pytest --junitxml=/test_artifacts/junit/pytest.xml --no-header -v 2>&1
+        /venv/bin/pytest tests/ \
+            --junitxml=/test_artifacts/junit/pytest.xml \
+            --no-header \
+            -v
         
         # Write final result
-        RESULT=$?
-        if [ $RESULT -eq 0 ]; then
-          echo '{"success": true}' > /test_artifacts/final_result.json
-          echo "All tests passed."
+        if [ $? -eq 0 ]; then
+            echo '{"success": true}' > /test_artifacts/final_result.json
         else
-          echo '{"success": false}' > /test_artifacts/final_result.json
-          echo "Some tests failed."
-          exit $RESULT
+            echo '{"success": false}' > /test_artifacts/final_result.json
+            exit 1
         fi
+        
+        echo "All tests passed!"
+        echo '{"success": true}' > /test_artifacts/final_result.json
   
       ''',
     }),
