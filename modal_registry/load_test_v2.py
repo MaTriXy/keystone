@@ -121,10 +121,10 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
             else
                 FAIL=$((FAIL + 1))
                 echo "FAILED (exit=$EXIT_CODE, ${{ELAPSED_MS}}ms) [pass=$PASS fail=$FAIL]"
-                echo "--- build output ---"
-                echo "$OUTPUT"
-                echo "--- end output ---"
             fi
+            echo "--- build output ---"
+            echo "$OUTPUT"
+            echo "--- end output ---"
 
             # Prune everything so next iteration must pull fresh
             docker system prune -af --volumes >/dev/null 2>&1
