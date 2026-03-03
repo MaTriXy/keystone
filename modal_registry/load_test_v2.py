@@ -16,7 +16,6 @@ Prerequisites:
 import argparse
 import sys
 import textwrap
-import time
 
 import modal
 
@@ -153,7 +152,6 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
 
         # Docker login for cache registry (if enabled).
         # Uses the same approach as ModalAgentRunner._docker_login().
-        # The registry may be cold-starting, so retry a few times.
         if with_cache:
             print("Logging into cache registry...", file=sys.stderr)
             login_script = (
@@ -168,17 +166,9 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
                 "        --password-stdin \\\n"
                 '        "$DOCKER_BUILD_CACHE_REGISTRY_URL"\n'
             )
-            for attempt in range(1, 6):
-                exit_code, _ = _exec_script(sb, login_script, label="docker-login")
-                if exit_code == 0:
-                    break
-                print(
-                    f"  Login attempt {attempt}/5 failed, retrying in 10s...",
-                    file=sys.stderr,
-                )
-                time.sleep(10)
-            else:
-                raise RuntimeError("Docker login failed after 5 attempts")
+            exit_code, _ = _exec_script(sb, login_script, label="docker-login")
+            if exit_code != 0:
+                raise RuntimeError("Docker login failed")
 
         # Set up project directory
         print("Setting up project...", file=sys.stderr)
