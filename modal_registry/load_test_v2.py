@@ -163,18 +163,24 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
             raise RuntimeError("Docker daemon failed to start")
 
         # Docker login for cache registry (if enabled).
+        # Uses the same approach as ModalAgentRunner._docker_login().
         # The registry may be cold-starting, so retry a few times.
         if with_cache:
             print("Logging into cache registry...", file=sys.stderr)
-            login_cmd = (
-                'echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | '
-                "docker login "
-                '--username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" '
-                "--password-stdin "
-                '"$DOCKER_BUILD_CACHE_REGISTRY_URL"'
+            login_script = (
+                "#!/bin/bash\n"
+                "set -euo pipefail\n"
+                ': "${DOCKER_BUILD_CACHE_REGISTRY_URL:?must be set}"\n'
+                ': "${DOCKER_BUILD_CACHE_REGISTRY_USERNAME:?must be set}"\n'
+                ': "${DOCKER_BUILD_CACHE_REGISTRY_PASSWORD:?must be set}"\n'
+                'echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \\\n'
+                "    docker login \\\n"
+                '        --username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \\\n'
+                "        --password-stdin \\\n"
+                '        "$DOCKER_BUILD_CACHE_REGISTRY_URL"\n'
             )
             for attempt in range(1, 6):
-                exit_code, _ = _exec_script(sb, login_cmd, label="docker-login")
+                exit_code, _ = _exec_script(sb, login_script, label="docker-login")
                 if exit_code == 0:
                     break
                 print(
