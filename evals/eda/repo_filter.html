@@ -52,6 +52,7 @@ function prepareData(rows) {
   rows.forEach(r => {
     r.lang_code = langMap[r.language] ?? -1;
     LOG_COLS.forEach(c => { r["log_" + c] = Math.log1p(r[c] || 0); });
+    r.from_examples_num = r.from_examples ? 1 : 0;
   });
 
   return { languages, langMap };
@@ -71,8 +72,7 @@ function buildParcoords(rows, languages, langMap) {
     { label: "Size MB (log)", values: rows.map(r => r.log_size_mb) },
     { label: "Commits 90d (log)", values: rows.map(r => r.log_recent_commits_90d) },
     { label: "Test Files (log)", values: rows.map(r => r.log_test_files_total) },
-    { label: "Test by Name (log)", values: rows.map(r => r.log_test_files_by_name) },
-    { label: "In Test Dirs (log)", values: rows.map(r => r.log_files_in_test_dirs) },
+    { label: "Examples", values: rows.map(r => r.from_examples ? 1 : 0), tickvals: [0, 1], ticktext: ["No", "Yes"] },
   ];
 
   const logStars = rows.map(r => r.log_stars);
@@ -99,7 +99,7 @@ function buildParcoords(rows, languages, langMap) {
 
 function updateSelection() {
   const dims = plotDiv.data[0].dimensions;
-  const axisKeys = ["lang_code", "log_stars", "log_size_mb", "log_recent_commits_90d", "log_test_files_total", "log_test_files_by_name", "log_files_in_test_dirs"];
+  const axisKeys = ["lang_code", "log_stars", "log_size_mb", "log_recent_commits_90d", "log_test_files_total", "from_examples_num"];
 
   currentMask = allRows.map((r, idx) => {
     for (let i = 0; i < dims.length; i++) {
