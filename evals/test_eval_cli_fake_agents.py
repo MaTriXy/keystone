@@ -89,7 +89,6 @@ FAKE_AGENT_CONFIGS = [
 ]
 
 
-@pytest.mark.slow
 @pytest.mark.modal
 def test_eval_cli_fake_agents_config_file(
     sample_repo: tuple[Path, list[str]],

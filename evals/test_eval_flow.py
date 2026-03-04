@@ -75,7 +75,7 @@ def sample_repos(tmp_path: Path) -> tuple[Path, list[str]]:
     return repo_list_path, repo_paths
 
 
-@pytest.mark.slow
+@pytest.mark.modal
 def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
     """Test the eval flow with fake agent on Modal (no LLM).
 
@@ -156,8 +156,8 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     print(f"\nTotal: {success_count}/{len(output.results)} succeeded")
 
 
-@pytest.mark.slow
 @pytest.mark.modal
+@pytest.mark.agentic
 def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
     """End-to-end test with real agent on Modal.
 

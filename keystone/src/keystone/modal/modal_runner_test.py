@@ -5,6 +5,7 @@ import os
 import shlex
 
 import modal
+import pytest
 
 from keystone.llm_provider.claude import ClaudeProvider
 from keystone.llm_provider.codex import CodexProvider
@@ -26,6 +27,7 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger("keystone.modal_test")
 
 
+@pytest.mark.modal
 def test_run_modal_command_interleaved_streaming():
     """
     Verify that run_modal_command correctly handles interleaved stdout/stderr.
@@ -83,6 +85,7 @@ def test_run_modal_command_interleaved_streaming():
         sb.terminate()
 
 
+@pytest.mark.modal
 def test_docker_readiness_and_run():
     """
     Verify that we can start dockerd, wait for it, and run a container.
@@ -137,6 +140,8 @@ def test_docker_readiness_and_run():
         sb.terminate()
 
 
+@pytest.mark.modal
+@pytest.mark.agentic
 def test_claude_streaming():
     """
     Verify that Claude CLI can run and stream its output.
@@ -204,6 +209,8 @@ def test_claude_streaming():
         sb.terminate()
 
 
+@pytest.mark.modal
+@pytest.mark.agentic
 def test_codex_streaming():
     """
     Verify that Codex CLI can run and stream its output.

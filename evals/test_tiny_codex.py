@@ -25,8 +25,8 @@ from typer.testing import CliRunner
 REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 
 
-@pytest.mark.slow
 @pytest.mark.modal
+@pytest.mark.agentic
 def test_tiny_codex_eval(tmp_path: Path) -> None:
     """Run the codex eval (default model) on requests repo and check it succeeds."""
     runner = CliRunner()

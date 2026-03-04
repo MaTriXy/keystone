@@ -158,11 +158,11 @@ def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.Mo
 @pytest.mark.parametrize(
     "execution_mode",
     [
-        pytest.param("local", id="local"),
+        pytest.param("local", id="local", marks=pytest.mark.local_docker),
         pytest.param(
             "modal",
             id="modal",
-            marks=pytest.mark.manual,
+            marks=pytest.mark.modal,
         ),
     ],
 )
@@ -311,6 +311,7 @@ def test_e2e_fake_agent(
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 
 
+@pytest.mark.local_docker
 @pytest.mark.parametrize("project_root", ["rust_project"], indirect=True)
 def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path) -> None:
     """
@@ -366,7 +367,8 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
 
 
-@pytest.mark.manual
+@pytest.mark.modal
+@pytest.mark.agentic
 @pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
 def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
     """E2E test: run the real Codex provider on Modal against python_project.
@@ -433,7 +435,7 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
         logger.warning("Skipping ccusage cost assertions (likely a cached replay)")
 
 
-@pytest.mark.manual
+@pytest.mark.modal
 @pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
 def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None:
     """Verify that agent errors (e.g. prompt rejection) propagate into BootstrapResult.
@@ -513,7 +515,8 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     logger.info("  agent.error_messages: %s", output.agent.error_messages)
 
 
-@pytest.mark.manual
+@pytest.mark.modal
+@pytest.mark.agentic
 @pytest.mark.parametrize(
     "project_root",
     [
@@ -705,6 +708,7 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     assert output.error_message, "Expected error_message in output"
 
 
+@pytest.mark.local_docker
 @pytest.mark.skipif(
     not shutil.which("timeout"), reason="GNU timeout not available (install coreutils)"
 )

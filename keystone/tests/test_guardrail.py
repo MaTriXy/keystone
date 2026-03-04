@@ -74,11 +74,11 @@ def test_guardrail_fails_with_missing_run_all_tests(workspace: Path) -> None:
 
 
 def test_guardrail_checks_dockerfile_structure(workspace: Path) -> None:
-    """Guardrail should check Dockerfile has FROM, test_artifacts, and COPY run_all_tests."""
+    """Guardrail should pass file checks even with a minimal Dockerfile, then fail at Docker build."""
     devcontainer_dir = workspace / ".devcontainer"
     devcontainer_dir.mkdir()
     (devcontainer_dir / "devcontainer.json").write_text('{"build": {}}')
-    # Dockerfile missing key elements
+    # Dockerfile with minimal content - file exists but build would fail
     (devcontainer_dir / "Dockerfile").write_text("# empty dockerfile\n")
     run_script = devcontainer_dir / "run_all_tests.sh"
     run_script.write_text(
@@ -88,33 +88,36 @@ def test_guardrail_checks_dockerfile_structure(workspace: Path) -> None:
 
     result = _run_guardrail(workspace)
     assert result.returncode != 0
-    assert "missing a FROM instruction" in result.stdout
-    assert "does not create /test_artifacts" in result.stdout
-    assert "does not COPY run_all_tests.sh" in result.stdout
+    # File existence checks pass
+    assert "PASS: .devcontainer/Dockerfile exists" in result.stdout
+    assert "PASS: .devcontainer/run_all_tests.sh exists" in result.stdout
+    # Docker build fails (no clean project copy in test environment)
+    assert "FAIL" in result.stdout
 
 
 def test_guardrail_checks_run_all_tests_structure(workspace: Path) -> None:
-    """Guardrail should check run_all_tests.sh has shebang, junit, and final_result."""
+    """Guardrail should pass file checks even with minimal run_all_tests.sh, then fail at Docker build."""
     devcontainer_dir = workspace / ".devcontainer"
     devcontainer_dir.mkdir()
     (devcontainer_dir / "devcontainer.json").write_text('{"build": {}}')
     (devcontainer_dir / "Dockerfile").write_text(
         "FROM python:3.12\nRUN mkdir -p /test_artifacts && chmod 777 /test_artifacts\nCOPY .devcontainer/run_all_tests.sh /run_all_tests.sh\nRUN chmod +x /run_all_tests.sh\n"
     )
-    # run_all_tests.sh missing key elements
+    # run_all_tests.sh with minimal content
     run_script = devcontainer_dir / "run_all_tests.sh"
-    run_script.write_text("echo 'hello'\n")  # No shebang, no junit, no final_result
+    run_script.write_text("echo 'hello'\n")
     run_script.chmod(0o755)
 
     result = _run_guardrail(workspace)
     assert result.returncode != 0
-    assert "missing a shebang" in result.stdout
-    assert "does not reference junit" in result.stdout
-    assert "does not write final_result.json" in result.stdout
+    # File existence checks pass
+    assert "PASS: .devcontainer/run_all_tests.sh exists" in result.stdout
+    # Docker build fails (no clean project copy in test environment)
+    assert "FAIL" in result.stdout
 
 
 def test_guardrail_passes_with_valid_files(workspace: Path) -> None:
-    """Guardrail should pass with properly structured files (skipping Docker build)."""
+    """Guardrail should pass all file existence checks with properly structured files."""
     devcontainer_dir = workspace / ".devcontainer"
     devcontainer_dir.mkdir()
     (devcontainer_dir / "devcontainer.json").write_text(
@@ -139,22 +142,17 @@ def test_guardrail_passes_with_valid_files(workspace: Path) -> None:
     run_script.chmod(0o755)
 
     result = _run_guardrail(workspace)
-    # File structure checks should all pass (Docker build may fail since
-    # we don't have a real project setup, but the file checks pass)
+    # File existence checks should all pass (Docker build will fail since
+    # we don't have a clean project copy, but the file checks pass)
     assert "PASS: .devcontainer/ directory exists" in result.stdout
     assert "PASS: .devcontainer/devcontainer.json exists" in result.stdout
     assert "PASS: .devcontainer/Dockerfile exists" in result.stdout
     assert "PASS: .devcontainer/run_all_tests.sh exists" in result.stdout
-    assert "PASS: Dockerfile has a FROM instruction" in result.stdout
-    assert "PASS: Dockerfile references test_artifacts directory" in result.stdout
-    assert "PASS: Dockerfile copies run_all_tests.sh" in result.stdout
-    assert "PASS: run_all_tests.sh has a shebang line" in result.stdout
-    assert "PASS: run_all_tests.sh references junit output" in result.stdout
-    assert "PASS: run_all_tests.sh writes final_result.json" in result.stdout
+    assert "PASS: .devcontainer/run_all_tests.sh is executable" in result.stdout
 
 
-def test_guardrail_warns_on_copy_dot_dot(workspace: Path) -> None:
-    """Guardrail should warn about COPY . . pattern."""
+def test_guardrail_fails_without_clean_copy(workspace: Path) -> None:
+    """Guardrail should fail at Docker build step when no clean project copy exists."""
     devcontainer_dir = workspace / ".devcontainer"
     devcontainer_dir.mkdir()
     (devcontainer_dir / "devcontainer.json").write_text('{"build": {}}')
@@ -162,7 +160,6 @@ def test_guardrail_warns_on_copy_dot_dot(workspace: Path) -> None:
         "FROM python:3.12\n"
         "WORKDIR /project_src\n"
         "RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts\n"
-        "COPY . .\n"
         "COPY .devcontainer/run_all_tests.sh /run_all_tests.sh\n"
         "RUN chmod +x /run_all_tests.sh\n"
     )
@@ -173,8 +170,10 @@ def test_guardrail_warns_on_copy_dot_dot(workspace: Path) -> None:
     run_script.chmod(0o755)
 
     result = _run_guardrail(workspace)
-    assert "WARN" in result.stdout
-    assert "COPY . ." in result.stdout
+    assert result.returncode != 0
+    # File checks pass but Docker build fails (no clean copy)
+    assert "PASS: .devcontainer/Dockerfile exists" in result.stdout
+    assert "No clean project copy found" in result.stdout
 
 
 def test_guardrail_checks_executable_permission(workspace: Path) -> None:
