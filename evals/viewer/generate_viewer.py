@@ -365,7 +365,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <script>
 const DATA = __DATA__;
 
-let currentRun = DATA.run_names[0];
+let currentRun = DATA.run_names[DATA.run_names.length - 1];
 let expandedRepo = null;
 let breakdownOpen = false;
 
