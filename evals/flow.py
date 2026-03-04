@@ -252,8 +252,8 @@ def process_repo_task(
                 cmd.extend(
                     [
                         "--agent_in_modal",
-                        "--docker_cache_secret",
-                        agent_config.docker_cache_secret,
+                        "--docker_registry_mirror",
+                        agent_config.docker_registry_mirror,
                     ]
                 )
 

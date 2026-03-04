@@ -92,10 +92,10 @@ class AgentConfig(BaseModel):
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",
     )
 
-    # Docker build cache (Modal secret name)
-    docker_cache_secret: str = Field(
-        default="keystone-docker-registry-config",
-        description="Modal secret name with DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}",
+    # Docker Hub mirror for pull-through caching
+    docker_registry_mirror: str = Field(
+        default="https://mirror.gcr.io",
+        description="URL of Docker Hub pull-through cache mirror (default: Google's mirror.gcr.io)",
     )
 
 
