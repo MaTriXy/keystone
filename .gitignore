@@ -206,3 +206,4 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 *_executed.ipynb
+evals/eda/repo_filter_out.html
