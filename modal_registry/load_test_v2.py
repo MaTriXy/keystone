@@ -229,10 +229,7 @@ def run_load_test(
             raise RuntimeError(f"Sandbox {sandbox_id} is not healthy (exit {exit_code})")
         needs_setup = False
     else:
-        print(
-            f"Creating Modal sandbox (iterations={iterations}, with_cache={with_cache})...",
-            file=sys.stderr,
-        )
+        print("Creating Modal sandbox...", file=sys.stderr)
         sb = modal.Sandbox.create(
             app=app,
             image=image,
@@ -254,7 +251,7 @@ def run_load_test(
         # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
         print(
-            f"Running {iterations} sequential build+prune cycles...",
+            f"Running {iterations} sequential build+prune cycles (with_cache={with_cache})...",
             file=sys.stderr,
         )
         print(f"{'=' * 60}\n", file=sys.stderr)
