@@ -260,7 +260,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .fail-chart-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
   .fail-bar-stack { display: flex; flex-direction: column-reverse; width: 100%;
                     border-radius: 3px 3px 0 0; overflow: hidden; }
-  .fail-bar-seg { width: 100%; transition: height .3s; }
+  .fail-bar-seg { width: 100%; transition: height .3s; cursor: default; }
+
+  #seg-tooltip { position: fixed; background: #1e2235; border: 1px solid #3d4163;
+                 border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #e2e8f0;
+                 pointer-events: none; z-index: 9999; display: none; white-space: nowrap; }
   .fail-bar-col-label { font-size: 11px; color: #64748b; text-align: center; white-space: nowrap;
                         overflow: hidden; text-overflow: ellipsis; width: 100%; }
   .fail-bar-count { font-size: 11px; color: #475569; text-align: center; }
@@ -303,6 +307,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 padding: 12px; overflow: hidden; }
   .model-card.pass-card { border-left: 3px solid #22c55e; }
   .model-card.fail-card { border-left: 3px solid #ef4444; }
+  .model-card.infra-card { border-left: 3px solid #fb923c; }
   .model-card .card-header { display: flex; justify-content: space-between; align-items: center;
                               margin-bottom: 8px; }
   .model-card .card-name { font-weight: 600; font-size: 13px; }
@@ -310,6 +315,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                               padding: 2px 8px; border-radius: 4px; }
   .model-card .card-status.pass { background: #14532d; color: #4ade80; }
   .model-card .card-status.fail { background: #450a0a; color: #f87171; }
+  .model-card .card-status.infra { background: #431407; color: #fdba74; }
   .meta-row { display: flex; gap: 16px; font-size: 12px; color: #64748b; margin-bottom: 8px;
               flex-wrap: wrap; }
   .meta-row span { display: flex; gap: 4px; align-items: center; }
@@ -335,6 +341,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
+<div id="seg-tooltip"></div>
 
 <header>
   <h1>Keystone Eval Viewer</h1>
@@ -523,7 +530,7 @@ function renderBreakdown() {
       const pct = (n / failCount) * 100;
       const color = CATEGORY_COLORS[cat] || "#c7c7c7";
       return `<div class="fail-bar-seg" style="height:${pct.toFixed(1)}%;background:${color}"
-               title="${cat}: ${n}"></div>`;
+               onmouseenter="showSegTip(event,'${cat}: ${n}')" onmouseleave="hideSegTip()"></div>`;
     }).join("");
 
     return `<div class="fail-chart-col">
@@ -631,7 +638,8 @@ function renderDetailPanel(repo, models, runData) {
       <span class="card-status fail">No data</span></div></div>`;
 
     const meta = getModelMeta(model);
-    const cls = r.success ? "pass" : "fail";
+    const errCat = categorizeError(r.error || "");
+    const cls = r.success ? "pass" : (INFRA_CATEGORIES.has(errCat) ? "infra" : "fail");
     const dur = r.duration_s ? `${r.duration_s}s` : "—";
     const cost = r.cost_usd ? `$${r.cost_usd}` : "—";
     const tests = (r.tests_passed != null)
@@ -705,6 +713,24 @@ function selectRun(run) {
   renderTable();
   if (breakdownOpen) renderBreakdown();
 }
+
+function showSegTip(e, text) {
+  const t = document.getElementById("seg-tooltip");
+  t.textContent = text;
+  t.style.display = "block";
+  positionSegTip(e);
+}
+function hideSegTip() {
+  document.getElementById("seg-tooltip").style.display = "none";
+}
+function positionSegTip(e) {
+  const t = document.getElementById("seg-tooltip");
+  t.style.left = (e.clientX + 12) + "px";
+  t.style.top = (e.clientY - 28) + "px";
+}
+document.addEventListener("mousemove", e => {
+  if (document.getElementById("seg-tooltip").style.display !== "none") positionSegTip(e);
+});
 
 function escHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
