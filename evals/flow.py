@@ -496,7 +496,7 @@ def _archive_repos(
     return archives
 
 
-DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 100
+DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 200
 """Maximum number of process_repo tasks running concurrently (across all configs)."""
 
 
@@ -744,10 +744,10 @@ def eval_flow(
     archives = _archive_repos(repos, s3_repo_cache_prefix, log)
 
     # Phase 2: Submit all configs' tasks with a shared concurrency limit.
-    # Build work items across all configs, then use a sliding window to limit
-    # the number of concurrently running keystone tasks.
+    # Build work items ordered repo-first (all models on repo0, then repo1, ...)
+    # so that under concurrency limits we get cross-model results per repo
+    # rather than all repos for one model before moving to the next.
     resolved_eval_configs: list[EvalConfig] = []
-    work_items: list[tuple[int, RepoEntry, str, int]] = []  # (config_idx, repo, s3_path, trial)
     for i, eval_config in enumerate(eval_configs):
         label = eval_config.name or f"config-{i}"
         log.info(f"--- Preparing eval [{label}] ---")
@@ -764,8 +764,10 @@ def eval_flow(
             )
         resolved_eval_configs.append(eval_config)
 
-        for repo_entry, s3_path in archives:
-            for trial in range(trials_per_repo):
+    work_items: list[tuple[int, RepoEntry, str, int]] = []
+    for repo_entry, s3_path in archives:
+        for i, eval_config in enumerate(resolved_eval_configs):
+            for trial in range(eval_config.trials_per_repo):
                 work_items.append((i, repo_entry, s3_path, trial))
 
     # Submit with sliding-window concurrency limit
