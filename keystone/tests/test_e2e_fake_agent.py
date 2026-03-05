@@ -281,6 +281,7 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         "--docker_registry_mirror",
         "https://mirror.gcr.io",
         "--no_cache_replay",
+        "--no_evaluator",
     ]
 
     logger.info("Running: %s", " ".join(cmd))
