@@ -230,7 +230,7 @@ def test_codex_streaming():
         app=app,
         image=image,
         timeout=300,
-        env={"OPENAI_API_KEY": api_key},
+        env={"OPENAI_API_KEY": api_key, "CODEX_API_KEY": api_key},
     )
     try:
         logger.info(f"Sandbox created: {sb.object_id}")
@@ -241,6 +241,7 @@ def test_codex_streaming():
             [
                 "env",
                 f"OPENAI_API_KEY={api_key}",
+                f"CODEX_API_KEY={api_key}",
                 "timeout",
                 "60",
                 *CodexProvider().build_command(
