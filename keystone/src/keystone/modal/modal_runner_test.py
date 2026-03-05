@@ -170,7 +170,8 @@ def test_claude_streaming():
         # Use a longer timeout as Claude takes time to initialize
         claude_cmd = shlex.join(
             [
-                f"ANTHROPIC_API_KEY={shlex.quote(api_key)}",
+                "env",
+                f"ANTHROPIC_API_KEY={api_key}",
                 "timeout",
                 "60",
                 *ClaudeProvider().build_command(
@@ -238,7 +239,8 @@ def test_codex_streaming():
         # Run Codex as agent user with explicit env
         codex_cmd = shlex.join(
             [
-                f"OPENAI_API_KEY={shlex.quote(api_key)}",
+                "env",
+                f"OPENAI_API_KEY={api_key}",
                 "timeout",
                 "60",
                 *CodexProvider().build_command(
