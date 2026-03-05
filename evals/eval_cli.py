@@ -68,7 +68,9 @@ def run(
 
     effective_limit = limit if limit is not None else run_config.limit
 
-    resolved_configs = run_config.expand_configs()
+    resolved_configs = [
+        run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)
+    ]
 
     # Apply CLI overrides to all configs
     if no_cache_replay:
@@ -82,7 +84,7 @@ def run(
             cfg.agent_config = cfg.agent_config.model_copy(update={"evaluator": False})
     if no_guardrail:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"guardrail": False})
+            cfg.agent_config = cfg.agent_config.model_copy(update={"no_guardrail": True})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
