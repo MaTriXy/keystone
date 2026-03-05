@@ -128,14 +128,14 @@ def _tarball_cache_key(
     context: object,  # noqa: ARG001
     parameters: dict[str, Any],
 ) -> str | None:
-    """Cache key for archive_repo_task: just the repo URL.
+    """Cache key for archive_repo_task: repo URL + pinned commit hash.
 
-    The tarball is immutable once created (pinned at clone-time HEAD).
+    The tarball is immutable once created (pinned to a specific commit).
     To re-snapshot a repo, bump the cache_prefix or clear Prefect result cache.
     """
     repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
     cache_prefix: str = parameters["s3_cache_prefix"]  # type: ignore[assignment]
-    return f"archive_repo:{cache_prefix}:{repo_entry.repo}"
+    return f"archive_repo:{cache_prefix}:{repo_entry.repo}:{repo_entry.commit_hash}"
 
 
 @task(
@@ -149,42 +149,37 @@ def _tarball_cache_key(
 def archive_repo_task(
     repo_entry: RepoEntry,
     s3_cache_prefix: str,
-) -> tuple[str, str]:
-    """Clone a repo, create a git archive tarball, upload to S3.
+) -> str:
+    """Clone a repo at its pinned commit, create a git archive tarball, upload to S3.
 
-    Returns (s3_tarball_path, commit_hash).
-    Prefect caches this based on (repo_url, s3_cache_prefix).
+    Returns the s3_tarball_path.
+    Prefect caches this based on (repo_url, commit_hash, s3_cache_prefix).
     """
     log = get_run_logger()
     repo_url = repo_entry.repo
     repo_id = repo_entry.id
+    commit_hash = repo_entry.commit_hash
 
     s3_tarball_path = f"{s3_cache_prefix.rstrip('/')}/{repo_id}.tar.gz"
 
     # Check if tarball already exists on S3
     if _s3_exists(s3_tarball_path):
         log.info(f"Tarball already exists at {s3_tarball_path}, skipping clone")
-        # We need the commit hash — store it alongside the tarball
-        meta_path = f"{s3_cache_prefix.rstrip('/')}/{repo_id}.commit"
-        with fsspec.open(meta_path, "r") as f:
-            commit_hash = f.read().strip()  # type: ignore[union-attr]
-        return s3_tarball_path, commit_hash
+        return s3_tarball_path
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         clone_path = Path(tmp_dir) / repo_id
-        pinned_hash = repo_entry.commit_hash
-        if pinned_hash:
-            # Clone full history so we can check out the pinned commit
-            log.info(f"Cloning {repo_url} (pinned to {pinned_hash[:12]})...")
-            _run_git(["clone", repo_url, str(clone_path)])
-            _run_git(["checkout", pinned_hash], cwd=clone_path)
-        else:
-            log.info(f"Cloning {repo_url} (HEAD)...")
-            _run_git(["clone", "--depth=1", repo_url, str(clone_path)])
+        log.info(f"Cloning {repo_url} (pinned to {commit_hash[:12]})...")
+        _run_git(["clone", repo_url, str(clone_path)])
+        _run_git(["checkout", commit_hash], cwd=clone_path)
 
-        # Get HEAD commit
+        # Verify checkout
         result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
-        commit_hash = result.stdout.strip()
+        actual_hash = result.stdout.strip()
+        if actual_hash != commit_hash:
+            raise RuntimeError(
+                f"Checkout mismatch for {repo_id}: expected {commit_hash}, got {actual_hash}"
+            )
         log.info(f"{repo_id} at commit {commit_hash[:12]}")
 
         # Create git archive tarball
@@ -200,15 +195,11 @@ def archive_repo_task(
 
         tarball_bytes = (clone_path / "archive.tar.gz").read_bytes()
 
-        # Upload tarball + commit hash to S3
+        # Upload tarball to S3
         log.info(f"Uploading {len(tarball_bytes)} bytes to {s3_tarball_path}")
         _s3_write_bytes(s3_tarball_path, tarball_bytes)
-        _s3_write_text(
-            f"{s3_cache_prefix.rstrip('/')}/{repo_id}.commit",
-            commit_hash,
-        )
 
-    return s3_tarball_path, commit_hash
+    return s3_tarball_path
 
 
 def _process_repo_task_name(parameters: dict[str, object]) -> str:
@@ -228,7 +219,6 @@ def _process_repo_task_name(parameters: dict[str, object]) -> str:
 def process_repo_task(
     repo_entry: RepoEntry,
     s3_tarball_path: str,
-    commit_hash: str,
     eval_config: EvalConfig,
     trial: int = 0,
 ) -> RepoResult:
@@ -245,8 +235,6 @@ def process_repo_task(
     agent_config = eval_config.agent_config
     s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
     repo_output_prefix = f"{s3_output_prefix}/{repo_id}/trial_{trial}"
-
-    repo_entry.commit_hash = commit_hash
 
     # Skip if result already exists on S3 (enables resuming partial runs)
     existing_result_path = f"{repo_output_prefix}/eval_result.json"
@@ -487,8 +475,8 @@ def _archive_repos(
     repos: list[RepoEntry],
     s3_cache_prefix: str,
     log: Any,
-) -> list[tuple[RepoEntry, str, str]]:
-    """Archive repos to S3 and return (entry, s3_path, commit_hash) tuples."""
+) -> list[tuple[RepoEntry, str]]:
+    """Archive repos to S3 and return (entry, s3_path) tuples."""
     log.info(f"Archiving {len(repos)} repos to S3...")
     archive_futures = []
     for repo_entry in repos:
@@ -499,10 +487,10 @@ def _archive_repos(
         archive_futures.append((repo_entry, future))
 
     wait([f for _, f in archive_futures])
-    archives: list[tuple[RepoEntry, str, str]] = []
+    archives: list[tuple[RepoEntry, str]] = []
     for repo_entry, future in archive_futures:
-        s3_path, commit_hash = future.result()
-        archives.append((repo_entry, s3_path, commit_hash))
+        s3_path = future.result()
+        archives.append((repo_entry, s3_path))
 
     log.info(f"Archiving complete: {len(archives)} repos archived")
     return archives
@@ -513,7 +501,7 @@ DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 100
 
 
 def _submit_with_concurrency_limit(
-    archives: list[tuple[RepoEntry, str, str]],
+    archives: list[tuple[RepoEntry, str]],
     eval_config: EvalConfig,
     trials_per_repo: int,
     max_concurrent: int,
@@ -526,9 +514,9 @@ def _submit_with_concurrency_limit(
     available slots.
     """
     # Build the full work list up front so ordering is deterministic.
-    work_items: list[tuple[RepoEntry, str, str, int]] = [
-        (repo_entry, s3_path, commit_hash, trial)
-        for repo_entry, s3_path, commit_hash in archives
+    work_items: list[tuple[RepoEntry, str, int]] = [
+        (repo_entry, s3_path, trial)
+        for repo_entry, s3_path in archives
         for trial in range(trials_per_repo)
     ]
 
@@ -541,11 +529,10 @@ def _submit_with_concurrency_limit(
         item = next(work_iter, None)
         if item is None:
             return False
-        repo_entry, s3_path, commit_hash, trial = item
+        repo_entry, s3_path, trial = item
         future = process_repo_task.submit(
             repo_entry=repo_entry,
             s3_tarball_path=s3_path,
-            commit_hash=commit_hash,
             eval_config=eval_config,
             trial=trial,
         )
@@ -575,7 +562,7 @@ def _submit_with_concurrency_limit(
 
 
 def _run_eval_phase(
-    archives: list[tuple[RepoEntry, str, str]],
+    archives: list[tuple[RepoEntry, str]],
     eval_config: EvalConfig,
     log: Any,
 ) -> EvalOutput:
@@ -760,7 +747,7 @@ def eval_flow(
     # Build work items across all configs, then use a sliding window to limit
     # the number of concurrently running keystone tasks.
     resolved_eval_configs: list[EvalConfig] = []
-    work_items: list[tuple[int, RepoEntry, str, str, int]] = []  # (config_idx, ...)
+    work_items: list[tuple[int, RepoEntry, str, int]] = []  # (config_idx, repo, s3_path, trial)
     for i, eval_config in enumerate(eval_configs):
         label = eval_config.name or f"config-{i}"
         log.info(f"--- Preparing eval [{label}] ---")
@@ -777,9 +764,9 @@ def eval_flow(
             )
         resolved_eval_configs.append(eval_config)
 
-        for repo_entry, s3_path, commit_hash in archives:
+        for repo_entry, s3_path in archives:
             for trial in range(trials_per_repo):
-                work_items.append((i, repo_entry, s3_path, commit_hash, trial))
+                work_items.append((i, repo_entry, s3_path, trial))
 
     # Submit with sliding-window concurrency limit
     all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[RepoResult]]] = []
@@ -790,11 +777,10 @@ def eval_flow(
         item = next(work_iter, None)
         if item is None:
             return False
-        cfg_idx, repo_entry, s3_path, commit_hash, trial = item
+        cfg_idx, repo_entry, s3_path, trial = item
         future = process_repo_task.submit(
             repo_entry=repo_entry,
             s3_tarball_path=s3_path,
-            commit_hash=commit_hash,
             eval_config=resolved_eval_configs[cfg_idx],
             trial=trial,
         )

@@ -70,12 +70,19 @@ def sample_repo(tmp_path: Path) -> tuple[Path, list[str]]:
     init_git_repo(dest)
     repo_paths.append(str(dest))
 
-    # Write repo list JSONL
+    # Write repo list JSONL (with commit hashes for reproducibility)
     repo_list_path = tmp_path / "repos.jsonl"
     with repo_list_path.open("w") as f:
         for path in repo_paths:
             repo_id = Path(path).name
-            f.write(json.dumps({"id": repo_id, "repo": path}) + "\n")
+            commit_hash = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=path,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+            f.write(json.dumps({"id": repo_id, "repo": path, "commit_hash": commit_hash}) + "\n")
 
     return repo_list_path, repo_paths
 

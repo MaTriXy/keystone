@@ -1,1 +1,1 @@
-{"id": "requests", "rank": 1, "repo": "https://github.com/psf/requests", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python, minimal dependencies, fast test suite; ideal baseline container workload."}
+{"id": "requests", "rank": 1, "repo": "https://github.com/psf/requests", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python, minimal dependencies, fast test suite; ideal baseline container workload.", "commit_hash": "d568f47278492e630cc990a259047c67991d007a"}
