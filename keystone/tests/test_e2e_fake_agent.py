@@ -207,6 +207,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
         "--run_agent_locally_with_dangerously_skip_permissions",
+        "--no_evaluator",
     ]
 
     logger.info("Running: keystone %s", " ".join(cmd))
