@@ -35,11 +35,11 @@ class RepoEntry(BaseModel):
     tests: str | None = None
     difficulty: str | None = None
     notes: str | None = None
-    # Pinned commit — when set before clone, the clone checks out this exact commit
-    commit_hash: str | None = Field(
-        default=None,
-        description="Git commit hash. Pre-populate to pin reproducible evals; "
-        "otherwise filled automatically after clone.",
+    # Pinned commit — the clone checks out this exact commit for reproducibility
+    commit_hash: str = Field(
+        ...,
+        description="Git commit hash. Required for reproducible evals. "
+        "Use evals/scripts/populate_commit_hashes.py to populate.",
     )
 
 
