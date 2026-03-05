@@ -17,7 +17,8 @@ from flow import eval_flow
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
-FAKE_CLAUDE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_claude_agent.py"
+# On Modal, fake_claude_agent.py is pre-installed at this path (see keystone/modal/image.py)
+FAKE_CLAUDE_AGENT_MODAL = "/usr/local/bin/fake_claude_agent.py"
 
 
 def init_git_repo(path: Path) -> None:
@@ -104,7 +105,7 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
         max_budget_usd=1.0,
         timeout_minutes=5,
         evaluator=True,
-        agent_cmd=f"python {FAKE_CLAUDE_AGENT}",
+        agent_cmd=f"python {FAKE_CLAUDE_AGENT_MODAL}",
     )
 
     eval_config = EvalConfig(
