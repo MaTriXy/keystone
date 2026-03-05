@@ -29,19 +29,19 @@ header "Fast tests (no markers)"
 uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "not modal and not local_docker and not agentic and not manual" \
-  -n auto -q "${EXTRA_ARGS[@]}"
+  -q "${EXTRA_ARGS[@]}"
 
 header "local_docker tests"
 uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "local_docker" \
-  -n auto -v "${EXTRA_ARGS[@]}"
+  -v "${EXTRA_ARGS[@]}"
 
 header "modal tests (deterministic, no agentic)"
 uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "modal and not agentic" \
-  -n auto -v "${EXTRA_ARGS[@]}"
+  -v "${EXTRA_ARGS[@]}"
 
 if [ "$SKIP_AGENTIC" = true ]; then
   header "Skipping agentic tests (--skip-agentic)"
@@ -52,4 +52,4 @@ header "agentic tests (non-deterministic)"
 uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "agentic" \
-  -n auto -v "${EXTRA_ARGS[@]}"
+  -v "${EXTRA_ARGS[@]}"
