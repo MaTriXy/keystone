@@ -16,6 +16,7 @@ class LLMModel(str, Enum):
     # Codex models
     CODEX_MINI = "gpt-5.1-codex-mini"
     CODEX = "gpt-5.2-codex"
+    CODEX_53 = "gpt-5.3-codex"
     # OpenCode models (provider/model format — same backends, routed through OpenCode)
     OPENCODE_HAIKU = "anthropic/claude-haiku-4-5"
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
@@ -88,7 +89,9 @@ class AgentConfig(BaseModel):
         ...,
         description="Enable or disable the LLM evaluator fix-up pass.",
     )
-    no_guardrail: bool = Field(default=False, description="Skip guardrail structural checks")
+    guardrail: bool = Field(
+        default=True, description="Enable or disable guardrail structural checks"
+    )
     use_agents_md: bool = Field(
         default=False,
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",

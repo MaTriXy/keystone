@@ -54,7 +54,7 @@ def run(
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
-    no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Skip guardrail checks"),
+    no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Disable guardrail checks"),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
     max_concurrent: int = typer.Option(
         DEFAULT_MAX_CONCURRENT_KEYSTONE,
@@ -96,7 +96,7 @@ def run(
             cfg.agent_config = cfg.agent_config.model_copy(update={"evaluator": False})
     if no_guardrail:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"no_guardrail": True})
+            cfg.agent_config = cfg.agent_config.model_copy(update={"guardrail": False})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
