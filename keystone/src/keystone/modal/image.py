@@ -16,7 +16,17 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
-IMAGE_CACHE_BUST = "2026-02-27T00:45:00"  # bump to force Modal image rebuild
+IMAGE_CACHE_BUST = "2026-03-05T00:00:00"  # bump to force Modal image rebuild
+
+# --- Pinned dependency versions (update these to upgrade) ---
+RUNC_VERSION = "v1.4.0"
+NODEJS_MAJOR_VERSION = "20"  # LTS "Iron", latest point release: 20.20.0
+DEVCONTAINERS_CLI_VERSION = "0.83.3"
+CLAUDE_CODE_VERSION = "2.1.69"
+OPENAI_CODEX_VERSION = "0.107.0"
+OPENCODE_AI_VERSION = "1.2.17"
+CCUSAGE_VERSION = "18.0.8"
+CCUSAGE_CODEX_VERSION = "18.0.8"
 
 
 def create_modal_image() -> modal.Image:
@@ -69,18 +79,24 @@ def create_modal_image() -> modal.Image:
         # Fix runc for Modal/gVisor compatibility
         .run_commands(
             "rm -f $(which runc) || true",
-            "wget https://github.com/opencontainers/runc/releases/download/v1.3.0/runc.amd64",
+            f"wget https://github.com/opencontainers/runc/releases/download/{RUNC_VERSION}/runc.amd64",
             "chmod +x runc.amd64",
             "mv runc.amd64 /usr/local/bin/runc",
         )
         # Install Node.js (required for devcontainer CLI)
         .run_commands(
-            "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
+            f"curl -fsSL https://deb.nodesource.com/setup_{NODEJS_MAJOR_VERSION}.x | bash -",
         )
         .apt_install("nodejs")
-        # Install devcontainer CLI and agent CLIs
+        # Install devcontainer CLI and agent CLIs (all versions pinned)
         .run_commands(
-            "npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex opencode-ai@latest ccusage @ccusage/codex",
+            f"npm install -g"
+            f" @devcontainers/cli@{DEVCONTAINERS_CLI_VERSION}"
+            f" @anthropic-ai/claude-code@{CLAUDE_CODE_VERSION}"
+            f" @openai/codex@{OPENAI_CODEX_VERSION}"
+            f" opencode-ai@{OPENCODE_AI_VERSION}"
+            f" ccusage@{CCUSAGE_VERSION}"
+            f" @ccusage/codex@{CCUSAGE_CODEX_VERSION}",
             "ccusage --version",
         )
         # Add scripts natively
