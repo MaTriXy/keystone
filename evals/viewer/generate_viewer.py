@@ -18,14 +18,14 @@ RUN_NAMES = [
     "2026-03-02_cat_v1",
     "2026-03-02_cat_v1_opencode",
     "2026-03-03_cat_v1_agents_md",
-    "2026-03-04_cat_v1",
+    "2026-03-02_thad_v2",
 ]
 
 RUN_LABELS = {
     "2026-03-02_cat_v1": "Native (baseline)",
     "2026-03-02_cat_v1_opencode": "OpenCode",
     "2026-03-03_cat_v1_agents_md": "AGENTS.md ablation",
-    "2026-03-04_cat_v1": "Native 2026-03-04",
+    "2026-03-02_thad_v2": "Five-model 2026-03-05",
 }
 
 # Canonical model display order & colors per run
@@ -34,6 +34,7 @@ MODEL_META = {
     "claude-haiku": {"label": "claude-haiku", "color": "#EF553B"},
     "codex-gpt-5.2": {"label": "codex-gpt-5.2", "color": "#00CC96"},
     "codex-mini-gpt-5.1": {"label": "codex-mini", "color": "#AB63FA"},
+    "codex-gpt-5.3": {"label": "codex-gpt-5.3", "color": "#FFA15A"},
     "opencode-opus": {"label": "opencode-opus", "color": "#636EFA"},
     "opencode-haiku": {"label": "opencode-haiku", "color": "#EF553B"},
     "opencode-codex": {"label": "opencode-codex", "color": "#00CC96"},
@@ -484,7 +485,7 @@ function categorizeError(errorMsg) {
 
 function modelOrder(run) {
   const models = Object.keys(DATA.runs[run] || {});
-  const order = ["claude-opus","claude-haiku","codex-gpt-5.2","codex-mini-gpt-5.1",
+  const order = ["claude-opus","claude-haiku","codex-gpt-5.2","codex-mini-gpt-5.1","codex-gpt-5.3",
                  "opencode-opus","opencode-haiku","opencode-codex","opencode-codex-mini"];
   return models.sort((a, b) => {
     const ia = order.indexOf(a), ib = order.indexOf(b);

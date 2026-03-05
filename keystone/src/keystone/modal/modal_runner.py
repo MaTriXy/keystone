@@ -159,6 +159,7 @@ class ModalAgentRunner(AgentRunner):
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
+        self._cached_inference_cost: InferenceCost | None = None
 
     def ensure_sandbox(self) -> modal.Sandbox:
         """Create sandbox if not already created. Returns the sandbox."""
@@ -174,7 +175,7 @@ class ModalAgentRunner(AgentRunner):
         self._sandbox = modal.Sandbox.create(
             app=app,
             image=image,
-            timeout=self._timeout_seconds,
+            timeout=self._timeout_seconds * 2,
             region="us-west-2",
             experimental_options={"enable_docker": True},
         )
@@ -276,6 +277,10 @@ class ModalAgentRunner(AgentRunner):
             )
         except Exception:
             if self._sandbox:
+                try:
+                    self._cached_inference_cost = self.run_ccusage(provider.name)
+                except Exception as ccusage_err:
+                    logger.warning("ccusage failed during exception cleanup: %s", ccusage_err)
                 self._sandbox.terminate()
                 self._sandbox = None
             raise
@@ -690,6 +695,8 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
     def get_inference_cost(self, provider_name: str) -> InferenceCost | None:
         """Get inference cost by running ccusage in the sandbox."""
+        if self._cached_inference_cost is not None:
+            return self._cached_inference_cost
         return self.run_ccusage(provider_name)
 
     def cleanup(self) -> None:

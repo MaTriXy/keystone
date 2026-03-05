@@ -29,12 +29,12 @@
       "trials_per_repo": 1,
     },
     {
-      "name": "codex-gpt-5.2",
+      "name": "codex-gpt-5.3",
       "agent_config": {
         "provider": "codex",
         "evaluator": false,
         "guardrail": false,
-        "model": "gpt-5.2-codex",
+        "model": "gpt-5.3-codex",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
       },
@@ -47,18 +47,6 @@
         "evaluator": false,
         "guardrail": false,
         "model": "gpt-5.1-codex-mini",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
-      },
-      "trials_per_repo": 1,
-    },
-    {
-      "name": "codex-gpt-5.3",
-      "agent_config": {
-        "provider": "codex",
-        "evaluator": false,
-        "guardrail": false,
-        "model": "gpt-5.3-codex",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
       },

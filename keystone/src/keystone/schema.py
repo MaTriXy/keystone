@@ -42,6 +42,7 @@ class LLMModel(str, Enum):
     # Codex models
     CODEX_MINI = "gpt-5.1-codex-mini"
     CODEX = "gpt-5.2-codex"
+    CODEX_53 = "gpt-5.3-codex"
     # OpenCode models (provider/model format — same backends, routed through OpenCode)
     OPENCODE_HAIKU = "anthropic/claude-haiku-4-5"
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
