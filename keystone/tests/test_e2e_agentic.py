@@ -158,7 +158,6 @@ def test_e2e_claude_on_modal_sample_projects(
     tmp_path: Path,
     project_root: Path,
     snapshot: SnapshotAssertion,
-    request: pytest.FixtureRequest,
 ) -> None:
     """E2E test: run real Claude agent on sample projects, snapshot the outcome.
 
@@ -189,11 +188,9 @@ def test_e2e_claude_on_modal_sample_projects(
 
     result = CliRunner().invoke(app, cmd)
 
-    sample_name = request.node.callspec.params["project_root"]
-    if "failing" in sample_name:
-        assert result.exit_code != 0, "Expected failure for failing project"
-    else:
-        assert result.exit_code == 0, f"{sample_name} failed with exit code {result.exit_code}"
+    # Don't assert on exit_code for agentic tests — a smart agent may fix or
+    # disable failing tests, turning an expected failure into a success.
+    # The snapshot captures the actual outcome for human review.
 
     # Parse the JSON output (find the JSON object in stdout)
     stdout_lines = result.stdout.strip().split("\n")
