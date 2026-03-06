@@ -252,7 +252,7 @@ def process_repo_task(
             work_path = Path(tmp_dir) / repo_id
 
             # Step 1: Download and extract tarball
-            log.info(f"[{repo_id}] Downloading tarball from {s3_tarball_path}")
+            log.debug(f"[{repo_id}] Downloading tarball from {s3_tarball_path}")
             tarball_bytes = _s3_read_bytes(s3_tarball_path)
             tarball_file = Path(tmp_dir) / "archive.tar.gz"
             tarball_file.write_bytes(tarball_bytes)
@@ -338,19 +338,18 @@ def process_repo_task(
 
             log.info(f"[{repo_id}] Running keystone...")
 
-            # Stream keystone output: status/summary markers at INFO (visible in
-            # Prefect UI), everything else at DEBUG (available if needed).
+            # Stream keystone output: only forward status/summary markers to
+            # Prefect (get_run_logger ships ALL levels to Prefect Cloud, so
+            # sending every agent line would flood the connection).
             def _log_stdout(line: str) -> None:
                 if (
                     "BOOTSTRAP_DEVCONTAINER_STATUS:" in line
                     or "BOOTSTRAP_DEVCONTAINER_SUMMARY:" in line
                 ):
                     log.info(f"[{repo_id}] {line}")
-                else:
-                    log.debug(f"[{repo_id}] {line}")
 
             def _log_stderr(line: str) -> None:
-                log.debug(f"[{repo_id}] {line}")
+                pass  # drop — avoid flooding Prefect Cloud with agent stderr
 
             proc = run_process(
                 cmd,
@@ -403,7 +402,7 @@ def process_repo_task(
                             f"{repo_output_prefix}/devcontainer.tar.gz",
                             tarball,
                         )
-                        log.info(
+                        log.debug(
                             f"[{repo_id}] Uploaded devcontainer tarball to "
                             f"{repo_output_prefix}/devcontainer.tar.gz"
                         )
@@ -416,11 +415,11 @@ def process_repo_task(
                         f"{repo_output_prefix}/agent_dir.tar.gz",
                         agent_dir_file.read_bytes(),
                     )
-                    log.info(
+                    log.debug(
                         f"[{repo_id}] Uploaded agent dir tarball to "
                         f"{repo_output_prefix}/agent_dir.tar.gz"
                     )
-                log.info(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")
+                log.debug(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")
             except Exception as upload_err:
                 log.warning(f"[{repo_id}] Failed to upload to S3: {upload_err}")
 
@@ -502,7 +501,7 @@ def _archive_repos(
     return archives
 
 
-DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 200
+DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 50
 """Maximum number of process_repo tasks running concurrently (across all configs)."""
 
 

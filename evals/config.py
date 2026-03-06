@@ -94,7 +94,7 @@ class AgentConfig(BaseModel):
         default=True, description="Enable or disable guardrail structural checks"
     )
     use_agents_md: bool = Field(
-        default=False,
+        default=True,
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",
     )
 

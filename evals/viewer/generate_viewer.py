@@ -19,6 +19,8 @@ RUN_NAMES = [
     "2026-03-02_cat_v1_opencode",
     "2026-03-03_cat_v1_agents_md",
     "2026-03-02_thad_v2",
+    "2026-03-05_cat_v1",
+    "2026-03-05_cat_v2",
 ]
 
 RUN_LABELS = {
@@ -26,6 +28,8 @@ RUN_LABELS = {
     "2026-03-02_cat_v1_opencode": "OpenCode",
     "2026-03-03_cat_v1_agents_md": "AGENTS.md ablation",
     "2026-03-02_thad_v2": "Five-model 2026-03-05",
+    "2026-03-05_cat_v1": "Four-model 2026-03-05 (v1)",
+    "2026-03-05_cat_v2": "Four-model 2026-03-05 (v2)",
 }
 
 # Canonical model display order & colors per run
@@ -239,6 +243,7 @@ def build_data(
         "repo_list": repo_list,
         "model_meta": MODEL_META,
         "rerun_meta": rerun_meta,
+        "s3_prefix": s3_prefix,
     }
 
 
@@ -370,6 +375,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                line-height: 1; transition: all .15s; }
   .rerun-btn:hover { border-color: #6366f1; color: #a78bfa; background: #1e2235; }
 
+  .cell-actions { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle;
+                  opacity: 0; transition: opacity .15s; }
+  td.result-cell:hover .cell-actions { opacity: 1; }
+  .cell-btn { background: none; border: 1px solid transparent; border-radius: 3px;
+              color: #475569; cursor: pointer; font-size: 11px; padding: 1px 3px;
+              line-height: 1; transition: all .15s; }
+  .cell-btn:hover { border-color: #6366f1; color: #a78bfa; background: #1e2235; }
+
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+                     z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .confirm-overlay.hidden { display: none; }
+  .confirm-box { background: #1a1d27; border: 1px solid #3d4163; border-radius: 10px;
+                 padding: 20px 24px; max-width: 480px; width: 90%; }
+  .confirm-box h2 { font-size: 15px; color: #fbbf24; margin-bottom: 8px; }
+  .confirm-box p { font-size: 13px; color: #94a3b8; margin-bottom: 16px; line-height: 1.5; }
+  .confirm-box .rerun-cmd { margin-bottom: 12px; }
+  .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
   .rerun-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
                    z-index: 1000; display: flex; align-items: center; justify-content: center; }
   .rerun-overlay.hidden { display: none; }
@@ -402,6 +425,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="rerun-actions">
       <button class="btn" onclick="closeRerun()">Close</button>
       <button class="btn primary" id="rerunCopyBtn" onclick="copyRerunCmd()">Copy command</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay hidden" id="confirmOverlay" onclick="closeConfirm(event)">
+  <div class="confirm-box" onclick="event.stopPropagation()">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmMsg"></p>
+    <div class="rerun-cmd-label">Command:</div>
+    <pre class="rerun-cmd" id="confirmCmd"></pre>
+    <div class="confirm-actions">
+      <button class="btn" onclick="closeConfirm()">Cancel</button>
+      <button class="btn primary" id="confirmCopyBtn" onclick="copyConfirmCmd()">Copy &amp; close</button>
     </div>
   </div>
 </div>
@@ -660,16 +696,21 @@ function renderTable() {
 
     const cells = models.map(m => {
       const r = (runData[m] || {})[repo];
-      if (!r) return `<td class="result-cell"><span class="badge missing">—</span></td>`;
+      const hasData = !!r;
+      const cellBtns = `<span class="cell-actions">` +
+        `<button class="cell-btn" title="Copy S3 path" onclick="copyS3Path(event,'${currentRun}','${m}','${repo}')">&#128203;</button>` +
+        `<button class="cell-btn" title="Rerun this repo+model" onclick="rerunRepo(event,'${currentRun}','${m}','${repo}',${hasData})">&#x21ba;</button>` +
+        `</span>`;
+      if (!r) return `<td class="result-cell"><span class="badge missing">—</span>${cellBtns}</td>`;
       if (r.success) {
-        return `<td class="result-cell"><span class="badge pass">✓</span></td>`;
+        return `<td class="result-cell"><span class="badge pass">✓</span>${cellBtns}</td>`;
       }
       const cat = categorizeError(r.error);
       const isInfra = INFRA_CATEGORIES.has(cat);
       if (isInfra) {
-        return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span></td>`;
+        return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span>${cellBtns}</td>`;
       }
-      return `<td class="result-cell"><span class="badge fail">✗</span></td>`;
+      return `<td class="result-cell"><span class="badge fail">✗</span>${cellBtns}</td>`;
     }).join("");
 
     tr.innerHTML = `
@@ -835,6 +876,80 @@ function copyRerunCmd() {
     btn.textContent = "Copied!";
     setTimeout(() => { btn.textContent = "Copy command"; }, 1500);
   });
+}
+
+function getS3Path(run, model, repo) {
+  const prefix = (DATA.s3_prefix || "s3://int8-datasets/keystone/evals/").replace(/\\/+$/, "");
+  return prefix + "/" + run + "/" + model + "/" + repo + "/trial_0/";
+}
+
+function getRerunCmd(run, model) {
+  const meta = (DATA.rerun_meta[run] || {})[model];
+  if (meta && meta.s3_uri) {
+    return "uv run python evals/eval_cli.py --config_file " + meta.s3_uri;
+  }
+  // Fallback: point at the rerun.json path
+  const prefix = (DATA.s3_prefix || "s3://int8-datasets/keystone/evals/").replace(/\\/+$/, "");
+  return "uv run python evals/eval_cli.py --config_file " + prefix + "/" + run + "/" + model + "/rerun.json";
+}
+
+function copyS3Path(e, run, model, repo) {
+  e.stopPropagation();
+  const path = getS3Path(run, model, repo);
+  navigator.clipboard.writeText(path).then(() => {
+    showToast("Copied: " + path);
+  });
+}
+
+function rerunRepo(e, run, model, repo, hasData) {
+  e.stopPropagation();
+  const cmd = getRerunCmd(run, model);
+  if (hasData) {
+    // Show confirmation overlay
+    document.getElementById("confirmTitle").textContent = "Rerun " + getModelMeta(model).label + " / " + repo + "?";
+    document.getElementById("confirmMsg").innerHTML =
+      "There is <b>preexisting data</b> for this test. Running again will overwrite the existing eval output.";
+    document.getElementById("confirmCmd").textContent = cmd;
+    document.getElementById("confirmCopyBtn").textContent = "Copy command";
+    document.getElementById("confirmOverlay").classList.remove("hidden");
+  } else {
+    // No existing data — just copy directly
+    navigator.clipboard.writeText(cmd).then(() => {
+      showToast("Copied rerun command");
+    });
+  }
+}
+
+function closeConfirm(e) {
+  if (e && e.target && e.target !== document.getElementById("confirmOverlay")) return;
+  document.getElementById("confirmOverlay").classList.add("hidden");
+}
+
+function copyConfirmCmd() {
+  const cmd = document.getElementById("confirmCmd").textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById("confirmCopyBtn");
+    btn.textContent = "Copied!";
+    setTimeout(() => {
+      closeConfirm();
+      btn.textContent = "Copy command";
+    }, 800);
+  });
+}
+
+function showToast(msg) {
+  let t = document.getElementById("toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "toast";
+    t.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);" +
+      "background:#312e81;color:#c7d2fe;padding:8px 16px;border-radius:6px;font-size:13px;" +
+      "z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = "1";
+  setTimeout(() => { t.style.opacity = "0"; }, 1800);
 }
 
 // Init
