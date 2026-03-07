@@ -1,4 +1,13 @@
-"""Configuration schemas for the eval harness."""
+"""Configuration schemas for the eval harness.
+
+Classes are organized into two groups:
+
+1. **Input / configuration** — describe *what* to run:
+   - RepoEntry, KeystoneConfig, EvalConfig, EvalRunConfig
+
+2. **Output / results** — describe *what happened*:
+   - KeystoneRepoResult, EvalResult
+"""
 
 import os
 from enum import Enum
@@ -6,6 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from keystone.schema import BootstrapResult, VersionInfo
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
 
 
 class LLMModel(str, Enum):
@@ -23,6 +38,11 @@ class LLMModel(str, Enum):
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
     OPENCODE_CODEX_MINI = "openai/gpt-5.1-codex-mini"
     OPENCODE_CODEX = "openai/gpt-5.2-codex"
+
+
+# ---------------------------------------------------------------------------
+# Input: repo specification
+# ---------------------------------------------------------------------------
 
 
 class RepoEntry(BaseModel):
@@ -45,9 +65,18 @@ class RepoEntry(BaseModel):
     )
 
 
-# FIXME: Would it make sense to call this KeystoneConfig?  These are the options that feed the Keystone CLI, I believe.
-class AgentConfig(BaseModel):
-    """Configuration for the agent execution."""
+# ---------------------------------------------------------------------------
+# Input: keystone agent configuration
+# ---------------------------------------------------------------------------
+
+
+class KeystoneConfig(BaseModel):
+    """Configuration for a single Keystone CLI invocation.
+
+    These fields map directly to Keystone CLI flags.  Every field that
+    materially affects the agent run is required (no implicit defaults)
+    so that config files are self-documenting.
+    """
 
     max_budget_usd: float = Field(..., description="Maximum budget per repo")
     timeout_minutes: int = Field(..., description="Timeout per repo in minutes")
@@ -66,26 +95,27 @@ class AgentConfig(BaseModel):
         default=False, description="Skip cache lookup, force fresh execution"
     )
 
-    # Provider and agent command
+    # Provider and agent command.
     provider: str = Field(
         default="claude", description="LLM provider name (claude, codex, or opencode)"
     )
     agent_cmd: str | None = Field(
         default=None, description="Agent command override (default: inferred from provider)"
     )
-    # Model selection
+
+    # Model selection.
     model: LLMModel | None = Field(
         default=None,
         description="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
     )
 
-    # When True, run the agent locally instead of on Modal
+    # When True, run the agent locally instead of on Modal.
     run_agent_locally: bool = Field(
         default=False,
         description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
     )
 
-    # Feature toggles
+    # Feature toggles — all required so config files are explicit.
     evaluator: bool = Field(
         ...,
         description="Enable or disable the LLM evaluator fix-up pass.",
@@ -96,84 +126,48 @@ class AgentConfig(BaseModel):
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
     )
 
-    # FIXME: This should be specified at the level of EvalRunConfig.  Whenever we're launching Keystone, we should propagate those "wider-scoped" configs down into the relevant code so that they're avaiable to configure parameters.
-    # Docker Hub mirror for pull-through caching
-    docker_registry_mirror: str = Field(
-        default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),
-        description=(
-            "URL of Docker Hub pull-through cache mirror.  "
-            "Set the DOCKER_REGISTRY_MIRROR environment variable or pass explicitly."
-        ),
-    )
+
+# ---------------------------------------------------------------------------
+# Input: single eval configuration (one KeystoneConfig + trial settings)
+# ---------------------------------------------------------------------------
 
 
-# FIXME: This is the EvalConfig only for a single AgentConfig (which might be renamed to KeystoneConfig) -- maybe this should be called EvalConfiguration?
 class EvalConfig(BaseModel):
-    """Top-level eval configuration."""
+    """One eval configuration: a KeystoneConfig plus trial/output settings.
 
-    # Optional human-readable name for this eval configuration
+    ``s3_output_prefix`` and ``s3_repo_cache_prefix`` are **not** meant to
+    be set in config files.  They are populated by
+    ``EvalRunConfig.resolve_config`` from the run-level S3 prefixes.
+    """
+
+    # Human-readable name — required so output directories are meaningful.
     name: str | None = Field(..., description="Name for this eval configuration")
 
-    # FIXME: Maybe should be called KeystoneConfig?
-    agent_config: AgentConfig = Field(...)
+    keystone_config: KeystoneConfig = Field(
+        ..., description="Keystone agent configuration for this eval."
+    )
 
     trials_per_repo: int = Field(
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",
     )
-    # FIXME: It doesn't make sense to have this value here.
-    # These are computed from EvalRunConfig globals; not set directly in config files.
+
+    # Resolved by EvalRunConfig.resolve_config — not set directly in config files.
     s3_output_prefix: str = Field(
-        ...,
+        default="",
         description="S3 prefix for per-repo results (set by EvalRunConfig, not manually).",
     )
     s3_repo_cache_prefix: str = Field(
-        ...,
+        default="",
         description="S3 prefix for cached repo tarballs (set by EvalRunConfig, not manually).",
     )
 
 
-# FIXME: rename to KeystoneRepoResult
-class RepoResult(BaseModel):
-    """Result from one trial: a single application of Keystone with a particular configuration to a single repo."""
-
-    repo_entry: RepoEntry
-    agent_config: AgentConfig | None = None
-    trial_index: int | None = None
-
-    # Differs from agent_config.success? -- Keystone can succeed but we can fail to package the result?
-    # FIXME: Actually, document what causes this to be False.
-    success: bool
-
-    error_message: str | None = None
-
-    # FIXME: Use the proper type here: BootstrapResult
-    bootstrap_result: dict[str, Any] | None = None
+# ---------------------------------------------------------------------------
+# Input: top-level run configuration
+# ---------------------------------------------------------------------------
 
 
-# FIXME: Let's be consistent with naming and use a Result suffix instead of Output.
-class EvalOutput(BaseModel):
-    """Output of the entire eval run.
-
-    This type is less important because we want to be able to analyze a partially completed run before this global summary is available.
-    """
-
-    # FIXME: Let's use a proper type here: VersionInfo
-    keystone_version: dict[str, Any]
-
-    # FIXME: This doesn't make sense to use a dict here.  Use a proper type.  I think this should be EvalRunConfig.  It shouldn't ever be None.
-    eval_config: dict[str, Any] | None = Field(
-        default=None,
-        description="Snapshot of the EvalConfig used for this run.",
-    )
-
-    # FIXME: We don't need repos here anymore -- the versions are already pre-pinned.  Delete this field.
-    repos: list[RepoEntry]  # Input repos with commit_hash pinned
-
-    results: list[RepoResult]
-
-
-# FIXME: Move all the input/config classes above all of the output/result classes.
 class EvalRunConfig(BaseModel):
     """Top-level configuration file supporting multiple eval configurations.
 
@@ -203,6 +197,15 @@ class EvalRunConfig(BaseModel):
         description="Global S3 prefix for cached repo tarballs (shared across all configs).",
     )
 
+    # Docker Hub mirror for pull-through caching.
+    docker_registry_mirror: str = Field(
+        default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),
+        description=(
+            "URL of Docker Hub pull-through cache mirror.  "
+            "Set the DOCKER_REGISTRY_MIRROR environment variable or pass explicitly."
+        ),
+    )
+
     def resolve_config(self, eval_config: EvalConfig, index: int) -> EvalConfig:
         """Return a copy with s3 prefixes built from the global values."""
         name = eval_config.name or f"config-{index}"
@@ -213,6 +216,74 @@ class EvalRunConfig(BaseModel):
                 "s3_repo_cache_prefix": self.s3_repo_cache_prefix,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Output: per-repo result
+# ---------------------------------------------------------------------------
+
+
+class KeystoneRepoResult(BaseModel):
+    """Result from one trial: a single application of Keystone to a single repo.
+
+    ``success`` is False when:
+    - The keystone CLI process exits with a non-zero return code, OR
+    - An infrastructure error prevents keystone from running (e.g. tarball
+      download failure, Prefect task crash).
+    """
+
+    repo_entry: RepoEntry
+    keystone_config: KeystoneConfig | None = None
+    trial_index: int | None = None
+
+    success: bool
+    error_message: str | None = None
+
+    bootstrap_result: BootstrapResult | None = None
+
+    def __init__(self, **data: Any) -> None:
+        # Accept raw dict for bootstrap_result (e.g. from JSON deserialization).
+        br = data.get("bootstrap_result")
+        if isinstance(br, dict):
+            data["bootstrap_result"] = BootstrapResult(**br)
+        super().__init__(**data)
+
+
+# ---------------------------------------------------------------------------
+# Output: full eval run result
+# ---------------------------------------------------------------------------
+
+
+class EvalResult(BaseModel):
+    """Output of the entire eval run.
+
+    This type is less important for analysis because we want to inspect
+    partially completed runs before this global summary is available.
+    Individual ``KeystoneRepoResult`` files uploaded per-repo are the
+    primary source of truth.
+    """
+
+    keystone_version: VersionInfo
+    eval_config: EvalConfig | None = Field(
+        default=None,
+        description="Snapshot of the EvalConfig used for this run.",
+    )
+    results: list[KeystoneRepoResult]
+
+    def __init__(self, **data: Any) -> None:
+        # Accept raw dict for keystone_version (e.g. from JSON deserialization).
+        kv = data.get("keystone_version")
+        if isinstance(kv, dict):
+            data["keystone_version"] = VersionInfo(**kv)
+        ec = data.get("eval_config")
+        if isinstance(ec, dict):
+            data["eval_config"] = EvalConfig(**ec)
+        super().__init__(**data)
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
 
 
 def resolve_path(path: str | Path) -> Path:

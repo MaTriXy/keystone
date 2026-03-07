@@ -17,7 +17,7 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
+from config import EvalConfig, EvalRunConfig, KeystoneConfig, LLMModel
 from eval_cli import app
 from typer.testing import CliRunner
 
@@ -122,10 +122,12 @@ def test_eval_cli_fake_agents_config_file(
         configs.append(
             EvalConfig(
                 name=name,
-                agent_config=AgentConfig(
+                keystone_config=KeystoneConfig(
                     max_budget_usd=1.0,
                     timeout_minutes=1,
                     evaluator=True,
+                    guardrail=False,
+                    use_agents_md=True,
                     agent_cmd=agent_cmd,
                     provider=provider,
                     model=model,

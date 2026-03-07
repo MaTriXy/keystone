@@ -6,10 +6,10 @@
   "configs": [
     {
       "name": "claude-opus",
-      "agent_config": {
+      "keystone_config": {
         "provider": "claude",
         "evaluator": false,
-        "guardrail": false,
+        "guardrail": false, "use_agents_md": true,
         "model": "claude-opus-4-6",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
@@ -17,10 +17,10 @@
     },
     {
       "name": "claude-haiku",
-      "agent_config": {
+      "keystone_config": {
         "provider": "claude",
         "evaluator": false,
-        "guardrail": false,
+        "guardrail": false, "use_agents_md": true,
         "model": "claude-haiku-4-5-20251001",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
@@ -28,10 +28,10 @@
     },
     {
       "name": "codex-gpt-5.2",
-      "agent_config": {
+      "keystone_config": {
         "provider": "codex",
         "evaluator": false,
-        "guardrail": false,
+        "guardrail": false, "use_agents_md": true,
         "model": "gpt-5.2-codex",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
@@ -39,10 +39,10 @@
     },
     {
       "name": "codex-mini-gpt-5.1",
-      "agent_config": {
+      "keystone_config": {
         "provider": "codex",
         "evaluator": false,
-        "guardrail": false,
+        "guardrail": false, "use_agents_md": true,
         "model": "gpt-5.1-codex-mini",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60

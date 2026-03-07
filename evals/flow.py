@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import fsspec
-from config import EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
+from config import EvalConfig, EvalResult, KeystoneRepoResult, RepoEntry, resolve_path
 from prefect import flow, get_run_logger, task
 from prefect.futures import PrefectFuture, wait
 
@@ -107,7 +107,7 @@ def _save_rerun_manifest(
             f"(originally {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')})"
         ),
         "repo_list_path": repo_list_path,
-        "limit": limit,
+        "limit_to_first_n_repos": limit,
         "s3_output_prefix": parent_prefix + "/",
         "s3_repo_cache_prefix": eval_config.s3_repo_cache_prefix,
         "configs": [config_dict],
@@ -221,7 +221,8 @@ def process_repo_task(
     s3_tarball_path: str,
     eval_config: EvalConfig,
     trial: int = 0,
-) -> RepoResult:
+    docker_registry_mirror: str = "",
+) -> KeystoneRepoResult:
     """Process a single repo.
 
     1. Download tarball from S3
@@ -232,7 +233,7 @@ def process_repo_task(
     """
     log = get_run_logger()
     repo_id = repo_entry.id
-    agent_config = eval_config.agent_config
+    keystone_config = eval_config.keystone_config
     s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
     repo_output_prefix = f"{s3_output_prefix}/{repo_id}/trial_{trial}"
 
@@ -243,7 +244,7 @@ def process_repo_task(
         try:
             existing_bytes = _s3_read_bytes(existing_result_path)
             existing_data = json.loads(existing_bytes)
-            return RepoResult(**existing_data)
+            return KeystoneRepoResult(**existing_data)
         except Exception as e:
             log.warning(f"[{repo_id}] Failed to parse existing result, re-running: {e}")
 
@@ -293,47 +294,47 @@ def process_repo_task(
                 "--test_artifacts_dir",
                 str(test_artifacts_dir),
                 "--max_budget_usd",
-                str(agent_config.max_budget_usd),
+                str(keystone_config.max_budget_usd),
                 "--output_file",
                 str(result_file),
                 "--agent_time_limit_seconds",
-                str(agent_config.timeout_minutes * 60),
+                str(keystone_config.timeout_minutes * 60),
                 "--provider",
-                agent_config.provider,
+                keystone_config.provider,
             ]
 
-            if agent_config.run_agent_locally:
+            if keystone_config.run_agent_locally:
                 cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
             else:
-                if not agent_config.docker_registry_mirror:
+                if not docker_registry_mirror:
                     raise RuntimeError(
                         "DOCKER_REGISTRY_MIRROR environment variable is not set. "
                         "Export it (e.g. export DOCKER_REGISTRY_MIRROR=https://mirror.gcr.io) "
-                        "or pass docker_registry_mirror in the agent config."
+                        "or pass docker_registry_mirror in the run config."
                     )
                 cmd.extend(
                     [
                         "--agent_in_modal",
                         "--docker_registry_mirror",
-                        agent_config.docker_registry_mirror,
+                        docker_registry_mirror,
                     ]
                 )
 
-            if not agent_config.evaluator:
+            if not keystone_config.evaluator:
                 cmd.append("--no_evaluator")
-            if agent_config.agent_cmd is not None:
-                cmd.extend(["--agent_cmd", agent_config.agent_cmd])
-            if agent_config.model is not None:
-                cmd.extend(["--model", agent_config.model.value])
-            if agent_config.log_db:
-                cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
-            if agent_config.require_cache_hit:
+            if keystone_config.agent_cmd is not None:
+                cmd.extend(["--agent_cmd", keystone_config.agent_cmd])
+            if keystone_config.model is not None:
+                cmd.extend(["--model", keystone_config.model.value])
+            if keystone_config.log_db:
+                cmd.extend(["--log_db", str(resolve_path(keystone_config.log_db))])
+            if keystone_config.require_cache_hit:
                 cmd.append("--require_cache_hit")
-            if agent_config.no_cache_replay:
+            if keystone_config.no_cache_replay:
                 cmd.append("--no_cache_replay")
-            if not agent_config.guardrail:
+            if not keystone_config.guardrail:
                 cmd.append("--no_guardrail")
-            if agent_config.use_agents_md:
+            if keystone_config.use_agents_md:
                 cmd.append("--use_agents_md")
 
             log.info(f"[{repo_id}] Running keystone...")
@@ -353,7 +354,7 @@ def process_repo_task(
 
             # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
             # Prevents a hung keystone process from blocking the pipeline forever.
-            hard_timeout = (agent_config.timeout_minutes * 60) + 300
+            hard_timeout = (keystone_config.timeout_minutes * 60) + 300
 
             proc = run_process(
                 cmd,
@@ -377,12 +378,12 @@ def process_repo_task(
             if not success:
                 log.error(f"[{repo_id}] keystone failed (exit code {proc.returncode})")
 
-            result = RepoResult(
+            result = KeystoneRepoResult(
                 repo_entry=repo_entry,
                 success=success,
                 error_message=error_message,
                 bootstrap_result=bootstrap_result,
-                agent_config=agent_config,
+                keystone_config=keystone_config,
                 trial_index=trial,
             )
 
@@ -442,11 +443,11 @@ def process_repo_task(
         raise
     except Exception as e:
         error_msg = f"{e}\n{traceback.format_exc()}"
-        result = RepoResult(
+        result = KeystoneRepoResult(
             repo_entry=repo_entry,
             success=False,
             error_message=error_msg,
-            agent_config=eval_config.agent_config,
+            keystone_config=eval_config.keystone_config,
             trial_index=trial,
         )
         # Try to upload failure result
@@ -510,170 +511,18 @@ DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 50
 """Maximum number of process_repo tasks running concurrently (across all configs)."""
 
 
-def _submit_with_concurrency_limit(
-    archives: list[tuple[RepoEntry, str]],
-    eval_config: EvalConfig,
-    trials_per_repo: int,
-    max_concurrent: int,
-    log: Any,
-) -> list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]:
-    """Submit process_repo tasks with a sliding-window concurrency limit.
-
-    At most *max_concurrent* tasks will be running (not yet finished) at any
-    time.  As running tasks complete, new ones are submitted to fill the
-    available slots.
-    """
-    # Build the full work list up front so ordering is deterministic.
-    work_items: list[tuple[RepoEntry, str, int]] = [
-        (repo_entry, s3_path, trial)
-        for repo_entry, s3_path in archives
-        for trial in range(trials_per_repo)
-    ]
-
-    all_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
-    pending_futures: list[PrefectFuture[RepoResult]] = []
-    work_iter = iter(work_items)
-
-    def _submit_next() -> bool:
-        """Submit the next work item. Returns False when exhausted."""
-        item = next(work_iter, None)
-        if item is None:
-            return False
-        repo_entry, s3_path, trial = item
-        future = process_repo_task.submit(
-            repo_entry=repo_entry,
-            s3_tarball_path=s3_path,
-            eval_config=eval_config,
-            trial=trial,
-        )
-        all_futures.append((repo_entry, trial, future))
-        pending_futures.append(future)
-        return True
-
-    # Fill initial window
-    for _ in range(min(max_concurrent, len(work_items))):
-        _submit_next()
-
-    log.info(
-        f"Submitted initial batch of {len(pending_futures)} tasks "
-        f"(max_concurrent={max_concurrent}, total={len(work_items)})"
-    )
-
-    # As tasks finish, submit replacements.
-    # Use a short timeout so we can backfill slots as soon as *any* task
-    # finishes, rather than waiting for ALL pending tasks (which causes a
-    # single slow task to block the entire pipeline).
-    while pending_futures:
-        done, not_done = wait(pending_futures, timeout=5)
-        pending_futures = list(not_done)
-        for _ in range(len(done)):
-            if not _submit_next():
-                break
-
-    return all_futures
-
-
-def _run_eval_phase(
-    archives: list[tuple[RepoEntry, str]],
-    eval_config: EvalConfig,
-    log: Any,
-) -> EvalOutput:
-    """Run keystone on archived repos and return results."""
-    total = len(archives)
-    trials_per_repo = eval_config.trials_per_repo
-
-    # When running multiple trials, force disable caching
-    if trials_per_repo > 1 and not eval_config.agent_config.no_cache_replay:
-        log.info(f"trials_per_repo={trials_per_repo} > 1: forcing --no_cache_replay")
-        eval_config = eval_config.model_copy(
-            update={
-                "agent_config": eval_config.agent_config.model_copy(
-                    update={"no_cache_replay": True}
-                )
-            }
-        )
-
-    total_tasks = total * trials_per_repo
-    log.info(
-        f"Running keystone on {total} repos"
-        f" ({trials_per_repo} trial(s) each, {total_tasks} total tasks)..."
-    )
-    process_futures = _submit_with_concurrency_limit(
-        archives=archives,
-        eval_config=eval_config,
-        trials_per_repo=trials_per_repo,
-        max_concurrent=DEFAULT_MAX_CONCURRENT_KEYSTONE,
-        log=log,
-    )
-    results: list[RepoResult] = []
-    succeeded = 0
-    failed = 0
-    for repo_entry, trial, future in process_futures:
-        trial_label = f" trial={trial}"
-        try:
-            result = future.result()
-            results.append(result)
-            succeeded += 1
-            remaining = total_tasks - succeeded - failed
-            log.info(
-                f"repo id={repo_entry.id}{trial_label} finished with SUCCESS, "
-                f"{remaining} tasks remain in the eval."
-            )
-        except Exception as e:
-            failed += 1
-            remaining = total_tasks - succeeded - failed
-            log.info(
-                f"repo id={repo_entry.id}{trial_label} finished with FAILURE, "
-                f"{remaining} tasks remain in the eval."
-            )
-            results.append(
-                RepoResult(
-                    repo_entry=repo_entry,
-                    success=False,
-                    error_message=str(e),
-                    agent_config=eval_config.agent_config,
-                    trial_index=trial,
-                )
-            )
-
-    # Build output
-    version_info = get_version_info()
-    pinned_repos = [r.repo_entry for r in results]
-
-    output = EvalOutput(
-        keystone_version=version_info.model_dump(),
-        eval_config=eval_config.model_dump(),
-        repos=pinned_repos,
-        results=results,
-    )
-
-    # Upload summary to S3
-    s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
-    try:
-        _s3_write_text(
-            f"{s3_output_prefix}/eval_summary.json",
-            json.dumps(output.model_dump(), indent=2),
-        )
-        log.info(f"Wrote eval summary to {s3_output_prefix}/eval_summary.json")
-    except Exception as e:
-        log.warning(f"Failed to upload eval summary to S3: {e}")
-
-    log.info(f"Complete: {succeeded}/{total_tasks} succeeded, {failed}/{total_tasks} failed")
-    return output
-
-
 def _collect_eval_results(
     eval_config: EvalConfig,
-    process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]],
+    process_futures: list[tuple[RepoEntry, int, PrefectFuture[KeystoneRepoResult]]],
     log: Any,
     repo_list_path: str | None = None,
     limit: int | None = None,
     git_commit: str = "unknown",
     git_is_dirty: bool = False,
-) -> EvalOutput:
-    """Collect results from already-completed futures and build EvalOutput."""
+) -> EvalResult:
+    """Collect results from already-completed futures and build EvalResult."""
     total_tasks = len(process_futures)
-    results: list[RepoResult] = []
+    results: list[KeystoneRepoResult] = []
     succeeded = 0
     failed = 0
     for repo_entry, trial, future in process_futures:
@@ -695,23 +544,21 @@ def _collect_eval_results(
                 f"{remaining} tasks remain in the eval."
             )
             results.append(
-                RepoResult(
+                KeystoneRepoResult(
                     repo_entry=repo_entry,
                     success=False,
                     error_message=str(e),
-                    agent_config=eval_config.agent_config,
+                    keystone_config=eval_config.keystone_config,
                     trial_index=trial,
                 )
             )
 
     # Build output
     version_info = get_version_info()
-    pinned_repos = [r.repo_entry for r in results]
 
-    output = EvalOutput(
-        keystone_version=version_info.model_dump(),
-        eval_config=eval_config.model_dump(),
-        repos=pinned_repos,
+    output = EvalResult(
+        keystone_version=version_info,
+        eval_config=eval_config,
         results=results,
     )
 
@@ -720,7 +567,7 @@ def _collect_eval_results(
     try:
         _s3_write_text(
             f"{s3_output_prefix}/eval_summary.json",
-            json.dumps(output.model_dump(), indent=2),
+            output.model_dump_json(indent=2),
         )
         log.info(f"Wrote eval summary to {s3_output_prefix}/eval_summary.json")
     except Exception as e:
@@ -741,7 +588,8 @@ def eval_flow(
     s3_repo_cache_prefix: str,
     limit: int | None = None,
     max_concurrent: int = DEFAULT_MAX_CONCURRENT_KEYSTONE,
-) -> list[EvalOutput]:
+    docker_registry_mirror: str = "",
+) -> list[EvalResult]:
     """Main evaluation flow.
 
     Archives repos once, then runs each eval config against the same archives.
@@ -765,11 +613,11 @@ def eval_flow(
         log.info(f"--- Preparing eval [{label}] ---")
 
         trials_per_repo = eval_config.trials_per_repo
-        if trials_per_repo > 1 and not eval_config.agent_config.no_cache_replay:
+        if trials_per_repo > 1 and not eval_config.keystone_config.no_cache_replay:
             log.info(f"trials_per_repo={trials_per_repo} > 1: forcing --no_cache_replay")
             eval_config = eval_config.model_copy(
                 update={
-                    "agent_config": eval_config.agent_config.model_copy(
+                    "keystone_config": eval_config.keystone_config.model_copy(
                         update={"no_cache_replay": True}
                     )
                 }
@@ -783,8 +631,8 @@ def eval_flow(
                 work_items.append((i, repo_entry, s3_path, trial))
 
     # Submit with sliding-window concurrency limit
-    all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[RepoResult]]] = []
-    pending_futures: list[PrefectFuture[RepoResult]] = []
+    all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[KeystoneRepoResult]]] = []
+    pending_futures: list[PrefectFuture[KeystoneRepoResult]] = []
     work_iter = iter(work_items)
 
     def _submit_next_item() -> bool:
@@ -797,6 +645,7 @@ def eval_flow(
             s3_tarball_path=s3_path,
             eval_config=resolved_eval_configs[cfg_idx],
             trial=trial,
+            docker_registry_mirror=docker_registry_mirror,
         )
         all_tagged.append((cfg_idx, repo_entry, trial, future))
         pending_futures.append(future)
@@ -819,13 +668,13 @@ def eval_flow(
 
     # Group futures by config index
     config_futures: list[
-        tuple[EvalConfig, list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]]
+        tuple[EvalConfig, list[tuple[RepoEntry, int, PrefectFuture[KeystoneRepoResult]]]]
     ] = [(cfg, []) for cfg in resolved_eval_configs]
     for cfg_idx, repo_entry, trial, future in all_tagged:
         config_futures[cfg_idx][1].append((repo_entry, trial, future))
 
     # Collect results per config
-    outputs: list[EvalOutput] = []
+    outputs: list[EvalResult] = []
     for eval_config, futures in config_futures:
         output = _collect_eval_results(
             eval_config,

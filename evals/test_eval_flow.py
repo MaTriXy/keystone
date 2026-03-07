@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from config import AgentConfig, EvalConfig
+from config import EvalConfig, KeystoneConfig
 from flow import eval_flow
 
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
@@ -101,16 +101,18 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     s3_output_dir.mkdir()
     s3_cache_dir.mkdir()
 
-    agent_config = AgentConfig(
+    keystone_config = KeystoneConfig(
         max_budget_usd=1.0,
         timeout_minutes=5,
         evaluator=True,
+        guardrail=True,
+        use_agents_md=True,
         agent_cmd=f"python {FAKE_CLAUDE_AGENT_MODAL}",
     )
 
     eval_config = EvalConfig(
         name="fake-agent",
-        agent_config=agent_config,
+        keystone_config=keystone_config,
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 
@@ -125,14 +127,13 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
 
     # Verify output structure
     assert output.keystone_version is not None
-    assert "git_hash" in output.keystone_version
-    assert len(output.repos) == 2
+    assert output.keystone_version.git_hash is not None
     assert len(output.results) == 2
 
-    # Verify repos are pinned with commit hashes
-    for repo in output.repos:
-        assert repo.commit_hash is not None
-        assert len(repo.commit_hash) == 40  # Full SHA
+    # Verify repos are pinned with commit hashes (via results)
+    for result in output.results:
+        assert result.repo_entry.commit_hash is not None
+        assert len(result.repo_entry.commit_hash) == 40  # Full SHA
 
     # Verify per-repo results were written to "S3" (local filesystem)
     for result in output.results:
@@ -148,7 +149,6 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     assert summary_file.exists()
     with summary_file.open() as f:
         saved_output = json.load(f)
-    assert len(saved_output["repos"]) == 2
     assert len(saved_output["results"]) == 2
 
     # Log results for debugging
@@ -183,17 +183,19 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
     s3_output_dir.mkdir()
     s3_cache_dir.mkdir()
 
-    agent_config = AgentConfig(
+    keystone_config = KeystoneConfig(
         max_budget_usd=1.0,
         timeout_minutes=10,
         evaluator=True,
+        guardrail=True,
+        use_agents_md=True,
         agent_cmd="claude",
         log_db=str(DEFAULT_TESTING_LOG_PATH),
     )
 
     eval_config = EvalConfig(
         name="modal-test",
-        agent_config=agent_config,
+        keystone_config=keystone_config,
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 
@@ -208,23 +210,20 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
 
     # Verify output structure
     assert output.keystone_version is not None
-    assert "git_hash" in output.keystone_version
-    assert len(output.repos) == 2
+    assert output.keystone_version.git_hash is not None
     assert len(output.results) == 2
 
-    # Verify repos are pinned
-    for repo in output.repos:
-        assert repo.commit_hash is not None
-        assert len(repo.commit_hash) == 40
+    # Verify repos are pinned (via results)
+    for result in output.results:
+        assert result.repo_entry.commit_hash is not None
+        assert len(result.repo_entry.commit_hash) == 40
 
     # Log full output report
     print("\n" + "=" * 60)
     print("EVAL OUTPUT REPORT")
     print("=" * 60)
     print(f"\nS3 output: {s3_output_dir}")
-    print("\nkeystone version:")
-    for k, v in output.keystone_version.items():
-        print(f"  {k}: {v}")
+    print(f"\nkeystone version: {output.keystone_version}")
 
     print("\n" + "-" * 60)
     print("RESULTS:")
@@ -238,13 +237,9 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
         if result.error_message:
             print(f"    error: {result.error_message[:300]}")
         if result.bootstrap_result:
-            print(f"    bootstrap_result keys: {list(result.bootstrap_result.keys())}")
-            if "tests_passed" in result.bootstrap_result:
-                print(f"    tests_passed: {result.bootstrap_result['tests_passed']}")
-            if "devcontainer_created" in result.bootstrap_result:
-                print(
-                    f"    devcontainer_created: {result.bootstrap_result['devcontainer_created']}"
-                )
+            print(f"    bootstrap_result: success={result.bootstrap_result.success}")
+            if result.bootstrap_result.verification:
+                print(f"    verification: {result.bootstrap_result.verification}")
 
     success_count = sum(1 for r in output.results if r.success)
     print("\n" + "=" * 60)

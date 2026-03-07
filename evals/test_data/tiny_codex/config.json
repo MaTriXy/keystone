@@ -9,9 +9,9 @@
   "configs": [
     {
       "name": "codex-default",
-      "agent_config": {
+      "keystone_config": {
         "provider": "codex",
-        "evaluator": true,
+        "evaluator": true, "guardrail": true, "use_agents_md": true,
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },

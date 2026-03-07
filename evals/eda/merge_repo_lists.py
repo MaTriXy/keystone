@@ -115,6 +115,7 @@ def count_test_files(tree: list[dict]) -> dict[str, int]:
 
 # ---------- GitHub API helpers ----------
 
+
 def _token() -> str:
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
@@ -183,7 +184,10 @@ def fetch_repo_metrics(owner_repo: str, token: str) -> dict | None:
 
     resp = requests.post(
         GITHUB_GRAPHQL_URL,
-        json={"query": SINGLE_REPO_QUERY, "variables": {"owner": owner, "name": name, "since": since}},
+        json={
+            "query": SINGLE_REPO_QUERY,
+            "variables": {"owner": owner, "name": name, "since": since},
+        },
         headers={"Authorization": f"bearer {token}"},
         timeout=30,
     )
@@ -262,13 +266,17 @@ def main() -> None:
     # Load filtered repos
     filtered: list[dict] = []
     if FILTERED_PATH.exists():
-        filtered = [json.loads(line) for line in FILTERED_PATH.read_text().splitlines() if line.strip()]
+        filtered = [
+            json.loads(line) for line in FILTERED_PATH.read_text().splitlines() if line.strip()
+        ]
     print(f"Loaded {len(filtered)} filtered repos")
 
     # Load examples repos
     examples: list[dict] = []
     if EXAMPLES_PATH.exists():
-        examples = [json.loads(line) for line in EXAMPLES_PATH.read_text().splitlines() if line.strip()]
+        examples = [
+            json.loads(line) for line in EXAMPLES_PATH.read_text().splitlines() if line.strip()
+        ]
     print(f"Loaded {len(examples)} example repos")
 
     # Index filtered by repo URL for dedup
@@ -300,7 +308,9 @@ def main() -> None:
         # Check for duplicate
         is_dup = repo_url in filtered_urls
         if is_dup:
-            print(f"  [{i + 1}/{len(examples)}] {owner_repo} already in filtered, marking from_examples=True")
+            print(
+                f"  [{i + 1}/{len(examples)}] {owner_repo} already in filtered, marking from_examples=True"
+            )
             # Find and update the existing entry
             for m in merged:
                 if m["repo"] == repo_url:
@@ -324,11 +334,15 @@ def main() -> None:
 
         # Fetch tree for test counts
         tree = fetch_tree(owner_repo, token)
-        test_counts = count_test_files(tree) if tree is not None else {
-            "test_files_by_name": 0,
-            "files_in_test_dirs": 0,
-            "test_files_total": 0,
-        }
+        test_counts = (
+            count_test_files(tree)
+            if tree is not None
+            else {
+                "test_files_by_name": 0,
+                "files_in_test_dirs": 0,
+                "test_files_total": 0,
+            }
+        )
 
         out = {
             "repo": repo_url,

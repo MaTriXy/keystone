@@ -18,7 +18,7 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import AgentConfig, EvalConfig, EvalRunConfig
+from config import EvalConfig, EvalRunConfig, KeystoneConfig
 from eval_cli import app
 from typer.testing import CliRunner
 
@@ -43,10 +43,12 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
         configs=[
             EvalConfig(
                 name="codex-default",
-                agent_config=AgentConfig(
+                keystone_config=KeystoneConfig(
                     provider="codex",
                     max_budget_usd=5.0,
                     evaluator=False,
+                    guardrail=False,
+                    use_agents_md=True,
                     timeout_minutes=3,
                 ),
                 trials_per_repo=1,

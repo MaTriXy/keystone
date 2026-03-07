@@ -5,7 +5,7 @@ from pathlib import Path
 
 import json5
 import typer
-from config import EvalConfig, EvalOutput, EvalRunConfig
+from config import EvalConfig, EvalResult, EvalRunConfig
 from flow import DEFAULT_MAX_CONCURRENT_KEYSTONE, eval_flow
 from rich.console import Console
 
@@ -25,7 +25,7 @@ app = typer.Typer(help="Eval harness for keystone")
 console = Console()
 
 
-def _print_results(outputs: list[EvalOutput], eval_configs: list[EvalConfig]) -> None:
+def _print_results(outputs: list[EvalResult], eval_configs: list[EvalConfig]) -> None:
     """Print a summary of results for each eval config."""
     for output, eval_config in zip(outputs, eval_configs, strict=True):
         label = eval_config.name or "unnamed"
@@ -87,16 +87,16 @@ def run(
     # Apply CLI overrides to all configs
     if no_cache_replay:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"no_cache_replay": True})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"no_cache_replay": True})
     if require_cache_hit:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"require_cache_hit": True})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"require_cache_hit": True})
     if no_evaluator:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"evaluator": False})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"evaluator": False})
     if no_guardrail:
         for cfg in resolved_configs:
-            cfg.agent_config = cfg.agent_config.model_copy(update={"guardrail": False})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"guardrail": False})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
@@ -106,8 +106,8 @@ def run(
     console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")
     for cfg in resolved_configs:
         console.print(
-            f"  - {cfg.name}: provider={cfg.agent_config.provider}, "
-            f"model={cfg.agent_config.model.value if cfg.agent_config.model else 'default'}"
+            f"  - {cfg.name}: provider={cfg.keystone_config.provider}, "
+            f"model={cfg.keystone_config.model.value if cfg.keystone_config.model else 'default'}"
         )
 
     outputs = eval_flow(
@@ -116,6 +116,7 @@ def run(
         s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
         limit=effective_limit,
         max_concurrent=max_concurrent,
+        docker_registry_mirror=run_config.docker_registry_mirror,
     )
 
     _print_results(outputs, resolved_configs)

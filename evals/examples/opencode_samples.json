@@ -7,9 +7,9 @@
   "configs": [
     {
       "name": "opencode-haiku",
-      "agent_config": {
+      "keystone_config": {
         "provider": "opencode",
-        "evaluator": true,
+        "evaluator": true, "guardrail": true, "use_agents_md": true,
         "model": "anthropic/claude-haiku-4-5",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
@@ -17,9 +17,9 @@
     },
     {
       "name": "opencode-opus",
-      "agent_config": {
+      "keystone_config": {
         "provider": "opencode",
-        "evaluator": true,
+        "evaluator": true, "guardrail": true, "use_agents_md": true,
         "model": "anthropic/claude-opus-4-6",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
@@ -27,9 +27,9 @@
     },
     {
       "name": "opencode-codex-mini",
-      "agent_config": {
+      "keystone_config": {
         "provider": "opencode",
-        "evaluator": true,
+        "evaluator": true, "guardrail": true, "use_agents_md": true,
         "model": "openai/gpt-5.1-codex-mini",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
@@ -37,9 +37,9 @@
     },
     {
       "name": "opencode-codex",
-      "agent_config": {
+      "keystone_config": {
         "provider": "opencode",
-        "evaluator": true,
+        "evaluator": true, "guardrail": true, "use_agents_md": true,
         "model": "openai/gpt-5.2-codex",
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
