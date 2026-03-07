@@ -93,10 +93,12 @@ def run(
             cfg.keystone_config = cfg.keystone_config.model_copy(update={"require_cache_hit": True})
     if no_evaluator:
         for cfg in resolved_configs:
-            cfg.keystone_config = cfg.keystone_config.model_copy(update={"evaluator": False})
+            ac = cfg.keystone_config.agent_config.model_copy(update={"evaluator": False})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
     if no_guardrail:
         for cfg in resolved_configs:
-            cfg.keystone_config = cfg.keystone_config.model_copy(update={"guardrail": False})
+            ac = cfg.keystone_config.agent_config.model_copy(update={"guardrail": False})
+            cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
@@ -106,7 +108,7 @@ def run(
     console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")
     for cfg in resolved_configs:
         console.print(
-            f"  - {cfg.name}: provider={cfg.keystone_config.provider}, "
+            f"  - {cfg.name}: provider={cfg.keystone_config.agent_config.provider}, "
             f"model={cfg.keystone_config.agent_config.model.value if cfg.keystone_config.agent_config.model else 'default'}"
         )
 

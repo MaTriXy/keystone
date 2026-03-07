@@ -302,7 +302,7 @@ def process_repo_task(
                 "--agent_time_limit_seconds",
                 str(agent.agent_time_limit_seconds),
                 "--provider",
-                keystone_config.provider,
+                agent.provider,
             ]
 
             if not agent.agent_in_modal:
@@ -322,7 +322,7 @@ def process_repo_task(
                     ]
                 )
 
-            if not keystone_config.evaluator:
+            if not agent.evaluator:
                 cmd.append("--no_evaluator")
             if agent.agent_cmd is not None:
                 cmd.extend(["--agent_cmd", agent.agent_cmd])
@@ -334,9 +334,9 @@ def process_repo_task(
                 cmd.append("--require_cache_hit")
             if keystone_config.no_cache_replay:
                 cmd.append("--no_cache_replay")
-            if not keystone_config.guardrail:
+            if not agent.guardrail:
                 cmd.append("--no_guardrail")
-            if keystone_config.use_agents_md:
+            if agent.use_agents_md:
                 cmd.append("--use_agents_md")
 
             log.info(f"[{repo_id}] Running keystone...")

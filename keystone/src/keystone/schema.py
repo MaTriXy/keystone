@@ -53,18 +53,34 @@ class LLMModel(str, Enum):
 class AgentConfig(BaseModel):
     """Configuration for how the agent is run.
 
-    This is part of the cache key - changing any field invalidates the cache.
+    This is part of the cache key — changing any field invalidates the cache.
     """
 
     max_budget_usd: float
     agent_time_limit_seconds: int
     agent_in_modal: bool
+
+    # Provider and agent command.
+    provider: str = Field(
+        default="claude", description="LLM provider name (claude, codex, or opencode)"
+    )
     # model picks which LLM to use (passed as --model to the agent CLI).
     # agent_cmd overrides the agent binary/path; None means use the provider's default command.
     # Both are optional: omitting model lets the provider use its own default, omitting agent_cmd
     # means we infer the command from the provider (e.g. "claude", "codex").
     model: LLMModel | None = None
     agent_cmd: str | None = None
+
+    # Feature toggles — all required so config files are explicit.
+    evaluator: bool = Field(
+        ...,
+        description="Enable or disable the LLM evaluator fix-up pass.",
+    )
+    guardrail: bool = Field(..., description="Enable or disable guardrail structural checks")
+    use_agents_md: bool = Field(
+        ...,
+        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
+    )
 
     def to_cache_key_json(self) -> str:
         """Stable JSON representation for cache key computation."""
@@ -93,22 +109,6 @@ class KeystoneConfig(BaseModel):
     )
     no_cache_replay: bool = Field(
         default=False, description="Skip cache lookup, force fresh execution"
-    )
-
-    # Provider and agent command.
-    provider: str = Field(
-        default="claude", description="LLM provider name (claude, codex, or opencode)"
-    )
-
-    # Feature toggles — all required so config files are explicit.
-    evaluator: bool = Field(
-        ...,
-        description="Enable or disable the LLM evaluator fix-up pass.",
-    )
-    guardrail: bool = Field(..., description="Enable or disable guardrail structural checks")
-    use_agents_md: bool = Field(
-        ...,
-        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
     )
 
 

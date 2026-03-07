@@ -108,10 +108,10 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
             agent_time_limit_seconds=5 * 60,
             agent_in_modal=True,
             agent_cmd=f"python {FAKE_CLAUDE_AGENT_MODAL}",
+            evaluator=True,
+            guardrail=True,
+            use_agents_md=True,
         ),
-        evaluator=True,
-        guardrail=True,
-        use_agents_md=True,
     )
 
     eval_config = EvalConfig(
@@ -193,10 +193,10 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
             agent_time_limit_seconds=10 * 60,
             agent_in_modal=True,
             agent_cmd="claude",
+            evaluator=True,
+            guardrail=True,
+            use_agents_md=True,
         ),
-        evaluator=True,
-        guardrail=True,
-        use_agents_md=True,
         log_db=str(DEFAULT_TESTING_LOG_PATH),
     )
 

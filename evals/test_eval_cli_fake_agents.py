@@ -131,11 +131,11 @@ def test_eval_cli_fake_agents_config_file(
                         agent_in_modal=True,
                         agent_cmd=agent_cmd,
                         model=model,
+                        provider=provider,
+                        evaluator=True,
+                        guardrail=False,
+                        use_agents_md=True,
                     ),
-                    provider=provider,
-                    evaluator=True,
-                    guardrail=False,
-                    use_agents_md=True,
                 ),
             )
         )

@@ -307,8 +307,12 @@ def bootstrap(
             max_budget_usd=max_budget_usd,
             agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
+            provider=provider_name,
             model=model,
             agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
+            evaluator=evaluator,
+            guardrail=guardrail,
+            use_agents_md=use_agents_md,
         )
         effective_agent_cmd = agent_config.agent_cmd or provider.default_cmd
 
