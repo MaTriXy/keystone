@@ -21,7 +21,7 @@ from eval_cli import app
 from eval_schema import EvalConfig, EvalRunConfig
 from typer.testing import CliRunner
 
-from keystone.schema import KeystoneConfig, LLMModel
+from keystone.schema import AgentConfig, KeystoneConfig, LLMModel
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 # On Modal, fake agents are baked into the image at /usr/local/bin/
@@ -125,14 +125,17 @@ def test_eval_cli_fake_agents_config_file(
             EvalConfig(
                 name=name,
                 keystone_config=KeystoneConfig(
-                    max_budget_usd=1.0,
-                    timeout_minutes=1,
+                    agent_config=AgentConfig(
+                        max_budget_usd=1.0,
+                        agent_time_limit_seconds=60,
+                        agent_in_modal=True,
+                        agent_cmd=agent_cmd,
+                        model=model,
+                    ),
+                    provider=provider,
                     evaluator=True,
                     guardrail=False,
                     use_agents_md=True,
-                    agent_cmd=agent_cmd,
-                    provider=provider,
-                    model=model,
                 ),
             )
         )

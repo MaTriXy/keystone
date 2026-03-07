@@ -107,7 +107,7 @@ def run(
     for cfg in resolved_configs:
         console.print(
             f"  - {cfg.name}: provider={cfg.keystone_config.provider}, "
-            f"model={cfg.keystone_config.model.value if cfg.keystone_config.model else 'default'}"
+            f"model={cfg.keystone_config.agent_config.model.value if cfg.keystone_config.agent_config.model else 'default'}"
         )
 
     outputs = eval_flow(

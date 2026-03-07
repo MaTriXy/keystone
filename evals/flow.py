@@ -285,6 +285,8 @@ def process_repo_task(
             test_artifacts_dir.mkdir(exist_ok=True)
             result_file = work_path / "keystone_result.json"
 
+            agent = keystone_config.agent_config
+
             cmd = [
                 "uv",
                 "run",
@@ -294,16 +296,16 @@ def process_repo_task(
                 "--test_artifacts_dir",
                 str(test_artifacts_dir),
                 "--max_budget_usd",
-                str(keystone_config.max_budget_usd),
+                str(agent.max_budget_usd),
                 "--output_file",
                 str(result_file),
                 "--agent_time_limit_seconds",
-                str(keystone_config.timeout_minutes * 60),
+                str(agent.agent_time_limit_seconds),
                 "--provider",
                 keystone_config.provider,
             ]
 
-            if keystone_config.run_agent_locally:
+            if not agent.agent_in_modal:
                 cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
             else:
                 if not docker_registry_mirror:
@@ -322,10 +324,10 @@ def process_repo_task(
 
             if not keystone_config.evaluator:
                 cmd.append("--no_evaluator")
-            if keystone_config.agent_cmd is not None:
-                cmd.extend(["--agent_cmd", keystone_config.agent_cmd])
-            if keystone_config.model is not None:
-                cmd.extend(["--model", keystone_config.model.value])
+            if agent.agent_cmd is not None:
+                cmd.extend(["--agent_cmd", agent.agent_cmd])
+            if agent.model is not None:
+                cmd.extend(["--model", agent.model.value])
             if keystone_config.log_db:
                 cmd.extend(["--log_db", str(resolve_path(keystone_config.log_db))])
             if keystone_config.require_cache_hit:
@@ -354,7 +356,7 @@ def process_repo_task(
 
             # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
             # Prevents a hung keystone process from blocking the pipeline forever.
-            hard_timeout = (keystone_config.timeout_minutes * 60) + 300
+            hard_timeout = agent.agent_time_limit_seconds + 300
 
             proc = run_process(
                 cmd,

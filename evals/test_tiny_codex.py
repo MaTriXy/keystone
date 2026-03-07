@@ -22,7 +22,7 @@ from eval_cli import app
 from eval_schema import EvalConfig, EvalRunConfig
 from typer.testing import CliRunner
 
-from keystone.schema import KeystoneConfig
+from keystone.schema import AgentConfig, KeystoneConfig
 
 REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 
@@ -46,12 +46,15 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
             EvalConfig(
                 name="codex-default",
                 keystone_config=KeystoneConfig(
+                    agent_config=AgentConfig(
+                        max_budget_usd=5.0,
+                        agent_time_limit_seconds=3 * 60,
+                        agent_in_modal=True,
+                    ),
                     provider="codex",
-                    max_budget_usd=5.0,
                     evaluator=False,
                     guardrail=False,
                     use_agents_md=True,
-                    timeout_minutes=3,
                 ),
                 trials_per_repo=1,
             ),

@@ -10,9 +10,12 @@
         "provider": "claude",
         "evaluator": false,
         "guardrail": false, "use_agents_md": true,
-        "model": "claude-opus-4-6",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
       },
       "trials_per_repo": 1,
     },
@@ -22,9 +25,12 @@
         "provider": "claude",
         "evaluator": false,
         "guardrail": false, "use_agents_md": true,
-        "model": "claude-haiku-4-5-20251001",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "claude-haiku-4-5-20251001",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
       },
       "trials_per_repo": 1,
     },
@@ -34,9 +40,12 @@
         "provider": "codex",
         "evaluator": false,
         "guardrail": false, "use_agents_md": true,
-        "model": "gpt-5.3-codex",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "gpt-5.3-codex",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
       },
       "trials_per_repo": 1,
     },
@@ -46,9 +55,12 @@
         "provider": "codex",
         "evaluator": false,
         "guardrail": false, "use_agents_md": true,
-        "model": "gpt-5.1-codex-mini",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "gpt-5.1-codex-mini",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
       },
       "trials_per_repo": 1,
     }

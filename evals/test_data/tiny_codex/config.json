@@ -12,8 +12,11 @@
       "keystone_config": {
         "provider": "codex",
         "evaluator": true, "guardrail": true, "use_agents_md": true,
-        "max_budget_usd": 5.0,
-        "timeout_minutes": 20
+        "agent_config": {
+          "agent_in_modal": true,
+          "max_budget_usd": 5.0,
+          "agent_time_limit_seconds": 1200
+        }
       },
       "trials_per_repo": 1,
     }

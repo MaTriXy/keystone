@@ -10,9 +10,12 @@
       "keystone_config": {
         "provider": "opencode",
         "evaluator": true, "guardrail": true, "use_agents_md": true,
-        "model": "anthropic/claude-haiku-4-5",
-        "max_budget_usd": 5.0,
-        "timeout_minutes": 20
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "anthropic/claude-haiku-4-5",
+          "max_budget_usd": 5.0,
+          "agent_time_limit_seconds": 1200
+        }
       },
     },
     {
@@ -20,9 +23,12 @@
       "keystone_config": {
         "provider": "opencode",
         "evaluator": true, "guardrail": true, "use_agents_md": true,
-        "model": "anthropic/claude-opus-4-6",
-        "max_budget_usd": 5.0,
-        "timeout_minutes": 20
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "anthropic/claude-opus-4-6",
+          "max_budget_usd": 5.0,
+          "agent_time_limit_seconds": 1200
+        }
       },
     },
     {
@@ -30,9 +36,12 @@
       "keystone_config": {
         "provider": "opencode",
         "evaluator": true, "guardrail": true, "use_agents_md": true,
-        "model": "openai/gpt-5.1-codex-mini",
-        "max_budget_usd": 5.0,
-        "timeout_minutes": 20
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "openai/gpt-5.1-codex-mini",
+          "max_budget_usd": 5.0,
+          "agent_time_limit_seconds": 1200
+        }
       },
     },
     {
@@ -40,9 +49,12 @@
       "keystone_config": {
         "provider": "opencode",
         "evaluator": true, "guardrail": true, "use_agents_md": true,
-        "model": "openai/gpt-5.2-codex",
-        "max_budget_usd": 5.0,
-        "timeout_minutes": 20
+        "agent_config": {
+          "agent_in_modal": true,
+          "model": "openai/gpt-5.2-codex",
+          "max_budget_usd": 5.0,
+          "agent_time_limit_seconds": 1200
+        }
       },
     }
   ]
