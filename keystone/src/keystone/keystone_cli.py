@@ -199,15 +199,29 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Build agent config early — needed for prompt generation and cache key.
+    assert max_budget_usd is not None
+    agent_config = AgentConfig(
+        max_budget_usd=max_budget_usd,
+        agent_time_limit_seconds=agent_time_limit_seconds,
+        agent_in_modal=agent_in_modal,
+        provider=provider_name,
+        model=model,
+        agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
+        evaluator=evaluator,
+        guardrail=guardrail,
+        use_agents_md=use_agents_md,
+    )
+
     # Build prompt — controlled by the --use_agents_md flag, not the provider.
     # When use_agents_md is True, we write an AGENTS.md file and use a short
     # CLI prompt; otherwise we send the full inline prompt.  This keeps the
     # experimental variation explicit so it can be reported across all models.
     agents_md_content: str | None = None
     if use_agents_md:
-        agents_md_content, prompt = build_agents_md_prompt(agent_in_modal)
+        agents_md_content, prompt = build_agents_md_prompt(agent_config)
     else:
-        prompt = build_agent_prompt(agent_in_modal)
+        prompt = build_agent_prompt(agent_config)
 
     start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
@@ -301,19 +315,6 @@ def bootstrap(
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
 
-        # Build agent config (part of cache key — only behavioral params)
-        assert max_budget_usd is not None
-        agent_config = AgentConfig(
-            max_budget_usd=max_budget_usd,
-            agent_time_limit_seconds=agent_time_limit_seconds,
-            agent_in_modal=agent_in_modal,
-            provider=provider_name,
-            model=model,
-            agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
-            evaluator=evaluator,
-            guardrail=guardrail,
-            use_agents_md=use_agents_md,
-        )
         effective_agent_cmd = agent_config.agent_cmd or provider.default_cmd
 
         # Compute cache key
@@ -350,6 +351,7 @@ def bootstrap(
                 agent_time_limit_seconds,
                 provider,
                 agents_md=agents_md_content,
+                guardrail=guardrail,
             ):
                 if event.stream == "stdout":
                     process_stdout_line(event.line)

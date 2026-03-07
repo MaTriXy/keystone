@@ -204,7 +204,9 @@ class ModalAgentRunner(AgentRunner):
 
         return self._sandbox
 
-    def upload_project(self, project_archive: bytes, agents_md: str | None = None) -> None:
+    def upload_project(
+        self, project_archive: bytes, agents_md: str | None = None, guardrail: bool = True
+    ) -> None:
         """Upload project archive to sandbox."""
         sb = self.ensure_sandbox()
         logger.info("Uploading project to sandbox...")
@@ -243,10 +245,11 @@ class ModalAgentRunner(AgentRunner):
             name="upload",
         ).wait()
 
-        # Upload guardrail.sh for agent self-checks
-        with sb.open("/project/guardrail.sh", "wb") as f:
-            f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
-        run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
+        # Upload guardrail.sh for agent self-checks (only when guardrail is enabled)
+        if guardrail:
+            with sb.open("/project/guardrail.sh", "wb") as f:
+                f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
+            run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:
@@ -266,10 +269,11 @@ class ModalAgentRunner(AgentRunner):
         time_limit_seconds: int,
         provider: AgentProvider,
         agents_md: str | None = None,
+        guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
-        self.upload_project(project_archive, agents_md=agents_md)
+        self.upload_project(project_archive, agents_md=agents_md, guardrail=guardrail)
 
         try:
             yield from self._run_agent(

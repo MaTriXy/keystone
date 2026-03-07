@@ -40,6 +40,7 @@ class AgentRunner(ABC):
         time_limit_seconds: int,
         provider: AgentProvider,
         agents_md: str | None = None,
+        guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
 
@@ -168,6 +169,7 @@ class LocalAgentRunner(AgentRunner):
         time_limit_seconds: int,
         provider: AgentProvider,
         agents_md: str | None = None,
+        guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
@@ -210,9 +212,10 @@ class LocalAgentRunner(AgentRunner):
         dest_pl.chmod(0o755)
 
         # Copy guardrail script into workspace for agent self-checks
-        dest_guardrail = self._work_dir / "guardrail.sh"
-        dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
-        dest_guardrail.chmod(0o755)
+        if guardrail:
+            dest_guardrail = self._work_dir / "guardrail.sh"
+            dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
+            dest_guardrail.chmod(0o755)
 
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:

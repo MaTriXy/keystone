@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
+
+if TYPE_CHECKING:
+    from keystone.schema import AgentConfig
 
 
 def generate_devcontainer_json() -> str:
@@ -229,27 +233,7 @@ Include anything you wish you had been told at the start. Examples:
 } Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
 
 Please don't forget to emit the summary at the end.
-
-IMPORTANT: Before doing your final verification, YOU MUST run the guardrail check script to catch common mistakes:
-```bash
-timeout 10m ./guardrail.sh
-```
-**You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
-
-This script validates that:
-- All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
-- Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
-- run_all_tests.sh has correct structure (JUnit output, final_result.json)
-- The Docker image builds successfully
-
-Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
-You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
-of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached.
-So you might need to use a longer timeout for the first run.
-
-Run this script after creating your files, and fix any reported errors before proceeding.
-If the guardrail reports a build failure, read the error output carefully and fix the issue.
-
+{{GUARDRAIL_SECTION}}
 Then verify your work using commands like these:
 
 1. To build your image:
@@ -277,6 +261,45 @@ docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME
 ```
 """
 
+# ---------------------------------------------------------------------------
+# Guardrail prompt fragments — included only when config.guardrail is True
+# ---------------------------------------------------------------------------
+
+_INLINE_GUARDRAIL = """\
+
+IMPORTANT: Before doing your final verification, YOU MUST run the guardrail check script to catch common mistakes:
+```bash
+timeout 10m ./guardrail.sh
+```
+**You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
+
+This script validates that:
+- All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
+- Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
+- run_all_tests.sh has correct structure (JUnit output, final_result.json)
+- The Docker image builds successfully
+
+Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
+You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
+of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached.
+So you might need to use a longer timeout for the first run.
+
+Run this script after creating your files, and fix any reported errors before proceeding.
+If the guardrail reports a build failure, read the error output carefully and fix the issue.
+"""
+
+_AGENTS_MD_GUARDRAIL_WORKFLOW_STEP = """\
+4. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
+"""
+
+_AGENTS_MD_GUARDRAIL_REMINDER = """\
+**You MUST run `./guardrail.sh` and get exit code 0 before finishing.**
+"""
+
+# ---------------------------------------------------------------------------
+# Environment addenda
+# ---------------------------------------------------------------------------
+
 MODAL_ADDENDUM = """
 
 IMPORTANT: You are running in a Modal sandbox environment.
@@ -298,10 +321,18 @@ RUN chown user:group /path/file.txt
 """
 
 
-def build_agent_prompt(agent_in_modal: bool) -> str:
-    """Build the agent prompt, optionally adding Modal-specific guidance."""
-    prompt = AGENT_PROMPT_TEMPLATE
-    prompt = prompt + MODAL_ADDENDUM if agent_in_modal else prompt + LOCAL_ADDENDUM
+def build_agent_prompt(config: AgentConfig) -> str:
+    """Build the inline agent prompt from *config*.
+
+    The prompt is assembled from sections so that optional parts (e.g. the
+    guardrail script instructions) can be included or excluded based on
+    the configuration.
+    """
+    prompt = AGENT_PROMPT_TEMPLATE.replace(
+        "{GUARDRAIL_SECTION}",
+        _INLINE_GUARDRAIL if config.guardrail else "\n",
+    )
+    prompt += MODAL_ADDENDUM if config.agent_in_modal else LOCAL_ADDENDUM
     return prompt
 
 
@@ -360,8 +391,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
 2. Identify language, test framework, and dependencies.
 3. Create the three files above.
-4. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
-5. Build and test:
+{{GUARDRAIL_WORKFLOW_STEP}}4. Build and test:
    ```bash
    IMAGE_NAME="img-$(date +%s)"
    devcontainer build --image-name "$IMAGE_NAME" --workspace-folder .
@@ -392,8 +422,7 @@ Emit status lines like:
 When done, emit:
 {SUMMARY_MARKER} <summary of what worked and tips>
 
-**You MUST run `./guardrail.sh` and get exit code 0 before finishing.**
-"""
+{{GUARDRAIL_REMINDER}}"""
 
 AGENTS_MD_SHORT_PROMPT = (
     "Set up a .devcontainer with Dockerfile and test runner for this project. "
@@ -401,19 +430,20 @@ AGENTS_MD_SHORT_PROMPT = (
 )
 
 
-def build_agents_md_prompt(agent_in_modal: bool) -> tuple[str, str]:
+def build_agents_md_prompt(config: AgentConfig) -> tuple[str, str]:
     """Return (agents_md_content, short_cli_prompt) for providers that use AGENTS.md.
 
     The AGENTS.md is written to the project root before launching the agent,
     keeping the CLI prompt short so agents don't exhaust their output budget
     on prompt comprehension. Used by both codex and claude (use_agents_md) providers.
     """
-    agents_md = AGENTS_MD
-    if agent_in_modal:
+    agents_md = AGENTS_MD.replace(
+        "{GUARDRAIL_WORKFLOW_STEP}",
+        _AGENTS_MD_GUARDRAIL_WORKFLOW_STEP if config.guardrail else "",
+    ).replace(
+        "{GUARDRAIL_REMINDER}",
+        _AGENTS_MD_GUARDRAIL_REMINDER if config.guardrail else "",
+    )
+    if config.agent_in_modal:
         agents_md += "\n\nIMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.\n"
     return agents_md, AGENTS_MD_SHORT_PROMPT
-
-
-# Aliases for backwards compatibility
-build_codex_prompt = build_agents_md_prompt
-build_claude_agents_md_prompt = build_agents_md_prompt
