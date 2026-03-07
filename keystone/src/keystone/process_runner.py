@@ -39,6 +39,7 @@ def run_process(
     cwd: str | None = None,
     stdout_callback: Callable[[str], None] | None = None,
     stderr_callback: Callable[[str], None] | None = None,
+    timeout_seconds: float | None = None,
 ) -> ProcessResult:
     """
     Run a subprocess with multi-threaded stdout/stderr capture, blocking until the process finishes.
@@ -99,9 +100,18 @@ def run_process(
 
     stdout_thread.start()
     stderr_thread.start()
-    stdout_thread.join()
-    stderr_thread.join()
-    process.wait()
+
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "%s Process timed out after %s seconds, killing", log_prefix, timeout_seconds
+        )
+        process.kill()
+        process.wait()
+
+    stdout_thread.join(timeout=10)
+    stderr_thread.join(timeout=10)
 
     return ProcessResult(
         returncode=process.returncode,

@@ -351,11 +351,16 @@ def process_repo_task(
             def _log_stderr(line: str) -> None:
                 pass  # drop — avoid flooding Prefect Cloud with agent stderr
 
+            # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
+            # Prevents a hung keystone process from blocking the pipeline forever.
+            hard_timeout = (agent_config.timeout_minutes * 60) + 300
+
             proc = run_process(
                 cmd,
                 log_prefix=f"[{repo_id}]",
                 stdout_callback=_log_stdout,
                 stderr_callback=_log_stderr,
+                timeout_seconds=hard_timeout,
             )
 
             # Step 3: Parse result
@@ -554,11 +559,13 @@ def _submit_with_concurrency_limit(
         f"(max_concurrent={max_concurrent}, total={len(work_items)})"
     )
 
-    # As tasks finish, submit replacements
+    # As tasks finish, submit replacements.
+    # Use a short timeout so we can backfill slots as soon as *any* task
+    # finishes, rather than waiting for ALL pending tasks (which causes a
+    # single slow task to block the entire pipeline).
     while pending_futures:
-        done, not_done = wait(pending_futures)
+        done, not_done = wait(pending_futures, timeout=5)
         pending_futures = list(not_done)
-        # Fill freed slots
         for _ in range(len(done)):
             if not _submit_next():
                 break
@@ -804,7 +811,7 @@ def eval_flow(
     )
 
     while pending_futures:
-        done, not_done = wait(pending_futures)
+        done, not_done = wait(pending_futures, timeout=5)
         pending_futures = list(not_done)
         for _ in range(len(done)):
             if not _submit_next_item():
