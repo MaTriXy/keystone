@@ -1,12 +1,7 @@
-from __future__ import annotations
-
 import json
-from typing import TYPE_CHECKING
 
 from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
-
-if TYPE_CHECKING:
-    from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig
 
 
 def generate_devcontainer_json() -> str:
@@ -16,10 +11,12 @@ def generate_devcontainer_json() -> str:
             "dockerfile": "Dockerfile",
             "context": "..",
             "options": [
+                # Necessary on Modal.
                 "--network=host",
             ],
         },
         "runArgs": [
+            # Necessary on Modal.
             "--network=host",
         ],
     }
@@ -307,17 +304,10 @@ Bridge networking does not work in this environment due to gVisor/veth restricti
 When using `docker run`, you MUST use `--network=host` for containers to have network access.
 """
 
+# FIXME: Why do we tell the agent this?  It's kind of the default assumption, no?
 LOCAL_ADDENDUM = """
 
 IMPORTANT: You are running locally (not in a Modal sandbox).
-"""
-
-OLD_PART = """
-IMPORTANT: Modal's image builder does not support --chown flags in COPY commands.
-Do NOT use `COPY --chown=user:group` syntax. Instead, use separate RUN commands to change ownership:
-```
-COPY file.txt /path/
-RUN chown user:group /path/file.txt
 """
 
 
