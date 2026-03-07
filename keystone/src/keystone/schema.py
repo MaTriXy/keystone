@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 
 
 def _ensure_iso_string(v: object) -> str:
@@ -48,6 +48,63 @@ class LLMModel(str, Enum):
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
     OPENCODE_CODEX_MINI = "openai/gpt-5.1-codex-mini"
     OPENCODE_CODEX = "openai/gpt-5.2-codex"
+
+
+class KeystoneConfig(BaseModel):
+    """Configuration for a single Keystone CLI invocation.
+
+    These fields map directly to Keystone CLI flags.  Every field that
+    materially affects the agent run is required (no implicit defaults)
+    so that config files are self-documenting.
+    """
+
+    max_budget_usd: float = Field(..., description="Maximum budget per repo")
+    timeout_minutes: int = Field(..., description="Timeout per repo in minutes")
+
+    # Log database.
+    log_db: str | None = Field(
+        default=None,
+        description="Database for logging/caching. SQLite path or postgresql:// URL",
+    )
+
+    # Cache settings.
+    require_cache_hit: bool = Field(
+        default=False, description="Fail if cache miss (for CI/testing)"
+    )
+    no_cache_replay: bool = Field(
+        default=False, description="Skip cache lookup, force fresh execution"
+    )
+
+    # Provider and agent command.
+    provider: str = Field(
+        default="claude", description="LLM provider name (claude, codex, or opencode)"
+    )
+    agent_cmd: str | None = Field(
+        default=None, description="Agent command override (default: inferred from provider)"
+    )
+
+    # Model selection.
+    model: LLMModel | None = Field(
+        default=None,
+        description="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
+    )
+
+    # When True, run the agent locally instead of on Modal.
+    run_agent_locally: bool = Field(
+        default=False,
+        description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
+    )
+
+    # Feature toggles — all required so config files are explicit.
+    evaluator: bool = Field(
+        ...,
+        description="Enable or disable the LLM evaluator fix-up pass.",
+    )
+    guardrail: bool = Field(..., description="Enable or disable guardrail structural checks")
+    use_agents_md: bool = Field(
+        ...,
+        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
+    )
 
 
 class AgentConfig(BaseModel):

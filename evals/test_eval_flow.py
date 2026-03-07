@@ -11,10 +11,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from config import EvalConfig, KeystoneConfig
+from eval_schema import EvalConfig
 from flow import eval_flow
 
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
+from keystone.schema import KeystoneConfig
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 # On Modal, fake_claude_agent.py is pre-installed at this path (see keystone/modal/image.py)

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import fsspec
-from config import EvalConfig, EvalResult, KeystoneRepoResult, RepoEntry, resolve_path
+from eval_schema import EvalConfig, EvalResult, KeystoneRepoResult, RepoEntry, resolve_path
 from prefect import flow, get_run_logger, task
 from prefect.futures import PrefectFuture, wait
 

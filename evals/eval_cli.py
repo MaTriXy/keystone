@@ -5,7 +5,7 @@ from pathlib import Path
 
 import json5
 import typer
-from config import EvalConfig, EvalResult, EvalRunConfig
+from eval_schema import EvalConfig, EvalResult, EvalRunConfig
 from flow import DEFAULT_MAX_CONCURRENT_KEYSTONE, eval_flow
 from rich.console import Console
 

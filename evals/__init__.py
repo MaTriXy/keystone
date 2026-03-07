@@ -1,10 +1,9 @@
 """Eval harness for keystone."""
 
-from config import (
+from eval_schema import (
     EvalConfig,
     EvalResult,
     EvalRunConfig,
-    KeystoneConfig,
     KeystoneRepoResult,
     RepoEntry,
 )
@@ -14,7 +13,6 @@ __all__ = [
     "EvalConfig",
     "EvalResult",
     "EvalRunConfig",
-    "KeystoneConfig",
     "KeystoneRepoResult",
     "RepoEntry",
     "eval_flow",

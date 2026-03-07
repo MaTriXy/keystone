@@ -18,9 +18,11 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import EvalConfig, EvalRunConfig, KeystoneConfig
 from eval_cli import app
+from eval_schema import EvalConfig, EvalRunConfig
 from typer.testing import CliRunner
+
+from keystone.schema import KeystoneConfig
 
 REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 

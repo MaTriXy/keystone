@@ -17,9 +17,11 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import EvalConfig, EvalRunConfig, KeystoneConfig, LLMModel
 from eval_cli import app
+from eval_schema import EvalConfig, EvalRunConfig
 from typer.testing import CliRunner
+
+from keystone.schema import KeystoneConfig, LLMModel
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 # On Modal, fake agents are baked into the image at /usr/local/bin/
