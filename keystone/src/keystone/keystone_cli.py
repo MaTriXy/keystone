@@ -43,7 +43,7 @@ from keystone.llm_provider import (
 )
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
-from keystone.prompts import build_agent_prompt, build_claude_agents_md_prompt, build_codex_prompt
+from keystone.prompts import build_agent_prompt, build_agents_md_prompt
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -164,7 +164,7 @@ def bootstrap(
     use_agents_md: bool = typer.Option(
         False,
         "--use_agents_md/--no_use_agents_md",
-        help="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only).",
+        help="Use AGENTS.md file + short CLI prompt instead of full inline prompt.",
     ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
@@ -199,13 +199,13 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build prompt — codex providers get a short CLI prompt + AGENTS.md file;
-    # claude providers can opt in to the same approach via --use_agents_md.
+    # Build prompt — controlled by the --use_agents_md flag, not the provider.
+    # When use_agents_md is True, we write an AGENTS.md file and use a short
+    # CLI prompt; otherwise we send the full inline prompt.  This keeps the
+    # experimental variation explicit so it can be reported across all models.
     agents_md_content: str | None = None
-    if provider_name == "codex":
-        agents_md_content, prompt = build_codex_prompt(agent_in_modal)
-    elif use_agents_md:
-        agents_md_content, prompt = build_claude_agents_md_prompt(agent_in_modal)
+    if use_agents_md:
+        agents_md_content, prompt = build_agents_md_prompt(agent_in_modal)
     else:
         prompt = build_agent_prompt(agent_in_modal)
 

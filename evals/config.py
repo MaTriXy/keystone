@@ -95,7 +95,7 @@ class AgentConfig(BaseModel):
     )
     use_agents_md: bool = Field(
         default=True,
-        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",
+        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
     )
 
     # Docker Hub mirror for pull-through caching
