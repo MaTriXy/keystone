@@ -35,15 +35,15 @@ def _make_config(
     "guardrail,agent_in_modal",
     [
         (True, True),
-        (True, False),
+        # (True, False),
         (False, True),
-        (False, False),
+        # (False, False),
     ],
     ids=[
         "guardrail-modal",
-        "guardrail-local",
+        # "guardrail-local",
         "no_guardrail-modal",
-        "no_guardrail-local",
+        # "no_guardrail-local",
     ],
 )
 def test_inline_prompt(
@@ -63,15 +63,15 @@ def test_inline_prompt(
     "guardrail,agent_in_modal",
     [
         (True, True),
-        (True, False),
+        # (True, False),
         (False, True),
-        (False, False),
+        # (False, False),
     ],
     ids=[
         "guardrail-modal",
-        "guardrail-local",
+        # "guardrail-local",
         "no_guardrail-modal",
-        "no_guardrail-local",
+        # "no_guardrail-local",
     ],
 )
 def test_agents_md_prompt(

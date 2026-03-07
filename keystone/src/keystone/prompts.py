@@ -32,7 +32,7 @@ def generate_devcontainer_json() -> str:
     return json.dumps(devcontainer, indent=2) + "\n"
 
 
-AGENT_PROMPT_TEMPLATE = f"""
+LONG_FORM_AGENT_PROMPT_TEMPLATE = f"""
 We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
 
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
@@ -271,31 +271,32 @@ docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME
 # Guardrail prompt fragments — included only when config.guardrail is True
 # ---------------------------------------------------------------------------
 
-_INLINE_GUARDRAIL = """\
+_LONGFORM_GUARDRAIL_PROMPT = """\
 
-IMPORTANT: Before doing your final verification, YOU MUST run the guardrail check script to catch common mistakes:
+**IMPORTANT: You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
 ```bash
 timeout 10m ./guardrail.sh
 ```
-**You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
 
 This script validates that:
 - All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
-- Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
-- run_all_tests.sh has correct structure (JUnit output, final_result.json)
 - The Docker image builds successfully
+- run_all_tests.sh runs tests and they pass inside the container image, and generates JUnit XML reports in /test_artifacts/junit/*.xml.
+
+If the guardrail exits abnormally, read the error output carefully and fix the issue.
+
+Once you have a successful guardrail run, there's no need to repeat the checks it does;
+you can likely end your turn at this point.
 
 Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
 You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
-of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached.
-So you might need to use a longer timeout for the first run.
+of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached yet,
+so you might need to use a longer timeout for the first run.
 
-Run this script after creating your files, and fix any reported errors before proceeding.
-If the guardrail reports a build failure, read the error output carefully and fix the issue.
 """
 
 _AGENTS_MD_GUARDRAIL_WORKFLOW_STEP = """\
-4. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
+5. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
 """
 
 _AGENTS_MD_GUARDRAIL_REMINDER = """\
@@ -336,9 +337,9 @@ def build_prompt(config: AgentConfig) -> Prompt:
 
 def _build_inline_prompt(config: AgentConfig) -> str:
     """Build the full inline agent prompt."""
-    prompt = AGENT_PROMPT_TEMPLATE.replace(
+    prompt = LONG_FORM_AGENT_PROMPT_TEMPLATE.replace(
         "{GUARDRAIL_SECTION}",
-        _INLINE_GUARDRAIL if config.guardrail else "\n",
+        _LONGFORM_GUARDRAIL_PROMPT if config.guardrail else "\n",
     )
     prompt += MODAL_ADDENDUM if config.agent_in_modal else LOCAL_ADDENDUM
     return prompt
@@ -354,7 +355,7 @@ def _build_inline_prompt(config: AgentConfig) -> str:
 # as system-level context.
 # ---------------------------------------------------------------------------
 
-AGENTS_MD = f"""\
+AGENTS_MD_CONTENTS = f"""\
 # Bootstrap Devcontainer - Agent Instructions
 
 You are setting up a reproducible dev container so this project's test suite passes.
@@ -385,21 +386,21 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    - If the project needs config files or test fixtures that don't exist in the repo,
      create them in the Dockerfile (or in `run_all_tests.sh`) — changes outside `.devcontainer/` are lost.
 
-3. **`.devcontainer/run_all_tests.sh`** (executable) — runs the full test suite:
+3. **`.devcontainer/run_all_tests.sh`** (executable) — should run and document the full test suite:
+   - Use `set -euo pipefail`
+   - `mkdir -p /test_artifacts/junit` near the top
    - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
      Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
      Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`
    - Writes `/test_artifacts/final_result.json` with `{{"success": true/false}}`
-   - Use `set -euo pipefail`
-   - `mkdir -p /test_artifacts/junit` at the top
-   - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites.
+   - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites and produce separate JUnit XML reports for each test suite.
 
 ## Workflow
 
 1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
 2. Identify language, test framework, and dependencies.
 3. Create the three files above.
-{{GUARDRAIL_WORKFLOW_STEP}}4. Build and test:
+4. Build and test:
    ```bash
    IMAGE_NAME="img-$(date +%s)"
    devcontainer build --image-name "$IMAGE_NAME" --workspace-folder .
@@ -410,20 +411,23 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    # No need to clean up — you're in an ephemeral sandbox.
    ```
 
-## Key tips
+{{GUARDRAIL_WORKFLOW_STEP}}
 
-- **Python**: use `uv` for fast installs. Set `ENV UV_LINK_MODE=copy` in the Dockerfile —
+## More tips
+
+- **Python**: use `uv` for fast installs, and try to have packages pre-installed in the Dockerfile so that they are cached.
+  Set `ENV UV_LINK_MODE=copy` in the Dockerfile to avoid problems with Modal's snapshotting —
   without this, Modal's snapshotting breaks on symlinks (hard-won lesson).
-  Set `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in `run_all_tests.sh` if tests
+  Consider setting `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in `run_all_tests.sh` if tests
   import from the project root without an installed package.
 - **Stuck tests**: use `timeout` to prevent hangs (e.g. `timeout 300 pytest tests/`).
-- **Coverage**: disable it (`--no-cov`, etc.) — it's slow and not needed here.
+- **Coverage**: if it's enabled by default, disable it (`--no-cov`, etc.) — it's slow and not needed here.
 - **`docker run`** must use `--network=host` in this environment.
 - Only changes inside `.devcontainer/` are preserved.
 
 ## Status updates
 
-Emit status lines like:
+As you work, emit status lines like:
 {STATUS_MARKER} Exploring repository structure.
 {STATUS_MARKER} Creating Dockerfile for Python project.
 
@@ -440,7 +444,7 @@ AGENTS_MD_SHORT_PROMPT = (
 
 def _build_agents_md_prompt(config: AgentConfig) -> tuple[str, str]:
     """Return (agents_md_content, short_cli_prompt) for the AGENTS.md path."""
-    agents_md = AGENTS_MD.replace(
+    agents_md = AGENTS_MD_CONTENTS.replace(
         "{GUARDRAIL_WORKFLOW_STEP}",
         _AGENTS_MD_GUARDRAIL_WORKFLOW_STEP if config.guardrail else "",
     ).replace(
