@@ -6,6 +6,7 @@ so tests don't need real AWS credentials.
 """
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -130,7 +131,7 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
         s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
         limit_to_first_n_repos=None,
         max_concurrent=2,
-        docker_registry_mirror="",
+        docker_registry_mirror=os.environ["DOCKER_REGISTRY_MIRROR"],
     )
 
     assert len(outputs) == 1
@@ -222,7 +223,7 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
         s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
         limit_to_first_n_repos=None,
         max_concurrent=2,
-        docker_registry_mirror="",
+        docker_registry_mirror=os.environ["DOCKER_REGISTRY_MIRROR"],
     )
 
     assert len(outputs) == 1
