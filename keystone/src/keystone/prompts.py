@@ -38,7 +38,7 @@ We need to build an appropriate dev container, Dockerfile, and test runner in wh
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
 
-Your task is to create and populate a .devcontainer/... folder with the appropriate Dockerfile at the root of the project's code tree.
+Your task is to create and populate a .devcontainer/... folder with an appropriate Dockerfile and test runner script.
 
 IMPORTANT: Only your changes inside .devcontainer/... will be preserved.
 When we capture your work, we extract only the .devcontainer/ directory and reapply it to the original repo.
@@ -53,13 +53,16 @@ Instructions:
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
 
-2. Create a .devcontainer/Dockerfile alongside that.
+2. Create a .devcontainer/Dockerfile alongside it that is capable of building and running the project's test suite.
 
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
+
+  After that inside the Dockerfile, configure, install and build any dependencies that are
+  necessary to run the code and test suite.
 
   A nice trick that can dramatically speed up subsequent Dockerfile builds is to pre-warm package caches
   and fetch/build dependencies early in the Dockerfile, before copying the entire source tree into the image.
@@ -77,14 +80,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Pre-create uv virtual environment and install dependencies.
 # Install dependencies first (without the project itself) to maximize layer caching.
 # See: https://docs.astral.sh/uv/guides/integration/docker/#caching
-COPY pyproject.toml uv.lock /tmp/deps/
+COPY README.md pyproject.toml uv.lock /tmp/deps/
 ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN cd /tmp/deps && \
     uv sync --locked --no-install-project && \
     echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
 ```
 
-  If you use this trick, please also add this environment variable to the Dockerfile so that this works correctly on Modal:
+  If you use uv and preinstall dependencies, please also add this environment variable to the Dockerfile so that this works correctly on Modal:
 ```
 # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!  This was a nightmare to debug.
 # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
@@ -121,7 +124,7 @@ COPY WORKSPACE BUILD.bazel /project_src/
 COPY src/ /project_src/src/
 WORKDIR /project_src
 RUN bazel build //...
-# Bazel cache will be preserved in the layer
+# Bazel build artifacts should be preserved in the layer.
 ```
 
 IMPORTANT: Do NOT use `COPY . .` to copy the entire source tree, because you are working inside
@@ -202,7 +205,8 @@ Tips and Notes:
   Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package,
   and that there may not already be a PYTHONPATH set in the image: `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}`
 
-* If tests cannot be fixed by Dockerfile environment changes, disable them via command line args in run_all_tests.sh.
+* If tests cannot be fixed by Dockerfile environment changes, disable them via command line args in run_all_tests.sh,
+  or remove them inside the Dockerfile after copying code into the image.
 
 * If the tests have code coverage enabled by default, disable it in run_all_tests.sh to speed things up.
   (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
@@ -231,16 +235,18 @@ Tips and Notes:
   - {STATUS_MARKER} Build failed due to missing dependency; adding libpq-dev to Dockerfile.
 
 * When finished, emit a final summary as plain text (not via tool calls):
-{SUMMARY_MARKER} <One-line summary of what worked, what didn't, and any tips for future runs.>
+{
+    SUMMARY_MARKER
+} <One-line summary of what worked, what didn't, and any tips for future runs.  Anything you did that was clever or interesting, and any problems you ran into.>
 Include anything you wish you had been told at the start. Examples:
 - {SUMMARY_MARKER} Everything worked. Tip: this project needed uv installed in the container.
 - {
     SUMMARY_MARKER
-} Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
+} All 200 tests pass. I had to work around rate limits and spotty internet connectivity, but I got it working.
 
 Please don't forget to emit the summary at the end.
-{{GUARDRAIL_SECTION}}
-Then verify your work using commands like these:
+
+You can verify your work using commands like these:
 
 1. To build your image:
 ```bash
@@ -264,6 +270,8 @@ docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME
 # Note: If you run a container in detached mode, make sure to `docker wait $CONTAINER_NAME` before trying to extract the test artifacts.
 
 # No need to clean up the container -- you're working in an ephemeral sandbox.
+
+{{GUARDRAIL_SECTION}}
 ```
 """
 
@@ -273,9 +281,12 @@ docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME
 
 _LONGFORM_GUARDRAIL_PROMPT = """\
 
+To aid you in verifying your work, we have provided a guardrail script that will check some basic properties of the
+devcontainer and test runner script.  This script simplifies the execution of the docker commands above.
+
 **IMPORTANT: You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
 ```bash
-timeout 10m ./guardrail.sh
+timeout 10m ./guardrail.sh  # Timeout may be changed as needed.
 ```
 
 This script validates that:
@@ -286,7 +297,7 @@ This script validates that:
 If the guardrail exits abnormally, read the error output carefully and fix the issue.
 
 Once you have a successful guardrail run, there's no need to repeat the checks it does;
-you can likely end your turn at this point.
+you can likely end your turn at this point -- using the guardrail can simplify the verification process a lot!
 
 Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
 You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
