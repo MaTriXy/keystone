@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI to find and delete eval run directories where success==false."""
+"""CLI to find and archive eval run directories where success==false."""
 
 from __future__ import annotations
 
@@ -48,15 +48,23 @@ def _protocol_prefix(path: str) -> str:
     return ""
 
 
+def _move_tree(fs: fsspec.AbstractFileSystem, src: str, dst: str) -> None:
+    """Recursively copy *src* to *dst* then remove *src*.
+
+    fsspec doesn't have a universal rename/move, so we copy + delete.
+    For S3 this stays server-side via the copy implementation in s3fs.
+    """
+    fs.copy(src, dst, recursive=True)
+    fs.rm(src, recursive=True)
+
+
 @app.command()
 def main(
     path: str = typer.Argument(help="fsspec root path (file:///... or s3://...)"),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", "-n", help="List directories but don't delete"
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="List directories but don't act"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
-    """Find eval runs with success==false and delete them."""
+    """Find eval runs with success==false and archive them."""
     fs, root = _get_fs(path)
     prefix = _protocol_prefix(path)
 
@@ -67,25 +75,31 @@ def main(
         console.print("[green]No failed runs found.[/green]")
         raise SystemExit(0)
 
+    archive_root = root.rstrip("/") + "_failed_run_archive"
+
     console.print(f"\n[bold red]Found {len(failed)} failed run(s):[/bold red]\n")
     for d in failed:
+        rel = d[len(root.rstrip("/")) :]  # e.g. /model/task/trial_0
         console.print(f"  {prefix}{d}")
+        console.print(f"    → {prefix}{archive_root}{rel}")
 
     if dry_run:
-        console.print("\n[yellow]Dry run — nothing deleted.[/yellow]")
+        console.print("\n[yellow]Dry run — nothing archived.[/yellow]")
         raise SystemExit(0)
 
     if not yes:
-        confirm = console.input(f"\n[bold]Delete these {len(failed)} directories? [y/N] [/bold]")
+        confirm = console.input(f"\n[bold]Archive these {len(failed)} directories? [y/N] [/bold]")
         if confirm.strip().lower() not in ("y", "yes"):
             console.print("[yellow]Aborted.[/yellow]")
             raise SystemExit(1)
 
     for d in failed:
-        console.print(f"  [red]deleting[/red] {prefix}{d}")
-        fs.rm(d, recursive=True)
+        rel = d[len(root.rstrip("/")) :]
+        dest = archive_root + rel
+        console.print(f"  [cyan]archiving[/cyan] {prefix}{d} → {prefix}{dest}")
+        _move_tree(fs, d, dest)
 
-    console.print(f"\n[green]Deleted {len(failed)} failed run(s).[/green]")
+    console.print(f"\n[green]Archived {len(failed)} failed run(s).[/green]")
 
 
 if __name__ == "__main__":
