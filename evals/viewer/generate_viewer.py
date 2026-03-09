@@ -326,6 +326,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
            line-height: 28px; font-size: 13px; font-weight: 700; }
   .badge.pass { background: #14532d; color: #4ade80; }
   .badge.fail { background: #450a0a; color: #f87171; }
+  .badge.timeout { background: #422006; color: #fbbf24; }
   .badge.infra { background: #7c3a10; color: #fed7aa; }
   .badge.missing { background: #1e2235; color: #475569; }
 
@@ -338,6 +339,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 padding: 12px; overflow: hidden; }
   .model-card.pass-card { border-left: 3px solid #22c55e; }
   .model-card.fail-card { border-left: 3px solid #ef4444; }
+  .model-card.timeout-card { border-left: 3px solid #fbbf24; }
   .model-card.infra-card { border-left: 3px solid #fb923c; }
   .model-card .card-header { display: flex; justify-content: space-between; align-items: center;
                               margin-bottom: 8px; }
@@ -346,6 +348,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                               padding: 2px 8px; border-radius: 4px; }
   .model-card .card-status.pass { background: #14532d; color: #4ade80; }
   .model-card .card-status.fail { background: #450a0a; color: #f87171; }
+  .model-card .card-status.timeout { background: #422006; color: #fbbf24; }
   .model-card .card-status.infra { background: #431407; color: #fdba74; }
   .meta-row { display: flex; gap: 16px; font-size: 12px; color: #64748b; margin-bottom: 8px;
               flex-wrap: wrap; }
@@ -706,6 +709,9 @@ function renderTable() {
         return `<td class="result-cell"><span class="badge pass">✓</span>${cellBtns}</td>`;
       }
       const cat = categorizeError(r.error);
+      if (cat === "Agent timeout") {
+        return `<td class="result-cell"><span class="badge timeout" title="Agent timeout">⏱</span>${cellBtns}</td>`;
+      }
       const isInfra = INFRA_CATEGORIES.has(cat);
       if (isInfra) {
         return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span>${cellBtns}</td>`;
@@ -749,7 +755,7 @@ function renderDetailPanel(repo, models, runData) {
 
     const meta = getModelMeta(model);
     const errCat = categorizeError(r.error || "");
-    const cls = r.success ? "pass" : (INFRA_CATEGORIES.has(errCat) ? "infra" : "fail");
+    const cls = r.success ? "pass" : (errCat === "Agent timeout" ? "timeout" : (INFRA_CATEGORIES.has(errCat) ? "infra" : "fail"));
     const dur = r.duration_s ? `${r.duration_s}s` : "—";
     const cost = r.cost_usd ? `$${r.cost_usd}` : "—";
     const tests = (r.tests_passed != null)
@@ -787,7 +793,7 @@ function renderDetailPanel(repo, models, runData) {
     return `<div class="model-card ${cls}-card">
       <div class="card-header">
         <span class="card-name" style="color:${meta.color}">${meta.label}</span>
-        <span class="card-status ${cls}">${r.success ? "PASS" : "FAIL"}</span>
+        <span class="card-status ${cls}">${r.success ? "PASS" : (cls === "timeout" ? "TIMEOUT" : "FAIL")}</span>
       </div>
       <div class="meta-row">
         <span><b>time:</b> ${dur}</span>
