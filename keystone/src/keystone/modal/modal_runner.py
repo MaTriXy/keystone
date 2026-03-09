@@ -38,6 +38,12 @@ from keystone.timeouts import sandbox_timeout_seconds
 logger = logging.getLogger(__name__)
 
 
+class SandboxCrashedError(Exception):
+    """Raised when the Modal sandbox has died (OOM, timeout, internal error)."""
+
+    pass
+
+
 class ManagedProcess:
     """
     Wraps a Modal ContainerProcess to provide consistent logging and optional streaming.
@@ -98,9 +104,15 @@ class ManagedProcess:
 
     def wait(self) -> int:
         """Block until the process and its logging threads finish."""
-        self.proc.wait()
-        self._stdout_thread.join()
-        self._stderr_thread.join()
+        try:
+            self.proc.wait()
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "already finished" in err_msg or "internal server error" in err_msg:
+                raise SandboxCrashedError(f"Sandbox died during '{self.prefix}': {e}") from e
+            raise
+        self._stdout_thread.join(timeout=10)
+        self._stderr_thread.join(timeout=10)
         return self.proc.returncode or 0
 
     def stream(self) -> Iterator[StreamEvent]:
@@ -110,7 +122,14 @@ class ManagedProcess:
 
         streams_done = 0
         while streams_done < 2:
-            event = self._queue.get()
+            try:
+                event = self._queue.get(timeout=30)
+            except queue.Empty:
+                # Queue stalled - check if threads are still alive
+                alive = self._stdout_thread.is_alive() or self._stderr_thread.is_alive()
+                if not alive:
+                    break
+                continue
             if event is None:
                 streams_done += 1
             else:
@@ -120,6 +139,20 @@ class ManagedProcess:
     def terminate(self) -> None:
         """Terminate the underlying process."""
         self.proc.terminate()
+
+
+def _is_sandbox_crash(exc: Exception) -> bool:
+    """Check if an exception indicates the Modal sandbox has died."""
+    msg = str(exc).lower()
+    return any(
+        pattern in msg
+        for pattern in [
+            "already finished",
+            "internal server error",
+            "sandbox terminated",
+            "sandbox timed out",
+        ]
+    )
 
 
 def run_modal_command(
@@ -135,7 +168,12 @@ def run_modal_command(
         **kwargs: Additional arguments passed to sb.exec()
     """
     logger.info(f"[{name}] Running: {shlex.join(args)}")
-    proc = sb.exec(*args, **kwargs)
+    try:
+        proc = sb.exec(*args, **kwargs)
+    except Exception as e:
+        if _is_sandbox_crash(e):
+            raise SandboxCrashedError(f"Sandbox died before exec '{name}': {e}") from e
+        raise
     return ManagedProcess(proc, prefix=name, capture=capture)
 
 
@@ -177,7 +215,6 @@ class ModalAgentRunner(AgentRunner):
             app=app,
             image=image,
             timeout=sandbox_timeout_seconds(self._agent_time_limit_seconds),
-            region="us-west-2",
             experimental_options={"enable_docker": True},
         )
 
@@ -283,6 +320,14 @@ class ModalAgentRunner(AgentRunner):
             yield from self._run_agent(
                 prompt, max_budget_usd, agent_cmd, time_limit_seconds, provider
             )
+        except SandboxCrashedError as e:
+            logger.error("Sandbox crashed during agent run: %s", e)
+            self._exit_code = 1
+            self._sandbox = None  # Mark as dead, don't try to terminate
+            yield StreamEvent(
+                stream=StreamType.STDERR,
+                line=f"SANDBOX_CRASHED: {e}",
+            )
         except Exception:
             if self._sandbox:
                 try:
@@ -378,6 +423,10 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             return
         with sb.open("/tmp/devcontainer.tar.gz", "rb") as f:
             self._devcontainer_tarball = f.read()
+        if len(self._devcontainer_tarball) == 0:
+            raise SandboxCrashedError(
+                "Devcontainer tarball is 0 bytes - sandbox likely crashed (OOM during Docker build)"
+            )
         logger.info("Captured devcontainer tarball: %d bytes", len(self._devcontainer_tarball))
 
     @property
@@ -403,28 +452,43 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         Note: Timeouts are enforced via the timeout command wrapper.
         """
-        sb = self.ensure_sandbox()
+        try:
+            sb = self.ensure_sandbox()
+        except Exception as e:
+            logger.error("Failed to create sandbox for verification: %s", e)
+            return VerificationResult(
+                success=False,
+                error_message=f"Failed to create sandbox for verification: {e}",
+            )
 
         # Upload fresh project source
         logger.info("Uploading project source for verification...")
-        run_modal_command(sb, "rm", "-rf", "/project", name="verify-setup").wait()
-        run_modal_command(sb, "mkdir", "-p", "/project", name="verify-setup").wait()
-        with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(project_archive)
-        run_modal_command(
-            sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="verify-setup"
-        ).wait()
+        try:
+            run_modal_command(sb, "rm", "-rf", "/project", name="verify-setup").wait()
+            run_modal_command(sb, "mkdir", "-p", "/project", name="verify-setup").wait()
+            with sb.open("/tmp/project.tar.gz", "wb") as f:
+                f.write(project_archive)
+            run_modal_command(
+                sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="verify-setup"
+            ).wait()
 
-        # Overlay devcontainer
-        logger.info(
-            "Uploading .devcontainer for verification (%d bytes)...",
-            len(devcontainer_tarball),
-        )
-        with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
-            f.write(devcontainer_tarball)
-        run_modal_command(
-            sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
-        ).wait()
+            # Overlay devcontainer
+            logger.info(
+                "Uploading .devcontainer for verification (%d bytes)...",
+                len(devcontainer_tarball),
+            )
+            with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
+                f.write(devcontainer_tarball)
+            run_modal_command(
+                sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
+            ).wait()
+        except SandboxCrashedError as e:
+            logger.error("Sandbox crashed during verification setup: %s", e)
+            self._sandbox = None
+            return VerificationResult(
+                success=False,
+                error_message=f"Sandbox crashed during verification setup: {e}",
+            )
 
         # List what ended up in .devcontainer for diagnostics
         ls_proc = run_modal_command(
@@ -467,8 +531,18 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             "/project/.devcontainer/Dockerfile",
             "/project",
         ]
-        build_proc = run_modal_command(sb, *build_cmd, name="docker-build")
-        build_exit = build_proc.wait()
+        try:
+            build_proc = run_modal_command(sb, *build_cmd, name="docker-build")
+            build_exit = build_proc.wait()
+        except SandboxCrashedError as e:
+            image_build_seconds = time.time() - build_start
+            logger.error("Sandbox crashed during Docker build (likely OOM): %s", e)
+            self._sandbox = None
+            return VerificationResult(
+                success=False,
+                error_message=f"Sandbox crashed during Docker build (likely OOM): {e}",
+                image_build_seconds=image_build_seconds,
+            )
         image_build_seconds = time.time() - build_start
         if build_exit == TIMEOUT_EXIT_CODE:
             return VerificationResult(
@@ -486,21 +560,32 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         # 2. Run tests
         logger.info("Running tests in container...")
         test_start = time.time()
-        run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
-        test_proc = run_modal_command(
-            sb,
-            "timeout",
-            str(test_timeout_seconds),
-            "docker",
-            "run",
-            "--network=host",
-            "--name",
-            container_name,
-            image_name,
-            "/run_all_tests.sh",
-            name="docker-test",
-        )
-        test_exit_code = test_proc.wait()
+        try:
+            run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
+            test_proc = run_modal_command(
+                sb,
+                "timeout",
+                str(test_timeout_seconds),
+                "docker",
+                "run",
+                "--network=host",
+                "--name",
+                container_name,
+                image_name,
+                "/run_all_tests.sh",
+                name="docker-test",
+            )
+            test_exit_code = test_proc.wait()
+        except SandboxCrashedError as e:
+            test_execution_seconds = time.time() - test_start
+            logger.error("Sandbox crashed during test execution: %s", e)
+            self._sandbox = None
+            return VerificationResult(
+                success=False,
+                error_message=f"Sandbox crashed during test execution: {e}",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
         test_execution_seconds = time.time() - test_start
 
         # 3. Extract test artifacts
@@ -509,38 +594,47 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         # Without this, `docker cp` would nest the directory inside the
         # existing one even with the trailing "/." fix.
         logger.info("Extracting test artifacts...")
-        run_modal_command(sb, "rm", "-rf", "/tmp/test_artifacts", name="cleanup_artifacts").wait()
-        run_modal_command(
-            sb,
-            "docker",
-            "cp",
-            f"{container_name}:/test_artifacts/.",
-            "/tmp/test_artifacts",
-            name="cp_test_artifacts",
-        ).wait()
-        run_modal_command(
-            sb,
-            "tar",
-            "-czf",
-            "/tmp/test_artifacts.tar.gz",
-            "-C",
-            "/tmp/test_artifacts",
-            ".",
-            name="extract",
-        ).wait()
-
         try:
+            run_modal_command(
+                sb, "rm", "-rf", "/tmp/test_artifacts", name="cleanup_artifacts"
+            ).wait()
+            run_modal_command(
+                sb,
+                "docker",
+                "cp",
+                f"{container_name}:/test_artifacts/.",
+                "/tmp/test_artifacts",
+                name="cp_test_artifacts",
+            ).wait()
+            run_modal_command(
+                sb,
+                "tar",
+                "-czf",
+                "/tmp/test_artifacts.tar.gz",
+                "-C",
+                "/tmp/test_artifacts",
+                ".",
+                name="extract",
+            ).wait()
+
             with sb.open("/tmp/test_artifacts.tar.gz", "rb") as f:
                 tarball = f.read()
             test_artifacts_dir.mkdir(parents=True, exist_ok=True)
             with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
                 tar.extractall(test_artifacts_dir, filter="data")
             logger.info(f"Test artifacts extracted to {test_artifacts_dir}")
+        except SandboxCrashedError as e:
+            logger.warning("Sandbox crashed during artifact extraction: %s", e)
+            self._sandbox = None
+            # Still return the test result - we already have it
         except Exception as e:
             logger.exception("Error extracting artifacts: %s", e)
 
         # 4. Clean up container
-        run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
+        try:
+            run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
+        except SandboxCrashedError:
+            self._sandbox = None
 
         if test_exit_code == TIMEOUT_EXIT_CODE:
             return VerificationResult(
@@ -716,5 +810,8 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         """Terminate the Modal sandbox."""
         if self._sandbox:
             print("Terminating Modal sandbox...", file=sys.stderr)
-            self._sandbox.terminate()
+            try:
+                self._sandbox.terminate()
+            except Exception as e:
+                logger.warning("Error terminating sandbox (may already be dead): %s", e)
             self._sandbox = None
