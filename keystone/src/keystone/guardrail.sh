@@ -212,7 +212,7 @@ if [ -n "$BUILT_IMAGE" ]; then
             echo "    Then parse Success/Fail lines into JUnit XML with a Python script."
             echo "    NOTE: Many Neovim plugins use busted, not plenary. Check first."
             echo ""
-            echo "  ❌ Anti-pattern — DO NOT DO THIS:"
+            echo "  ❌ Anti-pattern — DO NOT DO THIS AND ASK PYTEST FOR JUNIT XML OUTPUT:"
             echo "    def test_entire_suite():"
             echo '        subprocess.run(["bash", "run_tests.sh"], check=True)'
             echo "    This reports 1 test regardless of how many actually ran."
