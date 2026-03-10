@@ -96,9 +96,9 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
         cp -r .devcontainer/ "$BUILD_DIR/.devcontainer"
 
         IMAGE_NAME="guardrail-check-$(date +%s)"
-        BUILD_OUTPUT=$(devcontainer build \
+        devcontainer build \
             --image-name "$IMAGE_NAME" \
-            --workspace-folder "$BUILD_DIR" 2>&1)
+            --workspace-folder "$BUILD_DIR" 2>&1
         BUILD_EXIT=$?
 
         rm -rf "$BUILD_DIR"
@@ -107,10 +107,7 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
             pass "Docker image built successfully"
             BUILT_IMAGE="$IMAGE_NAME"
         else
-            fail "Docker build FAILED (exit code $BUILD_EXIT). Build output:"
-            echo "--- BUILD OUTPUT START ---"
-            echo "$BUILD_OUTPUT" | tail -50
-            echo "--- BUILD OUTPUT END ---"
+            fail "Docker build FAILED (exit code $BUILD_EXIT)."
             echo ""
             echo "  Hints:"
             echo "  - Check that all COPY source paths exist relative to the project root"
