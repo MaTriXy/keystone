@@ -90,29 +90,33 @@ if [ -f ".devcontainer/Dockerfile" ] && [ -f ".devcontainer/devcontainer.json" ]
     if [ -z "$CLEAN_SRC" ]; then
         fail "No clean project copy found (expected /project_clean or .project_clean). Cannot verify build isolation."
     else
-        BUILD_DIR=$(mktemp -d)
-        cp -r "$CLEAN_SRC/." "$BUILD_DIR/"
-        rm -rf "$BUILD_DIR/.devcontainer"
-        cp -r .devcontainer/ "$BUILD_DIR/.devcontainer"
-
-        IMAGE_NAME="guardrail-check-$(date +%s)"
-        devcontainer build \
-            --image-name "$IMAGE_NAME" \
-            --workspace-folder "$BUILD_DIR" 2>&1
-        BUILD_EXIT=$?
-
-        rm -rf "$BUILD_DIR"
-
-        if [ $BUILD_EXIT -eq 0 ]; then
-            pass "Docker image built successfully"
-            BUILT_IMAGE="$IMAGE_NAME"
+        BUILD_DIR=$(mktemp -d) || { fail "mktemp -d failed (is /tmp writable?)"; BUILD_DIR=""; }
+        if [ -z "$BUILD_DIR" ]; then
+            fail "Cannot proceed with Docker build — temp directory creation failed."
         else
-            fail "Docker build FAILED (exit code $BUILD_EXIT)."
-            echo ""
-            echo "  Hints:"
-            echo "  - Check that all COPY source paths exist relative to the project root"
-            echo "  - Check that all package names in apt-get/pip/npm install are correct"
-            echo "  - Check that the base image in FROM is valid and accessible"
+            cp -r "$CLEAN_SRC/." "$BUILD_DIR/"
+            rm -rf "$BUILD_DIR/.devcontainer"
+            cp -r .devcontainer/ "$BUILD_DIR/.devcontainer"
+
+            IMAGE_NAME="guardrail-check-$(date +%s)"
+            devcontainer build \
+                --image-name "$IMAGE_NAME" \
+                --workspace-folder "$BUILD_DIR" 2>&1
+            BUILD_EXIT=$?
+
+            rm -rf "$BUILD_DIR"
+
+            if [ $BUILD_EXIT -eq 0 ]; then
+                pass "Docker image built successfully"
+                BUILT_IMAGE="$IMAGE_NAME"
+            else
+                fail "Docker build FAILED (exit code $BUILD_EXIT)."
+                echo ""
+                echo "  Hints:"
+                echo "  - Check that all COPY source paths exist relative to the project root"
+                echo "  - Check that all package names in apt-get/pip/npm install are correct"
+                echo "  - Check that the base image in FROM is valid and accessible"
+            fi
         fi
     fi
 else
@@ -127,7 +131,10 @@ echo ""
 echo "[3/3] Running tests..."
 
 if [ -n "$BUILT_IMAGE" ]; then
-    ARTIFACTS_DIR=$(mktemp -d)
+    ARTIFACTS_DIR=$(mktemp -d) || { fail "mktemp -d failed for test artifacts (is /tmp writable?)"; ARTIFACTS_DIR=""; }
+    if [ -z "$ARTIFACTS_DIR" ]; then
+        fail "Cannot proceed with tests — temp directory creation failed."
+    else
     CONTAINER_NAME="guardrail-run-$(date +%s)"
 
     docker run --network=host --name "$CONTAINER_NAME" "$BUILT_IMAGE" /run_all_tests.sh
@@ -232,6 +239,7 @@ if [ -n "$BUILT_IMAGE" ]; then
     fi
 
     rm -rf "$ARTIFACTS_DIR"
+    fi
 else
     fail "Docker image was not built — cannot run tests."
 fi
