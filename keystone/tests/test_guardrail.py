@@ -232,24 +232,21 @@ def test_guardrail_warns_single_test(workspace: Path) -> None:
         "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
         "  fi\n"
         "done\n"
-        'if [ "$TOTAL_TESTS" -eq 1 ]; then\n'
-        '  echo "WARN: only 1 test"\n'
-        'elif [ "$TOTAL_TESTS" -eq 0 ]; then\n'
-        '  echo "WARN: 0 tests"\n'
+        'if [ "$TOTAL_TESTS" -le 1 ]; then\n'
+        '  echo "FAIL: only $TOTAL_TESTS test(s)"\n'
         "else\n"
         '  echo "PASS: $TOTAL_TESTS tests"\n'
         "fi\n"
     )
+    if not shutil.which("xmlstarlet"):
+        pytest.skip("xmlstarlet not installed in test environment")
     result = subprocess.run(
         ["bash", "-c", check_script],
         cwd=workspace,
         capture_output=True,
         text=True,
     )
-    # xmlstarlet may not be installed in the test environment; skip gracefully
-    if not shutil.which("xmlstarlet"):
-        pytest.skip("xmlstarlet not installed in test environment")
-    assert "WARN: only 1 test" in result.stdout
+    assert "FAIL: only 1 test(s)" in result.stdout
 
 
 def test_guardrail_passes_multiple_tests(workspace: Path) -> None:
@@ -277,20 +274,18 @@ def test_guardrail_passes_multiple_tests(workspace: Path) -> None:
         "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
         "  fi\n"
         "done\n"
-        'if [ "$TOTAL_TESTS" -eq 1 ]; then\n'
-        '  echo "WARN: only 1 test"\n'
-        'elif [ "$TOTAL_TESTS" -eq 0 ]; then\n'
-        '  echo "WARN: 0 tests"\n'
+        'if [ "$TOTAL_TESTS" -le 1 ]; then\n'
+        '  echo "FAIL: only $TOTAL_TESTS test(s)"\n'
         "else\n"
         '  echo "PASS: $TOTAL_TESTS tests"\n'
         "fi\n"
     )
+    if not shutil.which("xmlstarlet"):
+        pytest.skip("xmlstarlet not installed in test environment")
     result = subprocess.run(
         ["bash", "-c", check_script],
         cwd=workspace,
         capture_output=True,
         text=True,
     )
-    if not shutil.which("xmlstarlet"):
-        pytest.skip("xmlstarlet not installed in test environment")
     assert "PASS: 5 tests" in result.stdout
