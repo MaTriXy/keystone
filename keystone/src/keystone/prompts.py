@@ -51,6 +51,8 @@ IMPORTANT: When finished, emit a final summary as plain text (not via tool calls
   - {SUMMARY_MARKER} At first I was rate-limited by docker hub, and worked around it by using a different base image from ...  I also had to disable 3 tests by editing project's code in the Dockerfile.
   - {SUMMARY_MARKER} All 200 tests pass. My base image was X, and I made sure to only run the apt-install lines once to benefit from layer caching, adding a second layer of apt installs for the dependencies I discovered later.
 
+Include anything you wish you had been told at the start.
+
 Please don't forget to emit the summary before ending your turn.
 """
 
