@@ -227,7 +227,8 @@ def test_guardrail_warns_single_test(workspace: Path) -> None:
     check_script = (
         "TOTAL_TESTS=0\n"
         "for xml_file in fake_artifacts/junit/*.xml; do\n"
-        '  FILE_TESTS=$(xmlstarlet sel -t -v "/*/@tests" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  FILE_TESTS=$(xmlstarlet sel -t -v "sum(//testsuite/@tests)" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  FILE_TESTS=$(printf "%.0f" "$FILE_TESTS" 2>/dev/null || echo "0")\n'
         '  if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then\n'
         "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
         "  fi\n"
@@ -269,7 +270,8 @@ def test_guardrail_passes_multiple_tests(workspace: Path) -> None:
     check_script = (
         "TOTAL_TESTS=0\n"
         "for xml_file in fake_artifacts/junit/*.xml; do\n"
-        '  FILE_TESTS=$(xmlstarlet sel -t -v "/*/@tests" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  FILE_TESTS=$(xmlstarlet sel -t -v "sum(//testsuite/@tests)" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  FILE_TESTS=$(printf "%.0f" "$FILE_TESTS" 2>/dev/null || echo "0")\n'
         '  if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then\n'
         "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
         "  fi\n"
@@ -289,3 +291,49 @@ def test_guardrail_passes_multiple_tests(workspace: Path) -> None:
         text=True,
     )
     assert "PASS: 5 tests" in result.stdout
+
+
+def test_guardrail_counts_tests_in_nested_testsuite(workspace: Path) -> None:
+    """Guardrail should count tests when tests attr is on nested <testsuite>, not root <testsuites>.
+
+    Pytest's --junitxml produces <testsuites><testsuite tests="N">...</testsuite></testsuites>
+    where only the inner <testsuite> has the tests attribute. The XPath must handle this.
+    """
+    junit_dir = workspace / "fake_artifacts" / "junit"
+    junit_dir.mkdir(parents=True)
+    (junit_dir / "results.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<testsuites>\n"
+        '  <testsuite name="pytest" tests="3" failures="0">\n'
+        '    <testcase name="test_a" classname="tests.test_mod"/>\n'
+        '    <testcase name="test_b" classname="tests.test_mod"/>\n'
+        '    <testcase name="test_c" classname="tests.test_mod"/>\n'
+        "  </testsuite>\n"
+        "</testsuites>\n"
+    )
+
+    # Use the same XPath logic as guardrail.sh
+    check_script = (
+        "TOTAL_TESTS=0\n"
+        "for xml_file in fake_artifacts/junit/*.xml; do\n"
+        '  FILE_TESTS=$(xmlstarlet sel -t -v "sum(//testsuite/@tests)" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  FILE_TESTS=$(printf "%.0f" "$FILE_TESTS" 2>/dev/null || echo "0")\n'
+        '  if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then\n'
+        "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
+        "  fi\n"
+        "done\n"
+        'if [ "$TOTAL_TESTS" -le 1 ]; then\n'
+        '  echo "FAIL: only $TOTAL_TESTS test(s)"\n'
+        "else\n"
+        '  echo "PASS: $TOTAL_TESTS tests"\n'
+        "fi\n"
+    )
+    if not shutil.which("xmlstarlet"):
+        pytest.skip("xmlstarlet not installed in test environment")
+    result = subprocess.run(
+        ["bash", "-c", check_script],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+    )
+    assert "PASS: 3 tests" in result.stdout
