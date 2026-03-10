@@ -156,8 +156,9 @@ if [ -n "$BUILT_IMAGE" ]; then
         # Count total tests across all JUnit XML files using xmlstarlet
         TOTAL_TESTS=0
         for xml_file in "$ARTIFACTS_DIR/junit/"*.xml; do
-            # Sum tests= attribute from the root element (testsuites or testsuite)
-            FILE_TESTS=$(xmlstarlet sel -t -v '/*/@tests' "$xml_file" 2>/dev/null || echo "0")
+            # Sum tests= attribute from root or nested testsuite elements
+            FILE_TESTS=$(xmlstarlet sel -t -v 'sum(//testsuite/@tests)' "$xml_file" 2>/dev/null || echo "0")
+            FILE_TESTS=$(printf '%.0f' "$FILE_TESTS" 2>/dev/null || echo "0")
             if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then
                 TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))
             fi
