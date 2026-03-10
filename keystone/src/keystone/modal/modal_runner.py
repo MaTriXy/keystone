@@ -363,6 +363,7 @@ class ModalAgentRunner(AgentRunner):
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
         export_lines = "\n".join(f"export {k}={shlex.quote(v)}" for k, v in env_vars.items() if v)
+
         agent_script_content = f"""#!/bin/bash
 set -e
 cd /project

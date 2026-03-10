@@ -16,7 +16,7 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
-IMAGE_CACHE_BUST = "2026-03-05T00:00:00"  # bump to force Modal image rebuild
+IMAGE_CACHE_BUST = "2026-03-10T22:00:00-fix-perms"  # bump to force Modal image rebuild
 
 # --- Pinned dependency versions (update these to upgrade) ---
 RUNC_VERSION = "v1.4.0"
@@ -106,19 +106,18 @@ def create_modal_image() -> modal.Image:
         .add_local_file(TIMESTAMP_SCRIPT_PATH, "/timestamp_process_output.pl", copy=True)
         # Cache bust: bump IMAGE_CACHE_BUST to force rebuild of layers below
         .run_commands(f"echo 'image cache bust: {IMAGE_CACHE_BUST}'")
-        # Fake agents for testing (deterministic, no LLM dependency)
-        .add_local_file(
-            FAKE_CLAUDE_AGENT_SCRIPT_PATH, "/usr/local/bin/fake_claude_agent.py", copy=True
-        )
-        .add_local_file(
-            FAKE_CODEX_AGENT_SCRIPT_PATH, "/usr/local/bin/fake_codex_agent.py", copy=True
-        )
+        # Fake agents for testing (deterministic, no LLM dependency).
+        # Stage to /tmp first, then copy+chmod in run_commands so permissions
+        # are set in the same layer.  Modal's add_local_file sets restrictive
+        # permissions that cannot be changed by a later run_commands layer.
+        .add_local_file(FAKE_CLAUDE_AGENT_SCRIPT_PATH, "/tmp/_fake_claude_agent.py", copy=True)
+        .add_local_file(FAKE_CODEX_AGENT_SCRIPT_PATH, "/tmp/_fake_codex_agent.py", copy=True)
         .run_commands(
             "chmod 4755 /start-dockerd.sh",
             "chmod +x /wait_for_docker.sh",
             "chmod +x /timestamp_process_output.pl",
-            "chmod +x /usr/local/bin/fake_claude_agent.py",
-            "chmod +x /usr/local/bin/fake_codex_agent.py",
+            "cp /tmp/_fake_claude_agent.py /usr/local/bin/fake_claude_agent.py && chmod 755 /usr/local/bin/fake_claude_agent.py",
+            "cp /tmp/_fake_codex_agent.py /usr/local/bin/fake_codex_agent.py && chmod 755 /usr/local/bin/fake_codex_agent.py",
         )
         .run_commands(
             "useradd -m -s /bin/bash agent",
