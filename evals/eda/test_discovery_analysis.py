@@ -29,7 +29,7 @@ def _(mo):
     PARQUET_PATH = Path.home() / "keystone_eval" / "2026-03-11_cat_v8.parquet"
     df = pl.read_parquet(PARQUET_PATH)
     mo.md(f"Loaded **{len(df)}** rows from `{PARQUET_PATH.name}`")
-    return df, json, pl, Path, PARQUET_PATH
+    return df, json, pl
 
 
 @app.cell
@@ -62,11 +62,11 @@ def _(df, json, pl):
 
     tests_df = pl.DataFrame(rows)
     tests_df
-    return tests_df, rows
+    return (tests_df,)
 
 
 @app.cell
-def _(tests_df, pl):
+def _(pl, tests_df):
     # Build the universe of test names per repo
     repo_universes: dict[str, set[str]] = {}
     for _i in range(len(tests_df)):
@@ -80,11 +80,11 @@ def _(tests_df, pl):
         [{"repo_id": repo, "universe_size": len(names)} for repo, names in repo_universes.items()]
     )
     universe_sizes.sort("universe_size", descending=True)
-    return repo_universes, universe_sizes
+    return (repo_universes,)
 
 
 @app.cell
-def _(tests_df, repo_universes, pl):
+def _(pl, repo_universes: dict[str, set[str]], tests_df):
     # Compute test_discovered_fraction for each row
     fractions: list[float | None] = []
     for _i in range(len(tests_df)):
@@ -99,13 +99,15 @@ def _(tests_df, repo_universes, pl):
         pl.Series("test_discovered_fraction", fractions)
     )
     result_df.sort("test_discovered_fraction")
-    return result_df, fractions
+    return (result_df,)
 
 
 @app.cell
-def _(result_df, mo):
-    mo.md("## Lowest discovery fractions (potential issues)")
-    return ()
+def _(mo):
+    mo.md("""
+    ## Lowest discovery fractions (potential issues)
+    """)
+    return
 
 
 @app.cell
@@ -116,17 +118,19 @@ def _(result_df):
         .sort("test_discovered_fraction")
         .head(20)
     )
-    return ()
+    return
 
 
 @app.cell
-def _(result_df, mo):
-    mo.md("## CDF of `test_discovered_fraction` by model")
-    return ()
+def _(mo):
+    mo.md("""
+    ## CDF of `test_discovered_fraction` by model
+    """)
+    return
 
 
 @app.cell
-def _(result_df, pl):
+def _(pl, result_df):
     import plotly.express as px
 
     plot_df = result_df.filter(pl.col("test_discovered_fraction").is_not_null()).sort(
@@ -137,6 +141,7 @@ def _(result_df, pl):
         plot_df.to_pandas(),
         x="test_discovered_fraction",
         color="config_name",
+        hover_data=["repo_id", "tests_discovered"],
         labels={
             "test_discovered_fraction": "Fraction of repo test universe discovered",
             "config_name": "Model",
@@ -145,17 +150,19 @@ def _(result_df, pl):
     )
     fig.update_layout(xaxis_tickformat=".0%")
     fig
-    return fig, plot_df, px
+    return
 
 
 @app.cell
-def _(result_df, mo):
-    mo.md("## Summary stats by model")
-    return ()
+def _(mo):
+    mo.md("""
+    ## Summary stats by model
+    """)
+    return
 
 
 @app.cell
-def _(result_df, pl):
+def _(pl, result_df):
     (
         result_df.filter(pl.col("test_discovered_fraction").is_not_null())
         .group_by("config_name")
@@ -168,7 +175,7 @@ def _(result_df, pl):
         )
         .sort("mean", descending=True)
     )
-    return ()
+    return
 
 
 if __name__ == "__main__":
