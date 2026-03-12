@@ -151,6 +151,9 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
   COPY pyproject.toml uv.lock ./
 ```
 
+* Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+  they exist during your session but are not part of the project source.
+
 * For Python projects with simple dependencies, using uv for package management speeds up builds significantly.
   Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package,
   and that there may not already be a PYTHONPATH set in the image: `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}`
@@ -378,6 +381,8 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    - Copy source files explicitly — do NOT use `COPY . .`. You work inside `.devcontainer/`,
      so `COPY . .` would include your own files and invalidate the layer cache on every change.
      Instead: `COPY src/ ./src/`, `COPY pyproject.toml uv.lock ./`, etc.
+   - Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+     they exist during your session but are not part of the project source.
    - Do NOT create `.dockerignore` files.
    - For compiled languages (Rust, Go, C++), run the build inside a Dockerfile layer so
      artifacts are cached and tests don't need to recompile from scratch each run.
