@@ -68,24 +68,41 @@ class OpencodeProvider(AgentProvider):
         event_type = data.get("type")
         events: list[AgentEvent] = []
 
-        # ── message events ────────────────────────────────────────────
-        if event_type == "message.part.updated":
-            events.extend(self._parse_message_part(data.get("part", {})))
+        # ── text / tool events ─────────────────────────────────────────
+        # OpenCode nests content under "part" for all event types
+        part = data.get("part", {})
 
-        elif event_type == "message.completed":
-            # End of a full message; extract cost/usage if present
-            usage = data.get("usage", {})
-            if usage:
+        if event_type == "text":
+            text = (part.get("text") or "").strip()
+            if text:
+                events.append(AgentTextEvent(text=text))
+
+        elif event_type == "tool_use":
+            tool_name = part.get("tool", "")
+            tool_input = (part.get("state") or {}).get("input", {})
+            events.append(AgentToolCallEvent(name=tool_name, input=tool_input))
+
+        # ── step_finish: cost and token usage per step ─────────────────
+        elif event_type == "step_finish":
+            tokens = part.get("tokens", {})
+            cache = tokens.get("cache", {})
+            cost_usd = part.get("cost")
+            if tokens:
                 events.append(
                     AgentCostEvent(
-                        input_tokens=usage.get("input_tokens", 0),
-                        output_tokens=usage.get("output_tokens", 0),
-                        cached_tokens=usage.get("cache_read_input_tokens", 0),
+                        cost_usd=cost_usd,
+                        input_tokens=int(tokens.get("input", 0)),
+                        output_tokens=int(tokens.get("output", 0)),
+                        cached_tokens=int(cache.get("read", 0)),
+                        cache_creation_tokens=int(cache.get("write", 0)),
                     )
                 )
 
-        # ── session lifecycle ─────────────────────────────────────────
-        elif event_type == "session.completed":
+        # ── legacy message events (older opencode versions) ───────────
+        elif event_type == "message.part.updated":
+            events.extend(self._parse_message_part(data.get("part", {})))
+
+        elif event_type in ("message.completed", "session.completed"):
             usage = data.get("usage", {})
             if usage:
                 events.append(
@@ -93,6 +110,7 @@ class OpencodeProvider(AgentProvider):
                         input_tokens=usage.get("input_tokens", 0),
                         output_tokens=usage.get("output_tokens", 0),
                         cached_tokens=usage.get("cache_read_input_tokens", 0),
+                        cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
                     )
                 )
 

@@ -53,6 +53,7 @@ from keystone.schema import (
     GeneratedFiles,
     InferenceCost,
     LLMModel,
+    TokenSpending,
     VerificationResult,
 )
 from keystone.version import get_version_info
@@ -252,6 +253,12 @@ def bootstrap(
     status_messages: list[AgentStatusMessage] = []
     agent_errors: list[str] = []
     agent_stderr_lines: list[str] = []
+    # Accumulate token deltas from AgentCostEvent for fallback cost estimation
+    _total_input_tokens = 0
+    _total_output_tokens = 0
+    _total_cached_tokens = 0
+    _total_cache_creation_tokens = 0
+    _total_cost_usd_from_events = 0.0  # Sum of per-event cost_usd (if provider reports it)
 
     def _make_status_message(message: str) -> AgentStatusMessage:
         """Create an AgentStatusMessage with current timestamp."""
@@ -284,6 +291,12 @@ def bootstrap(
 
     def process_stdout_line(line: str) -> None:
         """Process a line of agent stdout via the LLM provider's event parser."""
+        nonlocal \
+            _total_input_tokens, \
+            _total_output_tokens, \
+            _total_cached_tokens, \
+            _total_cache_creation_tokens, \
+            _total_cost_usd_from_events
         for event in provider.parse_stdout_line(line):
             match event:
                 case AgentTextEvent(text=text):
@@ -293,8 +306,14 @@ def bootstrap(
                     logging.info(f"Tool Call: {name}({input_data})")
                 case AgentToolResultEvent(tool_name=name, output=output):
                     logging.info(f"Tool Result: {name} -> {output[:200]}")
-                case AgentCostEvent():
-                    pass  # Cost is now computed post-hoc via ccusage
+                case AgentCostEvent() as cost_event:
+                    # Accumulate token deltas as fallback when ccusage has no data
+                    _total_input_tokens += cost_event.input_tokens
+                    _total_output_tokens += cost_event.output_tokens
+                    _total_cached_tokens += cost_event.cached_tokens
+                    _total_cache_creation_tokens += cost_event.cache_creation_tokens
+                    if cost_event.cost_usd is not None:
+                        _total_cost_usd_from_events += cost_event.cost_usd
                 case AgentErrorEvent(message=msg):
                     logging.error(f"Agent error: {msg}")
                     agent_errors.append(msg)
@@ -376,6 +395,51 @@ def bootstrap(
 
         # Get inference cost via ccusage (Modal only; returns None for local runs)
         inference_cost = runner.get_inference_cost(provider_name) or InferenceCost()
+
+        # Fallback: if ccusage returned no data but we have cost/token info from
+        # the provider's streaming events, use that instead.
+        if (
+            inference_cost.cost_usd == 0.0
+            and inference_cost.ccusage_raw is None
+            and (
+                _total_cost_usd_from_events > 0
+                or (_total_input_tokens + _total_output_tokens + _total_cached_tokens) > 0
+            )
+        ):
+            # Prefer provider-reported cost; fall back to token-based estimate
+            if _total_cost_usd_from_events > 0:
+                final_cost = _total_cost_usd_from_events
+            else:
+                from keystone.llm_provider.pricing import estimate_cost_usd
+
+                model_str = model.value if model else None
+                if model_str and "/" in model_str:
+                    model_str = model_str.split("/", 1)[1]
+                final_cost = estimate_cost_usd(
+                    input_tokens=_total_input_tokens,
+                    cached_tokens=_total_cached_tokens,
+                    output_tokens=_total_output_tokens,
+                    cache_creation_tokens=_total_cache_creation_tokens,
+                    model=model_str,
+                )
+            inference_cost = InferenceCost(
+                cost_usd=final_cost,
+                token_spending=TokenSpending(
+                    input=_total_input_tokens,
+                    cached=_total_cached_tokens,
+                    output=_total_output_tokens,
+                    cache_creation=_total_cache_creation_tokens,
+                ),
+            )
+            logging.info(
+                "ccusage had no data; using streaming event cost: "
+                "$%.4f (input=%d cached=%d output=%d cache_creation=%d)",
+                final_cost,
+                _total_input_tokens,
+                _total_cached_tokens,
+                _total_output_tokens,
+                _total_cache_creation_tokens,
+            )
 
         agent_work_seconds = time.monotonic() - start_time
 

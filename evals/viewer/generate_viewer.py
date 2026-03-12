@@ -22,6 +22,11 @@ RUN_NAMES = [
     # "2026-03-05_cat_v1",
     # "2026-03-05_cat_v2",
     "2026-03-10_four_model_thad",
+    "2026-03-08_four_model_thad_v2",
+    "2026-03-11_cat_v8",
+    "2026-03-11_opencode_vs_claude_v2",
+    "2026-03-12_opencode_vs_claude_cost_v2",
+    "2026-03-12_opencode_vs_claude_cost_v3",
 ]
 
 RUN_LABELS = {
@@ -33,6 +38,10 @@ RUN_LABELS = {
     "2026-03-05_cat_v2": "Four-model 2026-03-05 (v2)",
     "2026-03-08_four_model_thad_v2": "Four-model 2026-03-08 (v2)",
     "2026-03-10_four_model_thad": "Four-model 2026-03-10",
+    "2026-03-11_cat_v8": "Four-model 2026-03-11 (v8)",
+    "2026-03-11_opencode_vs_claude_v2": "OpenCode vs Claude 2026-03-11",
+    "2026-03-12_opencode_vs_claude_cost_v2": "OpenCode vs Claude (cost) 2026-03-12",
+    "2026-03-12_opencode_vs_claude_cost_v3": "OpenCode vs Claude (cost v3) 2026-03-12",
 }
 
 # Canonical model display order & colors per run
