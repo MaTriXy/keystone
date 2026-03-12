@@ -16,6 +16,11 @@ def _():
         **all** configs and trials. Then for each individual run we measure what
         fraction of that universe it discovered (`test_discovered_fraction`).
 
+        Different models produce JUnit XML with different name formats for the
+        same test (e.g. `test_get::test_foo (mod.Class.test_foo)` vs
+        `mod.Class::test_foo`). We normalize names to `ClassName::method` to
+        avoid inflating the universe. Both raw and normalized fractions are shown.
+
         **Contents:**
 
         1. [Lowest discovery fractions](#lowest-discovery-fractions)
@@ -40,7 +45,8 @@ def _(mo):
 
 @app.cell
 def _(df, json, mo, pl):
-    # Extract test names from raw_json for every row
+    import re
+
     def _extract_test_names(raw_json: str) -> list[str]:
         data = json.loads(raw_json)
         br = data.get("bootstrap_result")
@@ -50,6 +56,32 @@ def _(df, json, mo, pl):
         if v is None:
             return []
         return [t["name"] for t in (v.get("test_results") or [])]
+
+    def _normalize_test_name(name: str) -> str:
+        """Normalize JUnit test names across different XML formats.
+
+        Models produce different formats for the same test, e.g.:
+          - 'test_get::test_foo (test_get.GetTest.test_foo)'
+          - 'test.test_get.GetTest::test_foo'
+        We canonicalize to 'ClassName::method' (or just 'method' when no class).
+        """
+        # Format: '... (module.Class.method)' — extract class::method from parens
+        _m = re.search(r"\(([^)]+)\)$", name)
+        if _m:
+            _parts = _m.group(1).split(".")
+            if len(_parts) >= 2:
+                return f"{_parts[-2]}::{_parts[-1]}"
+            return _parts[-1]
+        # Format: 'module.Class::method' — find class in prefix
+        _pieces = name.split("::")
+        if len(_pieces) >= 2:
+            _prefix_parts = _pieces[0].split(".")
+            _method = _pieces[-1]
+            for _p in reversed(_prefix_parts):
+                if _p and _p[0].isupper():
+                    return f"{_p}::{_method}"
+            return f"{_prefix_parts[-1]}::{_method}"
+        return name
 
     rows: list[dict[str, object]] = []
     for _i in range(len(df)):
@@ -61,50 +93,61 @@ def _(df, json, mo, pl):
                 "repo_id": _row["repo_id"],
                 "trial_index": _row["trial_index"],
                 "success": _row["success"],
-                "tests_discovered": len(set(_names)),
-                "test_names": _names,
+                "tests_discovered_raw": len(set(_names)),
+                "test_names_raw": _names,
+                "test_names_normalized": [_normalize_test_name(n) for n in _names],
             }
         )
 
     tests_df = pl.DataFrame(rows)
-    mo.ui.table(tests_df, selection=None)
+    mo.ui.table(tests_df.drop("test_names_raw", "test_names_normalized"), selection=None)
     return (tests_df,)
 
 
 @app.cell
-def _(pl, tests_df):
-    # Build the universe of test names per repo
-    repo_universes: dict[str, set[str]] = {}
+def _(tests_df):
+    # Build the universe of test names per repo (both raw and normalized)
+    _raw_universes: dict[str, set[str]] = {}
+    _norm_universes: dict[str, set[str]] = {}
     for _i in range(len(tests_df)):
         _row = tests_df.row(_i, named=True)
         _repo = _row["repo_id"]
-        if _repo not in repo_universes:
-            repo_universes[_repo] = set()
-        repo_universes[_repo].update(_row["test_names"])
+        if _repo not in _raw_universes:
+            _raw_universes[_repo] = set()
+            _norm_universes[_repo] = set()
+        _raw_universes[_repo].update(_row["test_names_raw"])
+        _norm_universes[_repo].update(_row["test_names_normalized"])
 
-    universe_sizes = pl.DataFrame(
-        [{"repo_id": repo, "universe_size": len(names)} for repo, names in repo_universes.items()]
-    )
-    universe_sizes.sort("universe_size", descending=True)
+    repo_universes = {"raw": _raw_universes, "normalized": _norm_universes}
     return (repo_universes,)
 
 
 @app.cell
-def _(pl, repo_universes: dict[str, set[str]], tests_df):
-    # Compute test_discovered_fraction for each row
-    fractions: list[float | None] = []
+def _(pl, repo_universes, tests_df):
+    # Compute test_discovered_fraction for each row (raw and normalized)
+    _raw_fracs: list[float | None] = []
+    _norm_fracs: list[float | None] = []
     for _i in range(len(tests_df)):
         _row = tests_df.row(_i, named=True)
-        _universe = repo_universes[_row["repo_id"]]
-        if len(_universe) == 0:
-            fractions.append(None)
-        else:
-            fractions.append(len(set(_row["test_names"])) / len(_universe))
+        _rid = _row["repo_id"]
 
-    result_df = tests_df.drop("test_names").with_columns(
-        pl.Series("test_discovered_fraction", fractions)
+        _raw_u = repo_universes["raw"][_rid]
+        if len(_raw_u) == 0:
+            _raw_fracs.append(None)
+        else:
+            _raw_fracs.append(len(set(_row["test_names_raw"])) / len(_raw_u))
+
+        _norm_u = repo_universes["normalized"][_rid]
+        if len(_norm_u) == 0:
+            _norm_fracs.append(None)
+        else:
+            _norm_fracs.append(len(set(_row["test_names_normalized"])) / len(_norm_u))
+
+    result_df = tests_df.drop("test_names_raw", "test_names_normalized").with_columns(
+        pl.Series("frac_raw", _raw_fracs),
+        pl.Series("frac_normalized", _norm_fracs),
     )
-    result_df.sort("test_discovered_fraction")
+    result_df.sort("frac_normalized")
     return (result_df,)
 
 
@@ -118,10 +161,10 @@ def _(mo):
 
 @app.cell
 def _(mo, result_df):
-    # Show rows with lowest discovery fraction (excluding repos with no tests at all)
+    # Show rows with lowest normalized discovery fraction
     _low = (
-        result_df.filter(result_df["test_discovered_fraction"].is_not_null())
-        .sort("test_discovered_fraction")
+        result_df.filter(result_df["frac_normalized"].is_not_null())
+        .sort("frac_normalized")
         .head(20)
     )
     mo.ui.table(_low, selection=None)
@@ -137,26 +180,36 @@ def _(mo):
 
 
 @app.cell
-def _(pl, result_df):
+def _(mo, pl, result_df):
     import plotly.express as px
 
-    plot_df = result_df.filter(pl.col("test_discovered_fraction").is_not_null()).sort(
-        "test_discovered_fraction"
+    _plot_df = (
+        result_df.filter(pl.col("frac_normalized").is_not_null())
+        .sort("frac_normalized")
+        .to_pandas()
     )
 
-    fig = px.ecdf(
-        plot_df.to_pandas(),
-        x="test_discovered_fraction",
+    fig_raw = px.ecdf(
+        _plot_df,
+        x="frac_raw",
         color="config_name",
-        hover_data=["repo_id", "tests_discovered"],
-        labels={
-            "test_discovered_fraction": "Fraction of repo test universe discovered",
-            "config_name": "Model",
-        },
-        title="CDF of Test Discovery Fraction by Model",
+        hover_data=["repo_id", "tests_discovered_raw"],
+        labels={"frac_raw": "Fraction (raw names)", "config_name": "Model"},
+        title="CDF — Raw test names (before normalization)",
     )
-    fig.update_layout(xaxis_tickformat=".0%")
-    fig
+    fig_raw.update_layout(xaxis_tickformat=".0%")
+
+    fig_norm = px.ecdf(
+        _plot_df,
+        x="frac_normalized",
+        color="config_name",
+        hover_data=["repo_id", "tests_discovered_raw"],
+        labels={"frac_normalized": "Fraction (normalized names)", "config_name": "Model"},
+        title="CDF — Normalized test names (after deduplication)",
+    )
+    fig_norm.update_layout(xaxis_tickformat=".0%")
+
+    mo.vstack([fig_raw, fig_norm])
     return
 
 
@@ -171,16 +224,16 @@ def _(mo):
 @app.cell
 def _(mo, pl, result_df):
     _stats = (
-        result_df.filter(pl.col("test_discovered_fraction").is_not_null())
+        result_df.filter(pl.col("frac_normalized").is_not_null())
         .group_by("config_name")
         .agg(
-            pl.col("test_discovered_fraction").mean().alias("mean"),
-            pl.col("test_discovered_fraction").median().alias("median"),
-            pl.col("test_discovered_fraction").quantile(0.25).alias("p25"),
-            pl.col("test_discovered_fraction").quantile(0.75).alias("p75"),
+            pl.col("frac_normalized").mean().alias("mean_normalized"),
+            pl.col("frac_normalized").median().alias("median_normalized"),
+            pl.col("frac_raw").mean().alias("mean_raw"),
+            pl.col("frac_raw").median().alias("median_raw"),
             pl.len().alias("n"),
         )
-        .sort("mean", descending=True)
+        .sort("mean_normalized", descending=True)
     )
     mo.ui.table(_stats, selection=None)
     return

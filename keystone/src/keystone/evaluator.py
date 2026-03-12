@@ -80,7 +80,9 @@ Dockerfile MUST:
 
 run_all_tests.sh MUST:
   - Start with #!/bin/bash
-  - Produce JUnit XML in /test_artifacts/junit/*.xml
+  - Produce JUnit XML in /test_artifacts/junit/*.xml using the test framework's
+    native JUnit output (e.g., pytest --junitxml, go-junit-report, jest-junit).
+    Do NOT hand-write XML or write a script that parses stdout to generate XML.
   - Write /test_artifacts/final_result.json with {"success": true/false}
   - Reference /test_artifacts for all output
 

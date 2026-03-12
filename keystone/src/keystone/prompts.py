@@ -103,9 +103,12 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
           IMPORTANT: Do NOT hand-write or manually generate the JUnit XML.
-          To the extent possible it must be produced by the project's native test framework itself.
-          Hand-written XML that doesn't reflect actual test results
-          is considered cheating and will cause incorrect pass/fail reporting.
+          Do NOT write a custom script/program that parses test output and produces XML.
+          The JUnit XML MUST be produced directly by the project's native test framework
+          (e.g., pytest --junitxml, mix test with JUnitFormatter, go-junit-report,
+          jest-junit, rspec_junit_formatter, ctest --output-junit, cargo-nextest).
+          Hand-written or script-generated XML loses real test names and is considered
+          cheating — it will cause incorrect pass/fail reporting and test attribution.
       ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
