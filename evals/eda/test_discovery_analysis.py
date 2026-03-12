@@ -15,6 +15,12 @@ def _():
         For each repo, we compute the *universe* of test names discovered across
         **all** configs and trials. Then for each individual run we measure what
         fraction of that universe it discovered (`test_discovered_fraction`).
+
+        **Contents:**
+
+        1. [Lowest discovery fractions](#lowest-discovery-fractions)
+        2. [CDF by model](#cdf-by-model)
+        3. [Summary stats by model](#summary-stats)
         """
     )
     return (mo,)
@@ -105,7 +111,7 @@ def _(pl, repo_universes: dict[str, set[str]], tests_df):
 @app.cell
 def _(mo):
     mo.md("""
-    ## Lowest discovery fractions (potential issues)
+    <h2 id="lowest-discovery-fractions">Lowest discovery fractions (potential issues)</h2>
     """)
     return
 
@@ -124,7 +130,7 @@ def _(result_df):
 @app.cell
 def _(mo):
     mo.md("""
-    ## CDF of `test_discovered_fraction` by model
+    <h2 id="cdf-by-model">CDF of <code>test_discovered_fraction</code> by model</h2>
     """)
     return
 
@@ -156,7 +162,7 @@ def _(pl, result_df):
 @app.cell
 def _(mo):
     mo.md("""
-    ## Summary stats by model
+    <h2 id="summary-stats">Summary stats by model</h2>
     """)
     return
 
