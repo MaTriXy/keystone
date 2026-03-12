@@ -512,7 +512,16 @@ def bootstrap(
     # Parse all JUnit XML test reports from junit/ subdirectory
     test_results = []
     for xml_file in test_artifacts_dir.glob("junit/*.xml"):
-        test_results.extend(parse_junit_xml(xml_file))
+        if not xml_file.is_file():
+            print(f"Skipping non-file: {xml_file}", file=sys.stderr)
+            continue
+        try:
+            test_results.extend(parse_junit_xml(xml_file))
+        except Exception as e:
+            print(
+                f"Warning: failed to parse JUnit XML {xml_file.name}: {e}",
+                file=sys.stderr,
+            )
 
     # Build verification result
     n_passed = sum(1 for t in test_results if t.passed and not t.skipped)
