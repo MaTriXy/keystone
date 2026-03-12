@@ -1,6 +1,10 @@
-# Working with Eval Parquet Files
+---
+name: eval-parquet
+description: Working with Eval Parquet Files
+advertise: true
+---
 
-You have access to Parquet files produced by `evals/eda/eval_to_parquet_cli.py`.
+You can create and access Parquet files produced by `evals/eda/eval_to_parquet_cli.py`.
 These files contain flattened results from Keystone eval runs.
 
 ## How the Parquet is produced
