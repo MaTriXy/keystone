@@ -125,6 +125,14 @@ class EvalRunConfig(BaseModel):
         description="Max number of keystone tasks running concurrently.",
     )
 
+    task_start_stagger_seconds: float = Field(
+        default=0,
+        description=(
+            "Seconds to sleep between submitting each eval task. "
+            "Useful for staggering API calls when running locally without a rate limiter."
+        ),
+    )
+
     # Docker Hub mirror for pull-through caching.
     docker_registry_mirror: str = Field(
         default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),

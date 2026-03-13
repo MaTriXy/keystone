@@ -117,6 +117,7 @@ def run(
         limit_to_first_n_repos=run_config.limit_to_first_n_repos,
         max_concurrent=run_config.max_concurrent,
         docker_registry_mirror=run_config.docker_registry_mirror,
+        task_start_stagger_seconds=run_config.task_start_stagger_seconds,
     )
 
     _print_results(outputs, resolved_configs)

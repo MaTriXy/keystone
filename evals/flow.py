@@ -10,6 +10,7 @@ import json
 import logging
 import subprocess
 import tempfile
+import time
 import traceback
 from collections import Counter
 from pathlib import Path
@@ -600,6 +601,7 @@ def eval_flow(
     limit_to_first_n_repos: int | None,
     max_concurrent: int,
     docker_registry_mirror: str,
+    task_start_stagger_seconds: float = 0,
 ) -> list[EvalResult]:
     """Main evaluation flow.
 
@@ -644,7 +646,9 @@ def eval_flow(
     # Submit all work items; concurrency is bounded by the flow's
     # ThreadPoolTaskRunner(max_workers=max_concurrent).
     all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[KeystoneRepoResult]]] = []
-    for cfg_idx, repo_entry, s3_path, trial in work_items:
+    for i, (cfg_idx, repo_entry, s3_path, trial) in enumerate(work_items):
+        if i > 0 and task_start_stagger_seconds > 0:
+            time.sleep(task_start_stagger_seconds)
         future = process_repo_task.submit(
             repo_entry=repo_entry,
             s3_tarball_path=s3_path,
