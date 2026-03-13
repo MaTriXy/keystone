@@ -193,16 +193,12 @@ def test_e2e_claude_on_modal_sample_projects(
     # disable failing tests, turning an expected failure into a success.
     # The snapshot captures the actual outcome for human review.
 
-    # Parse the JSON output (find the JSON object in stdout)
-    stdout_lines = result.stdout.strip().split("\n")
-    json_start = None
-    for i, line in enumerate(stdout_lines):
-        if line.strip() == "{":
-            json_start = i
-            break
-    assert json_start is not None, "Could not find JSON output"
-    json_str = "\n".join(stdout_lines[json_start:])
-    output = BootstrapResult.model_validate_json(json_str)
+    # Surface CLI crashes before attempting to parse JSON output
+    if result.exception and not isinstance(result.exception, SystemExit):
+        logger.error("CLI raised an exception:\n%s", result.exception)
+        raise result.exception
+
+    output = parse_bootstrap_result(result.stdout)
 
     # Check if .devcontainer was created
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()

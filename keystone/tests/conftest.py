@@ -70,7 +70,10 @@ def parse_bootstrap_result(stdout: str) -> BootstrapResult:
         if line.strip() == "{":
             json_start = i
             break
-    assert json_start is not None, "Could not find JSON output in stdout"
+    assert json_start is not None, (
+        f"Could not find JSON output in stdout "
+        f"(got {len(stdout_lines)} lines, first 5: {stdout_lines[:5]!r})"
+    )
     json_str = "\n".join(stdout_lines[json_start:])
     return BootstrapResult.model_validate_json(json_str)
 
