@@ -32,18 +32,21 @@ class ClaudeProvider(AgentProvider):
         max_budget_usd: float,
         agent_cmd: str,
     ) -> list[str]:
+        assert self.config.model is not None, "model is required for Claude provider"
+        assert self.config.claude_reasoning_level is not None, (
+            "claude_reasoning_level is required for Claude provider"
+        )
         cmd = [
             *shlex.split(agent_cmd),
             "--dangerously-skip-permissions",
             *("--output-format", "stream-json"),
             "--verbose",
             *("--max-budget-usd", str(max_budget_usd)),
+            *("--model", self.config.model.value),
+            *("--reasoning", self.config.claude_reasoning_level),
+            "-p",
+            prompt,
         ]
-        if self.model:
-            cmd.extend(("--model", self.model))
-        if self.reasoning_level:
-            cmd.extend(("--reasoning", self.reasoning_level))
-        cmd.extend(("-p", prompt))
         return cmd
 
     def parse_stdout_line(self, line: str) -> list[AgentEvent]:

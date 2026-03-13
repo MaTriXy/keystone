@@ -54,8 +54,8 @@ class OpencodeProvider(AgentProvider):
             "--format",
             "json",
         ]
-        if self.model:
-            cmd.extend(("--model", self.model))
+        assert self.config.model is not None, "model is required for OpenCode provider"
+        cmd.extend(("--model", self.config.model.value))
         cmd.append(prompt)
         return cmd
 

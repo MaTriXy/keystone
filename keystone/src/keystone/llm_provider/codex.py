@@ -39,14 +39,15 @@ class CodexProvider(AgentProvider):
         max_budget_usd: float,  # noqa: ARG002  # required by interface
         agent_cmd: str,
     ) -> list[str]:
+        assert self.config.model is not None, "model is required for Codex provider"
+        assert self.config.codex_reasoning_level is not None, (
+            "codex_reasoning_level is required for Codex provider"
+        )
         cmd = [
             *shlex.split(agent_cmd),
-            *((f"--model={self.model}",) if self.model else ()),
-            *(
-                ("--config", f"model_reasoning_effort={self.reasoning_level}")
-                if self.reasoning_level
-                else ()
-            ),
+            f"--model={self.config.model.value}",
+            "--config",
+            f"model_reasoning_effort={self.config.codex_reasoning_level}",
             "exec",
             "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",

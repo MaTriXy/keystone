@@ -211,6 +211,11 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Validate --model is always set.
+    if model is None:
+        console.print("[bold red]Error:[/bold red] --model is required.")
+        raise typer.Exit(code=1)
+
     # Validate reasoning level flags match the active provider.
     # The appropriate flag must be set, and the *other* provider's flag must NOT be set.
     _reasoning_errors: list[str] = []
@@ -289,11 +294,7 @@ def bootstrap(
         inner_runner = LocalAgentRunner()
 
     # Instantiate the LLM provider
-    # Resolve the active reasoning level for the selected provider.
-    reasoning_level = claude_reasoning_level if provider_name == "claude" else codex_reasoning_level
-    provider = get_provider(
-        provider_name, model=model.value if model else None, reasoning_level=reasoning_level
-    )
+    provider = get_provider(agent_config)
 
     exit_code = 1
     verification_success = False
