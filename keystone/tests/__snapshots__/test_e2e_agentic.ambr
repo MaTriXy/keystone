@@ -257,6 +257,152 @@
     }),
   })
 # ---
+# name: test_e2e_claude_on_modal_sample_projects[python_project]
+  dict({
+    'agent': dict({
+      'cost': dict({
+        'ccusage_raw': dict({
+          'cacheCreationTokens': 26009,
+          'cacheReadTokens': 59921,
+          'inputTokens': 6,
+          'lastActivity': '2026-03-13',
+          'modelBreakdowns': list([
+            dict({
+              'cacheCreationTokens': 26009,
+              'cacheReadTokens': 59921,
+              'cost': 0.19849674999999997,
+              'inputTokens': 6,
+              'modelName': 'claude-opus-4-6',
+              'outputTokens': 238,
+            }),
+          ]),
+          'modelsUsed': list([
+            'claude-opus-4-6',
+          ]),
+          'outputTokens': 238,
+          'projectPath': 'Unknown Project',
+          'sessionId': '-project',
+          'totalCost': 0.19849674999999997,
+          'totalTokens': 86174,
+        }),
+        'cost_usd': 0.19849674999999997,
+        'cost_usd_computed': 0.0,
+        'token_spending': dict({
+          'cache_creation': 26009,
+          'cached': 59921,
+          'input': 6,
+          'output': 238,
+        }),
+      }),
+      'duration_seconds': 80.35671558300965,
+      'end_time': '2026-03-13T18:41:12.396963+00:00',
+      'error_messages': list([
+      ]),
+      'exit_code': 0,
+      'start_time': '2026-03-13T18:39:41.171924+00:00',
+      'status_messages': list([
+        dict({
+          'message': 'Exploring repository structure to identify file types and test locations.',
+          'timestamp': '2026-03-13T18:40:19.639000+00:00',
+        }),
+        dict({
+          'message': 'Creating Dockerfile and test runner script.',
+          'timestamp': '2026-03-13T18:40:26.219062+00:00',
+        }),
+      ]),
+      'summary': dict({
+        'message': 'Everything worked on the first try. Simple Python project with 2 tests. Used `python:3.11-slim` as base image and `uv` for fast dependency installation. Dependencies (pytest, pytest-json-report) were pre-installed in a cached layer before copying source code. All 2 tests pass.',
+        'timestamp': '2026-03-13T18:40:53.842787+00:00',
+      }),
+      'timed_out': False,
+    }),
+    'cli_args': list([
+      '/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer/.venv/bin/pytest',
+      'tests/test_e2e_agentic.py::test_e2e_claude_on_modal_sample_projects[python_project]',
+      '-x',
+      '-v',
+      '--no-header',
+      '--snapshot-update',
+    ]),
+    'error_message': None,
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            "--network=host"
+          ]
+        }
+  
+      ''',
+      'dockerfile': '''
+        FROM python:3.11-slim
+        
+        # Create test artifacts directory.
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+        
+        ENV UV_LINK_MODE=copy
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        
+        WORKDIR /project_src
+        COPY pyproject.toml uv.lock ./
+        RUN uv sync --locked --no-install-project
+        
+        COPY app.py ./
+        COPY tests/ ./tests/
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/bin/bash
+        set -euo pipefail
+        
+        cd /project_src
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
+        
+        mkdir -p /test_artifacts/junit
+        
+        /venv/bin/pytest tests/ --junitxml=/test_artifacts/junit/results.xml --no-header -v 2>&1
+        
+        echo '{"success": true}' > /test_artifacts/final_result.json
+  
+      ''',
+    }),
+    'success': True,
+    'verification': dict({
+      'error_message': None,
+      'image_build_seconds': 3.3673970699310303,
+      'success': True,
+      'test_execution_seconds': 1.823547124862671,
+      'test_results': list([
+        dict({
+          'name': 'tests.test_app::test_add',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'tests.test_app::test_multiply',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
+      'tests_failed': 0,
+      'tests_passed': 2,
+      'tests_skipped': 0,
+    }),
+  })
+# ---
 # name: test_e2e_claude_on_modal_sample_projects[python_with_failing_test]
   dict({
     'agent': dict({
