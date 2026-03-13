@@ -71,6 +71,16 @@ class AgentConfig(BaseModel):
     model: LLMModel | None = None
     agent_cmd: str | None = None
 
+    # Reasoning level — provider-specific, exactly one must be set for the active provider.
+    claude_reasoning_level: str | None = Field(
+        default=None,
+        description="Reasoning level for Claude (e.g. 'low', 'medium', 'high'). Required when provider is 'claude'.",
+    )
+    codex_reasoning_level: str | None = Field(
+        default=None,
+        description="Reasoning level for Codex (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
+    )
+
     # Feature toggles — all required so config files are explicit.
     evaluator: bool = Field(
         ...,

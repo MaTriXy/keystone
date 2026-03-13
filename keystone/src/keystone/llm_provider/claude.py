@@ -41,6 +41,8 @@ class ClaudeProvider(AgentProvider):
         ]
         if self.model:
             cmd.extend(("--model", self.model))
+        if self.reasoning_level:
+            cmd.extend(("--reasoning", self.reasoning_level))
         cmd.extend(("-p", prompt))
         return cmd
 

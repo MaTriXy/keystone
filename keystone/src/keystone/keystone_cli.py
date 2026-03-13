@@ -167,6 +167,16 @@ def bootstrap(
         "--use_agents_md/--no_use_agents_md",
         help="Use AGENTS.md file + short CLI prompt instead of full inline prompt.",
     ),
+    claude_reasoning_level: str | None = typer.Option(
+        None,
+        "--claude_reasoning_level",
+        help="Reasoning level for Claude provider (e.g. 'low', 'medium', 'high'). Required when provider is 'claude'.",
+    ),
+    codex_reasoning_level: str | None = typer.Option(
+        None,
+        "--codex_reasoning_level",
+        help="Reasoning level for Codex provider (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
+    ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
@@ -200,6 +210,18 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+    # Validate that the appropriate reasoning level is set for the active provider.
+    if provider_name == "claude" and claude_reasoning_level is None:
+        console.print(
+            "[bold red]Error:[/bold red] --claude_reasoning_level is required when provider is 'claude'."
+        )
+        raise typer.Exit(code=1)
+    if provider_name == "codex" and codex_reasoning_level is None:
+        console.print(
+            "[bold red]Error:[/bold red] --codex_reasoning_level is required when provider is 'codex'."
+        )
+        raise typer.Exit(code=1)
+
     # Build agent config early — needed for prompt generation and cache key.
     assert max_budget_usd is not None
     agent_config = AgentConfig(
@@ -209,6 +231,8 @@ def bootstrap(
         provider=provider_name,
         model=model,
         agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
+        claude_reasoning_level=claude_reasoning_level,
+        codex_reasoning_level=codex_reasoning_level,
         evaluator=evaluator,
         guardrail=guardrail,
         use_agents_md=use_agents_md,
@@ -244,7 +268,11 @@ def bootstrap(
         inner_runner = LocalAgentRunner()
 
     # Instantiate the LLM provider
-    provider = get_provider(provider_name, model=model.value if model else None)
+    # Resolve the active reasoning level for the selected provider.
+    reasoning_level = claude_reasoning_level if provider_name == "claude" else codex_reasoning_level
+    provider = get_provider(
+        provider_name, model=model.value if model else None, reasoning_level=reasoning_level
+    )
 
     exit_code = 1
     verification_success = False

@@ -42,6 +42,11 @@ class CodexProvider(AgentProvider):
         cmd = [
             *shlex.split(agent_cmd),
             *((f"--model={self.model}",) if self.model else ()),
+            *(
+                ("--config", f"model_reasoning_effort={self.reasoning_level}")
+                if self.reasoning_level
+                else ()
+            ),
             "exec",
             "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
