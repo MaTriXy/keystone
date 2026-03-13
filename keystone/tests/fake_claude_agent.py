@@ -75,7 +75,8 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--max-budget-usd", type=float, default=1.0)
     parser.add_argument("--model", type=str, default=None)
-    parser.add_argument("--reasoning", type=str, default=None)
+    parser.add_argument("--effort", type=str, default=None)
+    parser.add_argument("--reasoning", type=str, default=None)  # legacy alias
     args = parser.parse_args()
 
     model_label = args.model or "unknown-model"

@@ -43,7 +43,7 @@ class ClaudeProvider(AgentProvider):
             "--verbose",
             *("--max-budget-usd", str(max_budget_usd)),
             *("--model", self.config.model.value),
-            *("--reasoning", self.config.claude_reasoning_level),
+            *("--effort", self.config.claude_reasoning_level),
             "-p",
             prompt,
         ]
