@@ -15,14 +15,33 @@ from keystone.llm_provider import (
 from keystone.llm_provider.claude import ClaudeProvider
 from keystone.llm_provider.codex import CodexProvider
 from keystone.llm_provider.opencode import OpencodeProvider
-from keystone.schema import LLMModel
+from keystone.schema import AgentConfig, LLMModel
+
+
+def _make_config(**overrides: object) -> AgentConfig:
+    """Create a minimal AgentConfig for testing, with sensible defaults."""
+    defaults: dict[str, object] = {
+        "max_budget_usd": 1.0,
+        "agent_time_limit_seconds": 300,
+        "agent_in_modal": False,
+        "provider": "claude",
+        "guardrail": False,
+        "use_agents_md": False,
+    }
+    defaults.update(overrides)
+    return AgentConfig(**defaults)  # type: ignore[arg-type]
 
 # ── Claude provider ───────────────────────────────────────────────────
 
 
 class TestClaudeProvider:
     def setup_method(self) -> None:
-        self.provider = ClaudeProvider()
+        self.config = _make_config(
+            provider="claude",
+            model=LLMModel.OPUS,
+            claude_reasoning_level="medium",
+        )
+        self.provider = ClaudeProvider(config=self.config)
 
     def test_name_and_default_cmd(self) -> None:
         assert self.provider.name == "claude"
@@ -35,13 +54,13 @@ class TestClaudeProvider:
         assert "stream-json" in cmd
         assert "5.0" in cmd
         assert "Fix the bug" in cmd
-
-    def test_build_command_with_model(self) -> None:
-        self.provider.model = "claude-opus-4-6"
-        cmd = self.provider.build_command("Fix the bug", 5.0, "claude")
+        # model and reasoning are always present
         assert "--model" in cmd
         model_idx = cmd.index("--model")
-        assert cmd[model_idx + 1] == "claude-opus-4-6"
+        assert cmd[model_idx + 1] == LLMModel.OPUS.value
+        assert "--reasoning" in cmd
+        reasoning_idx = cmd.index("--reasoning")
+        assert cmd[reasoning_idx + 1] == "medium"
 
     def test_parse_assistant_text(self) -> None:
         line = json.dumps(
@@ -118,7 +137,12 @@ class TestClaudeProvider:
 
 class TestCodexProvider:
     def setup_method(self) -> None:
-        self.provider = CodexProvider()
+        self.config = _make_config(
+            provider="codex",
+            model=LLMModel.CODEX,
+            codex_reasoning_level="high",
+        )
+        self.provider = CodexProvider(config=self.config)
 
     def test_name_and_default_cmd(self) -> None:
         assert self.provider.name == "codex"
@@ -131,15 +155,15 @@ class TestCodexProvider:
         assert "--json" in cmd
         assert "--dangerously-bypass-approvals-and-sandbox" in cmd
         assert "Fix the bug" in cmd
-
-    def test_build_command_with_model(self) -> None:
-        self.provider.model = "gpt-5.2-codex"
-        cmd = self.provider.build_command("Fix the bug", 5.0, "codex")
-        assert "--model=gpt-5.2-codex" in cmd
-        model_idx = cmd.index("--model=gpt-5.2-codex")
-        # --model is a top-level codex flag, comes before exec
+        # model and reasoning are always present
+        assert f"--model={LLMModel.CODEX.value}" in cmd
+        model_idx = cmd.index(f"--model={LLMModel.CODEX.value}")
         exec_idx = cmd.index("exec")
         assert model_idx < exec_idx
+        assert "--config" in cmd
+        config_idx = cmd.index("--config")
+        assert cmd[config_idx + 1] == "model_reasoning_effort=high"
+        assert config_idx < exec_idx
 
     def test_parse_turn_completed(self) -> None:
         line = json.dumps(
@@ -258,25 +282,30 @@ class TestCodexProvider:
 
 class TestProviderRegistry:
     def test_get_claude(self) -> None:
-        p = get_provider("claude")
+        config = _make_config(provider="claude", model=LLMModel.OPUS, claude_reasoning_level="high")
+        p = get_provider(config)
         assert isinstance(p, ClaudeProvider)
 
     def test_get_codex(self) -> None:
-        p = get_provider("codex")
+        config = _make_config(provider="codex", model=LLMModel.CODEX, codex_reasoning_level="high")
+        p = get_provider(config)
         assert isinstance(p, CodexProvider)
 
     def test_get_opencode(self) -> None:
-        p = get_provider("opencode")
+        config = _make_config(provider="opencode", model=LLMModel.OPENCODE_OPUS)
+        p = get_provider(config)
         assert isinstance(p, OpencodeProvider)
 
     def test_get_opencode_with_model(self) -> None:
-        p = get_provider("opencode", model="anthropic/claude-opus-4-6")
+        config = _make_config(provider="opencode", model=LLMModel.OPENCODE_OPUS)
+        p = get_provider(config)
         assert isinstance(p, OpencodeProvider)
-        assert p.model == "anthropic/claude-opus-4-6"
+        assert p.config.model == LLMModel.OPENCODE_OPUS
 
     def test_get_unknown(self) -> None:
+        config = _make_config(provider="nonexistent")
         with pytest.raises(ValueError, match="Unknown LLM provider"):
-            get_provider("nonexistent")
+            get_provider(config)
 
 
 # ── OpenCode provider ────────────────────────────────────────────────
@@ -284,7 +313,8 @@ class TestProviderRegistry:
 
 class TestOpencodeProvider:
     def setup_method(self) -> None:
-        self.provider = OpencodeProvider()
+        self.config = _make_config(provider="opencode", model=LLMModel.OPENCODE_OPUS)
+        self.provider = OpencodeProvider(config=self.config)
 
     def test_name_and_default_cmd(self) -> None:
         assert self.provider.name == "opencode"
@@ -301,19 +331,22 @@ class TestOpencodeProvider:
         assert "--max-budget-usd" not in cmd
 
     def test_build_command_with_model(self) -> None:
-        self.provider.model = "anthropic/claude-opus-4-6"
-        cmd = self.provider.build_command("Fix the bug", 5.0, "opencode")
+        config = _make_config(provider="opencode", model=LLMModel.OPENCODE_OPUS)
+        provider = OpencodeProvider(config=config)
+        cmd = provider.build_command("Fix the bug", 5.0, "opencode")
         assert "--model" in cmd
         model_idx = cmd.index("--model")
-        assert cmd[model_idx + 1] == "anthropic/claude-opus-4-6"
+        assert cmd[model_idx + 1] == LLMModel.OPENCODE_OPUS.value
         # --model should come after --format json but before prompt
         format_idx = cmd.index("--format")
         assert format_idx < model_idx
         assert cmd[-1] == "Fix the bug"  # prompt is last
 
-    def test_build_command_no_model(self) -> None:
-        cmd = self.provider.build_command("Do stuff", 1.0, "opencode")
-        assert "--model" not in cmd
+    def test_build_command_requires_model(self) -> None:
+        config = _make_config(provider="opencode", model=None)
+        provider = OpencodeProvider(config=config)
+        with pytest.raises(AssertionError, match="model is required"):
+            provider.build_command("Do stuff", 1.0, "opencode")
 
     def test_build_command_custom_agent_cmd(self) -> None:
         cmd = self.provider.build_command("Fix it", 1.0, "/usr/local/bin/opencode")

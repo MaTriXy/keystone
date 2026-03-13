@@ -11,6 +11,7 @@ from keystone.llm_provider.claude import ClaudeProvider
 from keystone.llm_provider.codex import CodexProvider
 from keystone.modal.image import create_modal_image
 from keystone.modal.modal_runner import run_modal_command
+from keystone.schema import AgentConfig, LLMModel
 
 # Configure logging to silence noisy third-party libraries
 logging.basicConfig(
@@ -174,7 +175,18 @@ def test_claude_streaming():
                 f"ANTHROPIC_API_KEY={api_key}",
                 "timeout",
                 "60",
-                *ClaudeProvider().build_command(
+                *ClaudeProvider(
+                    config=AgentConfig(
+                        max_budget_usd=0.10,
+                        agent_time_limit_seconds=300,
+                        agent_in_modal=False,
+                        provider="claude",
+                        guardrail=False,
+                        use_agents_md=False,
+                        model=LLMModel.OPUS,
+                        claude_reasoning_level="medium",
+                    )
+                ).build_command(
                     "Figure out what OS you are on and provide evidence.", 0.10, "claude"
                 ),
             ]
@@ -244,7 +256,18 @@ def test_codex_streaming():
                 f"CODEX_API_KEY={api_key}",
                 "timeout",
                 "60",
-                *CodexProvider().build_command(
+                *CodexProvider(
+                    config=AgentConfig(
+                        max_budget_usd=0.10,
+                        agent_time_limit_seconds=300,
+                        agent_in_modal=False,
+                        provider="codex",
+                        guardrail=False,
+                        use_agents_md=False,
+                        model=LLMModel.CODEX,
+                        codex_reasoning_level="high",
+                    )
+                ).build_command(
                     "Figure out what OS you are on and provide evidence.", 0.0, "codex"
                 ),
             ]

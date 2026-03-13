@@ -71,11 +71,17 @@ class AgentConfig(BaseModel):
     model: LLMModel | None = None
     agent_cmd: str | None = None
 
-    # Feature toggles — all required so config files are explicit.
-    evaluator: bool = Field(
-        ...,
-        description="Enable or disable the LLM evaluator fix-up pass.",
+    # Reasoning level — provider-specific, exactly one must be set for the active provider.
+    claude_reasoning_level: str | None = Field(
+        default=None,
+        description="Reasoning level for Claude (e.g. 'low', 'medium', 'high'). Required when provider is 'claude'.",
     )
+    codex_reasoning_level: str | None = Field(
+        default=None,
+        description="Reasoning level for Codex (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
+    )
+
+    # Feature toggles — all required so config files are explicit.
     guardrail: bool = Field(..., description="Enable or disable guardrail structural checks")
     use_agents_md: bool = Field(
         ...,
@@ -186,16 +192,6 @@ class GeneratedFiles(BaseModel):
     run_all_tests_sh: str | None = None
 
 
-class EvaluatorResult(BaseModel):
-    """Result from the LLM evaluator that checks agent completeness."""
-
-    passed: bool
-    reasoning: str
-    issues: list[str] = []
-    model: str = ""
-    cost_usd: float = 0.0
-
-
 class BootstrapResult(BaseModel):
     """The final result of the entire bootstrap process."""
 
@@ -205,8 +201,6 @@ class BootstrapResult(BaseModel):
     agent: AgentExecution
 
     verification: VerificationResult | None = None
-
-    evaluator: EvaluatorResult | None = None
 
     generated_files: GeneratedFiles | None = None
 

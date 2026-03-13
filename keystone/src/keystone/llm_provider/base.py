@@ -10,6 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from keystone.schema import AgentConfig  # noqa: TC001
+
 # ── Agent events (common output types) ────────────────────────────────
 
 
@@ -65,8 +67,8 @@ class AgentErrorEvent(AgentEvent):
 class AgentProvider(ABC):
     """Interface that each LLM backend must implement."""
 
-    def __init__(self, model: str | None = None) -> None:
-        self.model = model
+    def __init__(self, config: AgentConfig) -> None:
+        self.config = config
 
     @property
     @abstractmethod

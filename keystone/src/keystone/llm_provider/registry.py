@@ -10,6 +10,7 @@ from keystone.llm_provider.opencode import OpencodeProvider
 
 if TYPE_CHECKING:
     from keystone.llm_provider.base import AgentProvider
+    from keystone.schema import AgentConfig
 
 PROVIDER_REGISTRY: dict[str, type[AgentProvider]] = {
     "claude": ClaudeProvider,
@@ -18,13 +19,13 @@ PROVIDER_REGISTRY: dict[str, type[AgentProvider]] = {
 }
 
 
-def get_provider(name: str, model: str | None = None) -> AgentProvider:
-    """Instantiate a provider by name.
+def get_provider(config: AgentConfig) -> AgentProvider:
+    """Instantiate a provider from an AgentConfig.
 
-    Raises ``ValueError`` if the name is not registered.
+    Raises ``ValueError`` if the provider name is not registered.
     """
-    cls = PROVIDER_REGISTRY.get(name)
+    cls = PROVIDER_REGISTRY.get(config.provider)
     if cls is None:
         available = ", ".join(sorted(PROVIDER_REGISTRY.keys()))
-        raise ValueError(f"Unknown LLM provider {name!r}. Available: {available}")
-    return cls(model=model)
+        raise ValueError(f"Unknown LLM provider {config.provider!r}. Available: {available}")
+    return cls(config=config)
