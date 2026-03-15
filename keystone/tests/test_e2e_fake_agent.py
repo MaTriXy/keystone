@@ -276,7 +276,7 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     cache_file = tmp_path / "codex_error_cache.sqlite"
 
     # fake_codex_agent.py is baked into the Modal image at /usr/local/bin/
-    agent_cmd = "fake_codex_agent.py --model=fake-error-model"
+    agent_cmd = "fake_codex_agent.py"
 
     logger.info("=" * 60)
     logger.info("E2E Test: Agent error propagation")
@@ -293,7 +293,7 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         "--provider",
         "codex",
         "--model",
-        "gpt-5.3-codex",
+        "fake-error-model",
         "--codex_reasoning_level",
         "high",
         "--agent_cmd",
