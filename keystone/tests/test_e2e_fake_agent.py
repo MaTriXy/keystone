@@ -181,6 +181,10 @@ def test_e2e_fake_agent(
         shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
     ]
     if use_modal:
         cmd2 += [
