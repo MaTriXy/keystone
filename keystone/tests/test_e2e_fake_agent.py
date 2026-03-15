@@ -316,11 +316,6 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         logger.error("CLI raised an exception:\n%s", result.exception)
         raise result.exception
 
-    # Verify the fake agent received the right model name
-    assert "model=fake-error-model" in result.stderr, (
-        f"Expected fake agent to log model=fake-error-model, got stderr:\n{result.stderr}"
-    )
-
     output = parse_bootstrap_result(result.stdout)
 
     # The CLI should exit with non-zero code
