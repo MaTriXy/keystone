@@ -54,13 +54,13 @@ class TestClaudeProvider:
         assert "stream-json" in cmd
         assert "5.0" in cmd
         assert "Fix the bug" in cmd
-        # model and reasoning are always present
+        # model and effort are always present
         assert "--model" in cmd
         model_idx = cmd.index("--model")
         assert cmd[model_idx + 1] == LLMModel.OPUS.value
-        assert "--reasoning" in cmd
-        reasoning_idx = cmd.index("--reasoning")
-        assert cmd[reasoning_idx + 1] == "medium"
+        assert "--effort" in cmd
+        effort_idx = cmd.index("--effort")
+        assert cmd[effort_idx + 1] == "medium"
 
     def test_parse_assistant_text(self) -> None:
         line = json.dumps(
