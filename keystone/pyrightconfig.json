@@ -1,5 +1,6 @@
 {
   "include": ["."],
+  "extraPaths": ["tests"],
   "exclude": ["**/node_modules", "**/.venv"],
   "pythonVersion": "3.12",
   "typeCheckingMode": "basic",
