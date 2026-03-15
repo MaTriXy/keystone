@@ -76,6 +76,10 @@ def test_e2e_fake_agent(
         shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
     ]
     if use_modal:
         cmd += [
@@ -220,6 +224,10 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         str(test_artifacts_dir),
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
         "--run_agent_locally_with_dangerously_skip_permissions",
     ]
 
@@ -286,6 +294,10 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         str(cache_file),
         "--provider",
         "codex",
+        "--model",
+        "gpt-5.3-codex",
+        "--codex_reasoning_level",
+        "high",
         "--agent_cmd",
         agent_cmd,
         "--agent_in_modal",
