@@ -31,6 +31,7 @@ def _make_config(**overrides: object) -> AgentConfig:
     defaults.update(overrides)
     return AgentConfig(**defaults)  # type: ignore[arg-type]
 
+
 # ── Claude provider ───────────────────────────────────────────────────
 
 

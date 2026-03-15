@@ -142,7 +142,7 @@ def _setup_sandbox(sb: modal.Sandbox, mirror_url: str | None = None) -> None:
         print(f"Configuring Docker Hub mirror: {mirror_url}", file=sys.stderr)
         _exec_script(
             sb,
-            f'mkdir -p /etc/docker && '
+            f"mkdir -p /etc/docker && "
             f'echo \'{{"registry-mirrors": ["{mirror_url}"]}}\' > /etc/docker/daemon.json',
             label="mirror-config",
         )
@@ -239,7 +239,7 @@ def run_load_test(
         # It will self-destruct after the 60-minute timeout.
         print(file=sys.stderr)
         print("=" * 60, file=sys.stderr)
-        print(f"Sandbox left running (self-destructs in ≤60 min)", file=sys.stderr)
+        print("Sandbox left running (self-destructs in ≤60 min)", file=sys.stderr)
         print(f"  ID:    {sb.object_id}", file=sys.stderr)
         print(f"  Reuse: --sandbox {sb.object_id}", file=sys.stderr)
         print(f"  Shell: modal shell {sb.object_id}", file=sys.stderr)

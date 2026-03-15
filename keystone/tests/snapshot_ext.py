@@ -18,7 +18,7 @@ class _TzInfo(datetime.tzinfo):
     def __init__(self, offset: int | float) -> None:
         self._offset = datetime.timedelta(hours=offset)
 
-    def utcoffset(self, dt: datetime.datetime | None = None) -> datetime.timedelta:
+    def utcoffset(self, dt: datetime.datetime | None = None) -> datetime.timedelta:  # noqa: ARG002
         return self._offset
 
     def __eq__(self, other: object) -> bool:
@@ -48,7 +48,7 @@ def _ambr_to_python(s: str) -> object:
     The .ambr format uses ``dict({...})``, ``list([...])``, and standard Python
     literals plus ``datetime.datetime(...)`` and ``TzInfo(...)``.
     """
-    return eval(s, {"__builtins__": {}}, _AMBR_EVAL_NS)  # noqa: S307
+    return eval(s, {"__builtins__": {}}, _AMBR_EVAL_NS)
 
 
 def _strip_paths(data: object, paths: frozenset[str]) -> object:
