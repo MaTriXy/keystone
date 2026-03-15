@@ -101,6 +101,8 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
         "codex",
         "--model",
         "gpt-5.3-codex",
+        "--codex_reasoning_level",
+        "high",
         "--agent_in_modal",
         "--docker_registry_mirror",
         os.environ["DOCKER_REGISTRY_MIRROR"],
