@@ -110,11 +110,18 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
     logger.info("Running: keystone %s", " ".join(cmd))
     result = CliRunner().invoke(app, cmd)
 
-    output = parse_bootstrap_result(result.stdout)
+    # Surface CLI crashes before attempting to parse JSON output
+    if result.exception and not isinstance(result.exception, SystemExit):
+        logger.error("CLI raised an exception:\n%s", result.exception)
+        raise result.exception
 
     assert result.exit_code == 0, (
-        f"Codex on Modal failed (exit {result.exit_code}):\nerror: {output.error_message}"
+        f"Codex on Modal failed (exit {result.exit_code}):\n"
+        f"stdout: {result.stdout[:500]!r}\n"
+        f"output: {result.output[:500]!r}"
     )
+
+    output = parse_bootstrap_result(result.stdout)
     assert output.success, f"Bootstrap failed: {output.error_message}"
 
     # Verify devcontainer files were created
