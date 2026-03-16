@@ -29,6 +29,7 @@ import pandas as pd
 import typer
 from pydantic import ValidationError
 from rich.console import Console
+from tqdm import tqdm
 
 # Ensure the project root is importable.
 _project_root = str(Path(__file__).resolve().parents[2])
@@ -99,7 +100,7 @@ def main(
     # --- load and validate ---
     records: list[dict] = []
     errors: list[dict] = []
-    for path in json_paths:
+    for path in tqdm(json_paths, desc="Loading JSON files"):
         with in_fs.open(path, "r") as f:
             raw = json.load(f)
         try:
