@@ -28,6 +28,7 @@ RUN_NAMES = [
     # "2026-03-12_opencode_vs_claude_cost_v2",
     # "2026-03-12_opencode_vs_claude_cost_v3",
     "2026-03-13_four_model_thad",
+    "2026-03-13_five_model_full_v3",
 ]
 
 RUN_LABELS = {
@@ -44,6 +45,7 @@ RUN_LABELS = {
     "2026-03-12_opencode_vs_claude_cost_v2": "OpenCode vs Claude (cost) 2026-03-12",
     "2026-03-12_opencode_vs_claude_cost_v3": "OpenCode vs Claude (cost v3) 2026-03-12",
     "2026-03-13_four_model_thad": "Four-model 2026-03-13",
+    "2026-03-13_five_model_full_v3": "Five-model full 2026-03-13",
 }
 
 # Canonical model display order & colors per run
@@ -335,7 +337,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   td { padding: 7px 10px; vertical-align: middle; }
   td.repo-name { font-weight: 500; color: #c7d2fe; font-size: 13px; }
   td.meta { color: #475569; font-size: 12px; }
-  td.result-cell { text-align: center; }
+  td.result-cell { text-align: center; vertical-align: top; height: 52px; }
 
   .badge { display: inline-block; width: 28px; height: 28px; border-radius: 6px;
            line-height: 28px; font-size: 13px; font-weight: 700; }
@@ -344,6 +346,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .badge.timeout { background: #422006; color: #fbbf24; }
   .badge.infra { background: #7c3a10; color: #fed7aa; }
   .badge.missing { background: #1e2235; color: #475569; }
+
+  .cell-meta { display: block; font-size: 11px; color: #475569; margin-top: 1px;
+               line-height: 1.2; white-space: nowrap; min-height: 13px; }
+  .cell-meta .cm-cost { color: #a78bfa; font-weight: 600; }
+  .cell-meta .cm-time { color: #475569; font-size: 10px; }
 
   .detail-row td { padding: 0; }
   .detail-panel { padding: 16px 20px 20px; background: #12151f;
@@ -537,6 +544,13 @@ function categorizeError(errorMsg) {
   return "Other";
 }
 
+function fmtDuration(s) {
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return sec ? m + "m" + sec + "s" : m + "m";
+}
+
 function modelOrder(run) {
   const models = Object.keys(DATA.runs[run] || {});
   const order = ["claude-opus","claude-haiku","codex-gpt-5.2","codex-mini-gpt-5.1","codex-gpt-5.3",
@@ -719,19 +733,27 @@ function renderTable() {
         `<button class="cell-btn" title="Copy S3 path" onclick="copyS3Path(event,'${currentRun}','${m}','${repo}')">&#128203;</button>` +
         `<button class="cell-btn" title="Rerun this repo+model" onclick="rerunRepo(event,'${currentRun}','${m}','${repo}',${hasData})">&#x21ba;</button>` +
         `</span>`;
-      if (!r) return `<td class="result-cell"><span class="badge missing">—</span>${cellBtns}</td>`;
+      if (!r) return `<td class="result-cell"><span class="badge missing">—</span>${cellBtns}<span class="cell-meta"></span></td>`;
+
+      // Compact time + cost beneath the badge
+      const durStr = r.duration_s ? fmtDuration(r.duration_s) : "";
+      const costStr = r.cost_usd ? "$" + r.cost_usd.toFixed(2) : "";
+      const metaHtml = (durStr || costStr)
+        ? `<span class="cell-meta"><span class="cm-cost">${costStr}</span>${costStr && durStr ? " · " : ""}<span class="cm-time">${durStr}</span></span>`
+        : `<span class="cell-meta"></span>`;
+
       if (r.success) {
-        return `<td class="result-cell"><span class="badge pass">✓</span>${cellBtns}</td>`;
+        return `<td class="result-cell"><span class="badge pass">✓</span>${cellBtns}${metaHtml}</td>`;
       }
       const cat = categorizeError(r.error);
       if (cat === "Agent timeout") {
-        return `<td class="result-cell"><span class="badge timeout" title="Agent timeout">⏱</span>${cellBtns}</td>`;
+        return `<td class="result-cell"><span class="badge timeout" title="Agent timeout">⏱</span>${cellBtns}${metaHtml}</td>`;
       }
       const isInfra = INFRA_CATEGORIES.has(cat);
       if (isInfra) {
-        return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span>${cellBtns}</td>`;
+        return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span>${cellBtns}${metaHtml}</td>`;
       }
-      return `<td class="result-cell"><span class="badge fail">✗</span>${cellBtns}</td>`;
+      return `<td class="result-cell"><span class="badge fail">✗</span>${cellBtns}${metaHtml}</td>`;
     }).join("");
 
     tr.innerHTML = `
