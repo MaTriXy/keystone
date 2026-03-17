@@ -13,6 +13,8 @@ from pathlib import Path
 EVALS_DIR = Path.home() / "keystone_evals"
 DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
 
+DEFAULT_S3_PREFIX = "file:///Users/thad/keystone_eval/z/"
+
 # Which runs to include and in what order
 RUN_NAMES = [
     # "2026-03-02_cat_v1",
@@ -27,8 +29,10 @@ RUN_NAMES = [
     # "2026-03-11_opencode_vs_claude_v2",
     # "2026-03-12_opencode_vs_claude_cost_v2",
     # "2026-03-12_opencode_vs_claude_cost_v3",
-    "2026-03-13_four_model_thad",
-    "2026-03-13_five_model_full_v3",
+    # "2026-03-13_four_model_thad",
+    # "2026-03-13_five_model_full_v3",
+    # "2026-03-14_thad_eval",
+    "main",
 ]
 
 RUN_LABELS = {
@@ -44,8 +48,8 @@ RUN_LABELS = {
     "2026-03-11_opencode_vs_claude_v2": "OpenCode vs Claude 2026-03-11",
     "2026-03-12_opencode_vs_claude_cost_v2": "OpenCode vs Claude (cost) 2026-03-12",
     "2026-03-12_opencode_vs_claude_cost_v3": "OpenCode vs Claude (cost v3) 2026-03-12",
-    "2026-03-13_four_model_thad": "Four-model 2026-03-13",
-    "2026-03-13_five_model_full_v3": "Five-model full 2026-03-13",
+    "2026-03-14_thad_eval": "Thad eval 2026-03-14",
+    "main": "Main",
 }
 
 # Canonical model display order & colors per run
