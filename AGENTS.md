@@ -60,6 +60,8 @@ uv run ruff format .          # Format code
 uv run pyright                # Type check
 ```
 
+**Fix all lint/type errors in files you touch, even pre-existing ones.** Don't leave warnings behind just because you didn't introduce them — if you edited the file, clean it up. (Exception: marimo notebooks have per-file ignores in `pyproject.toml` for cell-based import patterns; those are intentional.)
+
 To install pre-commit hooks after cloning:
 ```bash
 uv sync

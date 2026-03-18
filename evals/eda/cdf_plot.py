@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import argparse
 import re
-from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import polars as pl
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 CODEX_CONFIGS: list[str] = [
     "codex-gpt-5.3-reasoning_xhigh",
@@ -263,7 +266,7 @@ def build_cdf_figure(
         for _, row in sub.iterrows():
             fail_label = " ✕ FAIL" if row["failed"] else ""
             lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {row[x_col]}"]
-            for ci, (col_name, label) in enumerate(hover_extra_cols.items()):
+            for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
                 val = row[col_name] if pd.notna(row[col_name]) else 0
                 lines.append(f"{label}: {val}")
             lines.append(f"CDF: {row['cdf']:.0%}")
@@ -276,13 +279,13 @@ def build_cdf_figure(
                 mode="lines+markers",
                 name=config,
                 legendgroup=config,
-                marker=dict(
-                    size=sizes,
-                    color=colors,
-                    symbol=symbols,
-                    line=dict(width=[2 if f else 0 for f in sub["failed"]]),
-                ),
-                line=dict(color=color, width=2),
+                marker={
+                    "size": sizes,
+                    "color": colors,
+                    "symbol": symbols,
+                    "line": {"width": [2 if f else 0 for f in sub["failed"]]},
+                },
+                line={"color": color, "width": 2},
                 customdata=customdata,
                 text=hover_texts,
                 hovertemplate="%{text}<extra>" + config + "</extra>",
@@ -297,7 +300,7 @@ def build_cdf_figure(
         template="plotly_dark",
         height=height,
         hovermode="closest",
-        legend=dict(font=dict(size=11)),
+        legend={"font": {"size": 11}},
     )
     if x_format:
         fig.update_layout(xaxis_tickformat=x_format)
