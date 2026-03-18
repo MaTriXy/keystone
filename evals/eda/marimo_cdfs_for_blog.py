@@ -5,11 +5,11 @@ self-contained HTML files for embedding in blog posts.
 
 Run interactively::
 
-    uv run marimo edit evals/eda/time_cdf_analysis.py
+    uv run marimo edit evals/eda/marimo_cdfs_for_blog.py
 
 Render to static HTML::
 
-    uv run marimo export html evals/eda/time_cdf_analysis.py -o time_cdf_analysis.html
+    uv run marimo export html evals/eda/marimo_cdfs_for_blog.py -o marimo_cdfs_for_blog.html
 """
 
 import marimo
