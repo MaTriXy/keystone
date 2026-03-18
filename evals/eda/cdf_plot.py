@@ -17,12 +17,15 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import polars as pl
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 CODEX_CONFIGS: list[str] = [
     "codex-gpt-5.3-reasoning_xhigh",
@@ -188,7 +191,7 @@ def build_cdf_figure(
         sub = pdf[pdf["config_name"] == config].copy()
         if sub.empty:
             continue
-        sub = sub.sort_values(x_col).reset_index(drop=True)
+        sub = sub.sort_values(x_col).reset_index(drop=True)  # type: ignore[call-overload]
         n = len(sub)
         sub["cdf"] = (np.arange(n) + 1) / n
         color = config_colors.get(config, "#888888")
@@ -204,7 +207,7 @@ def build_cdf_figure(
             sub["repo_id"].values,
             sub["failed"].astype(str).values,
         ] + [sub[c].fillna(0).values for c in extra_keys]
-        customdata = np.column_stack(customdata_cols)
+        customdata = np.column_stack(customdata_cols)  # type: ignore[call-overload]
 
         # Build hover template — customdata[1] is the failed flag
         hover_lines = [
@@ -226,10 +229,10 @@ def build_cdf_figure(
         # Build per-point hover text to append fail marker
         hover_texts = []
         for _, row in sub.iterrows():
-            fail_label = " ✕ FAIL" if row["failed"] else ""
+            fail_label = " ✕ FAIL" if bool(row["failed"]) else ""
             lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {row[x_col]}"]
-            for ci, (col_name, label) in enumerate(hover_extra_cols.items()):
-                val = row[col_name] if pd.notna(row[col_name]) else 0
+            for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
+                val = row[col_name] if bool(pd.notna(row[col_name])) else 0
                 lines.append(f"{label}: {val}")
             lines.append(f"CDF: {row['cdf']:.0%}")
             hover_texts.append("<br>".join(lines))
@@ -241,13 +244,13 @@ def build_cdf_figure(
                 mode="lines+markers",
                 name=config,
                 legendgroup=config,
-                marker=dict(
-                    size=sizes,
-                    color=colors,
-                    symbol=symbols,
-                    line=dict(width=[2 if f else 0 for f in sub["failed"]]),
-                ),
-                line=dict(color=color, width=2),
+                marker={
+                    "size": sizes,
+                    "color": colors,
+                    "symbol": symbols,
+                    "line": {"width": [2 if f else 0 for f in sub["failed"]]},
+                },
+                line={"color": color, "width": 2},
                 customdata=customdata,
                 text=hover_texts,
                 hovertemplate="%{text}<extra>" + config + "</extra>",
@@ -262,7 +265,7 @@ def build_cdf_figure(
         template="plotly_dark",
         height=height,
         hovermode="closest",
-        legend=dict(font=dict(size=11)),
+        legend={"font": {"size": 11}},
     )
     if x_format:
         fig.update_layout(xaxis_tickformat=x_format)
