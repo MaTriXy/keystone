@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -152,7 +152,6 @@ def load_codex_data(parquet_path: Path) -> pd.DataFrame:
     ).to_pandas()
     pdf["failed"] = ~pdf["success"] | pdf["agent_timed_out"].fillna(False)
     return pdf
-
 
 
 def load_claude_data(parquet_path: Path) -> pd.DataFrame:
@@ -329,7 +328,6 @@ def build_cost_figure(pdf: pd.DataFrame) -> go.Figure:
         x_format="$,.2f",
         hover_extra_cols={"agent_walltime_seconds": "Time"},
     )
-
 
 
 def build_claude_figure(pdf: pd.DataFrame) -> go.Figure:
