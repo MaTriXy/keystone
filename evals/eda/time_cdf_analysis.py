@@ -231,11 +231,6 @@ def _(df, mo, pl):
         .sort("median_time_s")
     )
     mo.md("## Summary stats by config")
-    return (_stats,)
-
-
-@app.cell
-def _(_stats, mo):
     mo.ui.table(_stats, selection=None)
     return
 
