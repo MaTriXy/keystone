@@ -49,20 +49,38 @@ def _(mo):
 
     from eda.cdf_plot import (  # noqa: E402
         DEFAULT_PARQUET,
+        build_claude_cost_figure,
+        build_claude_figure,
         build_cost_figure,
         build_figure,
         export_html,
+        load_claude_data,
         load_codex_data,
     )
 
     pdf = load_codex_data(DEFAULT_PARQUET)
-    mo.md(f"Loaded **{len(pdf)}** codex rows from `{DEFAULT_PARQUET.name}`")
-    return Path, build_cost_figure, build_figure, export_html, pdf
+    claude_pdf = load_claude_data(DEFAULT_PARQUET)
+    mo.md(
+        f"Loaded **{len(pdf)}** codex rows and **{len(claude_pdf)}** claude rows "
+        f"from `{DEFAULT_PARQUET.name}`"
+    )
+    return (
+        Path,
+        build_claude_cost_figure,
+        build_claude_figure,
+        build_cost_figure,
+        build_figure,
+        claude_pdf,
+        export_html,
+        pdf,
+    )
 
 
 @app.cell
 def _(mo):
-    mo.md("## CDF — Agent Wall-clock Time")
+    mo.md("""
+    ## CDF — Agent Wall-clock Time
+    """)
     return
 
 
@@ -85,7 +103,9 @@ def _(fig_time, mo):
 
 @app.cell
 def _(mo):
-    mo.md("## CDF — Inference Cost")
+    mo.md("""
+    ## CDF — Inference Cost
+    """)
     return
 
 
@@ -106,12 +126,64 @@ def _(fig_cost, mo):
     return
 
 
+
 @app.cell
-def _(mo, pdf):
+def _(mo):
+    mo.md("""
+    ## CDF — Claude Agent Wall-clock Time
+    """)
+    return
+
+
+@app.cell
+def _(Path, build_claude_figure, claude_pdf, export_html, mo):
+    fig_claude_time = build_claude_figure(claude_pdf)
+
+    _out = Path(__file__).parent / "output" / "claude_walltime_cdf.html"
+    _out.parent.mkdir(parents=True, exist_ok=True)
+    export_html(fig_claude_time, _out, div_id="claude-walltime-cdf")
+    mo.md(f"Saved → `{_out}`")
+    return (fig_claude_time,)
+
+
+@app.cell
+def _(fig_claude_time, mo):
+    mo.ui.plotly(fig_claude_time)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## CDF — Claude Inference Cost
+    """)
+    return
+
+
+@app.cell
+def _(Path, build_claude_cost_figure, claude_pdf, export_html, mo):
+    fig_claude_cost = build_claude_cost_figure(claude_pdf)
+
+    _out = Path(__file__).parent / "output" / "claude_cost_cdf.html"
+    _out.parent.mkdir(parents=True, exist_ok=True)
+    export_html(fig_claude_cost, _out, div_id="claude-cost-cdf")
+    mo.md(f"Saved → `{_out}`")
+    return (fig_claude_cost,)
+
+
+@app.cell
+def _(fig_claude_cost, mo):
+    mo.ui.plotly(fig_claude_cost)
+    return
+
+
+@app.cell
+def _(claude_pdf, mo, pdf):
+    import pandas as pd
     import polars as pl
 
     _stats = (
-        pl.from_pandas(pdf)
+        pl.from_pandas(pd.concat([pdf, claude_pdf], ignore_index=True))
         .group_by("config_name")
         .agg(
             pl.col("agent_walltime_seconds").mean().alias("mean_time_s"),

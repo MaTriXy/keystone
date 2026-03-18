@@ -42,6 +42,25 @@ CONFIG_COLORS: dict[str, str] = {
     "codex-gpt-5.3-no_agents_md-no_guardrail": "#FF6692",
 }
 
+CLAUDE_CONFIGS: list[str] = [
+    "claude-opus-effort_max",
+    "claude-opus",
+    "claude-opus-effort_medium",
+    "claude-opus-no_agents_md",
+    "claude-opus-no_agents_md-no_guardrail",
+    "claude-haiku",
+]
+
+CLAUDE_CONFIG_COLORS: dict[str, str] = {
+    "claude-opus-effort_max": "#636EFA",
+    "claude-opus": "#00CC96",
+    "claude-opus-effort_medium": "#AB63FA",
+    "claude-opus-no_agents_md": "#FFA15A",
+    "claude-opus-no_agents_md-no_guardrail": "#FF6692",
+    "claude-haiku": "#EF553B",
+}
+
+
 DEFAULT_PARQUET: Path = Path.home() / "keystone_eval" / "2026-03-14.parquet"
 PLOT_DIV_ID: str = "time-cdf-plot"
 PLOTLY_CDN_VERSION: str = "3.3.1"
@@ -123,6 +142,23 @@ def load_codex_data(parquet_path: Path) -> pd.DataFrame:
     """
     df = pl.read_parquet(parquet_path)
     df = df.filter(pl.col("config_name").is_in(CODEX_CONFIGS))
+    pdf = df.select(
+        "config_name",
+        "repo_id",
+        "agent_walltime_seconds",
+        "cost_usd",
+        "success",
+        "agent_timed_out",
+    ).to_pandas()
+    pdf["failed"] = ~pdf["success"] | pdf["agent_timed_out"].fillna(False)
+    return pdf
+
+
+
+def load_claude_data(parquet_path: Path) -> pd.DataFrame:
+    """Load parquet and return a pandas DataFrame filtered to Claude configs."""
+    df = pl.read_parquet(parquet_path)
+    df = df.filter(pl.col("config_name").is_in(CLAUDE_CONFIGS))
     pdf = df.select(
         "config_name",
         "repo_id",
@@ -292,6 +328,34 @@ def build_cost_figure(pdf: pd.DataFrame) -> go.Figure:
         x_label="Inference cost (USD)",
         x_format="$,.2f",
         hover_extra_cols={"agent_walltime_seconds": "Time"},
+    )
+
+
+
+def build_claude_figure(pdf: pd.DataFrame) -> go.Figure:
+    """Build the walltime CDF figure for Claude configs."""
+    return build_cdf_figure(
+        pdf,
+        "agent_walltime_seconds",
+        title="CDF — Agent Wall-clock Time by Claude Config",
+        x_label="Agent walltime (seconds)",
+        hover_extra_cols={"cost_usd": "Cost: $"},
+        config_order=CLAUDE_CONFIGS,
+        config_colors=CLAUDE_CONFIG_COLORS,
+    )
+
+
+def build_claude_cost_figure(pdf: pd.DataFrame) -> go.Figure:
+    """Build the inference cost CDF figure for Claude configs."""
+    return build_cdf_figure(
+        pdf,
+        "cost_usd",
+        title="CDF — Inference Cost by Claude Config",
+        x_label="Inference cost (USD)",
+        x_format="$,.2f",
+        hover_extra_cols={"agent_walltime_seconds": "Time"},
+        config_order=CLAUDE_CONFIGS,
+        config_colors=CLAUDE_CONFIG_COLORS,
     )
 
 
