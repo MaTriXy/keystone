@@ -183,6 +183,7 @@ def build_cdf_figure(
     title: str,
     x_label: str,
     x_format: str = "",
+    logx: bool = False,
     hover_extra_cols: dict[str, str] | None = None,
     config_order: Sequence[str] | None = None,
     config_colors: dict[str, str] | None = None,
@@ -304,6 +305,8 @@ def build_cdf_figure(
     )
     if x_format:
         fig.update_layout(xaxis_tickformat=x_format)
+    if logx:
+        fig.update_xaxes(type="log")
     return fig
 
 
@@ -317,6 +320,7 @@ def build_figure(pdf: pd.DataFrame) -> go.Figure:
         "agent_walltime_seconds",
         title="CDF — Agent Wall-clock Time by Codex Config",
         x_label="Agent walltime (seconds)",
+        logx=True,
         hover_extra_cols={"cost_usd": "Cost: $"},
     )
 
@@ -329,6 +333,7 @@ def build_cost_figure(pdf: pd.DataFrame) -> go.Figure:
         title="CDF — Inference Cost by Codex Config",
         x_label="Inference cost (USD)",
         x_format="$,.2f",
+        logx=True,
         hover_extra_cols={"agent_walltime_seconds": "Time"},
     )
 
@@ -340,6 +345,7 @@ def build_claude_figure(pdf: pd.DataFrame) -> go.Figure:
         "agent_walltime_seconds",
         title="CDF — Agent Wall-clock Time by Claude Config",
         x_label="Agent walltime (seconds)",
+        logx=True,
         hover_extra_cols={"cost_usd": "Cost: $"},
         config_order=CLAUDE_CONFIGS,
         config_colors=CLAUDE_CONFIG_COLORS,
@@ -354,6 +360,7 @@ def build_claude_cost_figure(pdf: pd.DataFrame) -> go.Figure:
         title="CDF — Inference Cost by Claude Config",
         x_label="Inference cost (USD)",
         x_format="$,.2f",
+        logx=True,
         hover_extra_cols={"agent_walltime_seconds": "Time"},
         config_order=CLAUDE_CONFIGS,
         config_colors=CLAUDE_CONFIG_COLORS,
