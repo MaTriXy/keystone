@@ -272,7 +272,7 @@ def build_cdf_figure(
             for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
                 val = row[col_name] if pd.notna(row[col_name]) else 0
                 formatted = f"{val:.2f}" if "cost" in col_name else f"{val}"
-                lines.append(f"{label}{formatted}")
+                lines.append(f"{label}: {formatted}")
             lines.append(f"CDF: {row['cdf']:.0%}")
             hover_texts.append("<br>".join(lines))
 
