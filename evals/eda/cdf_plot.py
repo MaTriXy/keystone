@@ -15,6 +15,7 @@ Usage (CLI, backwards-compatible)::
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -392,6 +393,120 @@ def export_html(
     js = CROSS_HIGHLIGHT_JS.replace("__PLOT_DIV_ID__", div_id)
     plot_html = plot_html.replace("</body>", f"{js}\n</body>")
     output_path.write_text(plot_html)
+
+
+XHTML_TEMPLATE: str = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" \
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>__TITLE__</title>
+<script src="https://cdn.plot.ly/plotly-__CDN_VERSION__.min.js">//</script>
+<style type="text/css">
+/*<![CDATA[*/
+    body {{ margin: 0; padding: 0; background: #fff; }}
+    #__DIV_ID__ {{ width: 100%; height: 100vh; }}
+/*]]>*/
+</style>
+</head>
+<body>
+  <div id="__DIV_ID__">&#160;</div>
+  <script type="text/javascript">
+//<![CDATA[
+    var data = __DATA_JSON__;
+    var layout = __LAYOUT_JSON__;
+    Plotly.newPlot('__DIV_ID__', data, layout, {{ responsive: true }});
+__CROSS_HIGHLIGHT_JS__
+//]]>
+  </script>
+</body>
+</html>
+"""
+
+# Cross-highlight JS for XHTML (no <script> wrapper — it lives inside the CDATA block).
+_XHTML_CROSS_HIGHLIGHT_JS: str = """
+    (function() {
+        var el = document.getElementById('__DIV_ID__');
+        if (!el) return;
+        var attempts = 0;
+        var timer = setInterval(function() {
+            if (el.data && el.data.length > 0) {
+                clearInterval(timer);
+                attachHL(el);
+            }
+            if (++attempts > 100) clearInterval(timer);
+        }, 100);
+        function attachHL(el) {
+            var xRange = el.layout.xaxis.range.slice();
+            var yRange = el.layout.yaxis.range.slice();
+            Plotly.relayout(el, {
+                'xaxis.autorange': false, 'xaxis.range': xRange,
+                'yaxis.autorange': false, 'yaxis.range': yRange
+            });
+            var origSizes = el.data.map(function(t) {
+                return Array.isArray(t.marker.size) ? t.marker.size.slice() : t.marker.size;
+            });
+            el.on('plotly_hover', function(evData) {
+                var pt = evData.points[0];
+                if (!pt.customdata) return;
+                var repo = pt.customdata[0];
+                var indices = [], sizes = [];
+                for (var i = 0; i < el.data.length; i++) {
+                    var cd = el.data[i].customdata;
+                    if (!cd) continue;
+                    var orig = origSizes[i];
+                    indices.push(i);
+                    if (Array.isArray(orig)) {
+                        sizes.push(cd.map(function(r, j) {
+                            return r[0] === repo ? orig[j] + 8 : orig[j];
+                        }));
+                    } else {
+                        sizes.push(cd.map(function(r) {
+                            return r[0] === repo ? orig + 8 : orig;
+                        }));
+                    }
+                }
+                if (indices.length) Plotly.restyle(el, {'marker.size': sizes}, indices);
+            });
+            el.on('plotly_unhover', function() {
+                var indices = [], sizes = [];
+                for (var i = 0; i < el.data.length; i++) {
+                    var cd = el.data[i].customdata;
+                    if (!cd) continue;
+                    indices.push(i);
+                    sizes.push(Array.isArray(origSizes[i]) ? origSizes[i].slice() : origSizes[i]);
+                }
+                if (indices.length) Plotly.restyle(el, {'marker.size': sizes}, indices);
+            });
+        }
+    })();
+"""
+
+
+def export_xhtml(
+    fig: go.Figure,
+    output_path: Path,
+    *,
+    title: str = "Plot",
+    div_id: str = PLOT_DIV_ID,
+) -> None:
+    """Write a self-contained XHTML file suitable for blog embedding."""
+    data_json = json.dumps(fig.to_dict()["data"], default=str)
+    layout_json = json.dumps(fig.to_dict()["layout"], default=str)
+    js = _XHTML_CROSS_HIGHLIGHT_JS.replace("__DIV_ID__", div_id)
+    xhtml = (
+        XHTML_TEMPLATE.replace("__TITLE__", title)
+        .replace("__CDN_VERSION__", PLOTLY_CDN_VERSION)
+        .replace("__DIV_ID__", div_id)
+        .replace("__DATA_JSON__", data_json)
+        .replace("__LAYOUT_JSON__", layout_json)
+        .replace("__CROSS_HIGHLIGHT_JS__", js)
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(xhtml)
 
 
 def main() -> None:

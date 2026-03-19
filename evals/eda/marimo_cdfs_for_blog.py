@@ -54,17 +54,22 @@ def _(mo):
         build_cost_figure,
         build_figure,
         export_html,
+        export_xhtml,
         load_claude_data,
         load_codex_data,
     )
 
     pdf = load_codex_data(DEFAULT_PARQUET)
     claude_pdf = load_claude_data(DEFAULT_PARQUET)
+
+    BLOG_STATIC = Path.home() / "src" / "generallyintelligent.com" / "static" / "keystone"
+
     mo.md(
         f"Loaded **{len(pdf)}** codex rows and **{len(claude_pdf)}** claude rows "
         f"from `{DEFAULT_PARQUET.name}`"
     )
     return (
+        BLOG_STATIC,
         Path,
         build_claude_cost_figure,
         build_claude_figure,
@@ -72,6 +77,7 @@ def _(mo):
         build_figure,
         claude_pdf,
         export_html,
+        export_xhtml,
         pdf,
     )
 
@@ -85,13 +91,16 @@ def _(mo):
 
 
 @app.cell
-def _(Path, build_figure, export_html, mo, pdf):
+def _(BLOG_STATIC, Path, build_figure, export_html, export_xhtml, mo, pdf):
     fig_time = build_figure(pdf)
 
     _out = Path(__file__).parent / "output" / "codex_walltime_cdf.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
     export_html(fig_time, _out, div_id="walltime-cdf")
-    mo.md(f"Saved → `{_out}`")
+
+    _xhtml = BLOG_STATIC / "codex_walltime_cdf.xhtml"
+    export_xhtml(fig_time, _xhtml, title="CDF — Codex Agent Wall-clock Time", div_id="walltime-cdf")
+    mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_time,)
 
 
@@ -110,13 +119,16 @@ def _(mo):
 
 
 @app.cell
-def _(Path, build_cost_figure, export_html, mo, pdf):
+def _(BLOG_STATIC, Path, build_cost_figure, export_html, export_xhtml, mo, pdf):
     fig_cost = build_cost_figure(pdf)
 
     _out = Path(__file__).parent / "output" / "codex_cost_cdf.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
     export_html(fig_cost, _out, div_id="cost-cdf")
-    mo.md(f"Saved → `{_out}`")
+
+    _xhtml = BLOG_STATIC / "codex_cost_cdf.xhtml"
+    export_xhtml(fig_cost, _xhtml, title="CDF — Codex Inference Cost", div_id="cost-cdf")
+    mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_cost,)
 
 
@@ -135,13 +147,16 @@ def _(mo):
 
 
 @app.cell
-def _(Path, build_claude_figure, claude_pdf, export_html, mo):
+def _(BLOG_STATIC, Path, build_claude_figure, claude_pdf, export_html, export_xhtml, mo):
     fig_claude_time = build_claude_figure(claude_pdf)
 
     _out = Path(__file__).parent / "output" / "claude_walltime_cdf.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
     export_html(fig_claude_time, _out, div_id="claude-walltime-cdf")
-    mo.md(f"Saved → `{_out}`")
+
+    _xhtml = BLOG_STATIC / "claude_walltime_cdf.xhtml"
+    export_xhtml(fig_claude_time, _xhtml, title="CDF — Claude Agent Wall-clock Time", div_id="claude-walltime-cdf")
+    mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_claude_time,)
 
 
@@ -160,13 +175,16 @@ def _(mo):
 
 
 @app.cell
-def _(Path, build_claude_cost_figure, claude_pdf, export_html, mo):
+def _(BLOG_STATIC, Path, build_claude_cost_figure, claude_pdf, export_html, export_xhtml, mo):
     fig_claude_cost = build_claude_cost_figure(claude_pdf)
 
     _out = Path(__file__).parent / "output" / "claude_cost_cdf.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
     export_html(fig_claude_cost, _out, div_id="claude-cost-cdf")
-    mo.md(f"Saved → `{_out}`")
+
+    _xhtml = BLOG_STATIC / "claude_cost_cdf.xhtml"
+    export_xhtml(fig_claude_cost, _xhtml, title="CDF — Claude Inference Cost", div_id="claude-cost-cdf")
+    mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_claude_cost,)
 
 
