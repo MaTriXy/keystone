@@ -73,3 +73,9 @@ ignore = [
 known-first-party = ["keystone", "evals"]
 
 # Pyright config in pyrightconfig.json (needs explicit include to avoid hanging on symlinks)
+
+[tool.marimo.runtime]
+auto_instantiate = true
+on_cell_change = "autorun"
+module_watcher_mode = "autorun"
+
