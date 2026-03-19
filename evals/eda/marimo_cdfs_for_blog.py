@@ -79,7 +79,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md("""
-    ## CDF — Agent Wall-clock Time
+    ## CDF — Codex Agent Wall-clock Time
     """)
     return
 
@@ -104,7 +104,7 @@ def _(fig_time, mo):
 @app.cell
 def _(mo):
     mo.md("""
-    ## CDF — Inference Cost
+    ## CDF — Codex Inference Cost
     """)
     return
 
