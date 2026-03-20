@@ -65,6 +65,20 @@ CLAUDE_CONFIG_COLORS: dict[str, str] = {
 }
 
 
+COMPARE_CONFIGS: list[str] = [
+    "claude-opus",
+    "codex-gpt-5.3",
+    "claude-haiku",
+    "codex-mini-gpt-5.1",
+]
+
+COMPARE_CONFIG_COLORS: dict[str, str] = {
+    "claude-opus": "#00CC96",
+    "codex-gpt-5.3": "#636EFA",
+    "claude-haiku": "#EF553B",
+    "codex-mini-gpt-5.1": "#AB63FA",
+}
+
 DEFAULT_PARQUET: Path = Path.home() / "keystone_eval" / "2026-03-14.parquet"
 PLOT_DIV_ID: str = "time-cdf-plot"
 PLOTLY_CDN_VERSION: str = "3.3.1"
@@ -175,6 +189,95 @@ def load_claude_data(parquet_path: Path) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Data loading — all configs (for cross-config normalisation)
+# ---------------------------------------------------------------------------
+def load_all_data(parquet_path: Path) -> pd.DataFrame:
+    """Load parquet and return a pandas DataFrame with all configs.
+
+    Includes ``tests_passed``, ``tests_failed``, and derived ``tests_discovered``
+    and ``failed`` columns.
+    """
+    df = pl.read_parquet(parquet_path)
+    pdf = df.select(
+        "config_name",
+        "repo_id",
+        "agent_walltime_seconds",
+        "cost_usd",
+        "success",
+        "agent_timed_out",
+        "tests_passed",
+        "tests_failed",
+    ).to_pandas()
+    pdf["failed"] = ~pdf["success"] | pdf["agent_timed_out"].fillna(False)
+    pdf["tests_discovered"] = pdf["tests_passed"].fillna(0) + pdf["tests_failed"].fillna(0)
+    return pdf
+
+
+def prepare_parcoords_data(all_pdf: pd.DataFrame) -> list[dict[str, object]]:
+    """Prepare eval data as a list of dicts for the parcoords HTML template.
+
+    Computes ``repo_max_tests`` and ``norm_tests_passed`` across all configs,
+    then returns records for the comparison subset (:data:`COMPARE_CONFIGS`).
+    """
+    df = all_pdf.copy()
+    df["repo_max_tests"] = df.groupby("repo_id")["tests_discovered"].transform("max")
+    df["norm_tests_passed"] = np.where(
+        df["repo_max_tests"] > 0,
+        df["tests_passed"].fillna(0) / df["repo_max_tests"],
+        0.0,
+    )
+    plot_df = df[df["config_name"].isin(COMPARE_CONFIGS)]
+    cols = [
+        "config_name",
+        "repo_id",
+        "agent_walltime_seconds",
+        "cost_usd",
+        "success",
+        "tests_passed",
+        "tests_failed",
+        "tests_discovered",
+        "repo_max_tests",
+        "norm_tests_passed",
+    ]
+    return plot_df[cols].to_dict(orient="records")  # type: ignore[call-overload]
+
+
+def build_normalized_tests_figure(all_pdf: pd.DataFrame) -> go.Figure:
+    """Build a CDF of normalized test discovery (fraction of repo max).
+
+    The max tests discovered per repo is computed across *all* configs in
+    ``all_pdf``, then each run's count is divided by that max.  The CDF is
+    plotted only for configs in :data:`COMPARE_CONFIGS`.
+    """
+    # Compute max tests discovered (passed + failed) per repo across ALL configs
+    all_pdf = all_pdf.copy()
+    all_pdf["repo_max_tests"] = all_pdf.groupby("repo_id")["tests_discovered"].transform("max")
+    all_pdf["norm_tests_passed"] = np.where(
+        all_pdf["repo_max_tests"] > 0,
+        all_pdf["tests_passed"].fillna(0) / all_pdf["repo_max_tests"],
+        0.0,
+    )
+
+    # Filter to comparison configs for plotting
+    plot_pdf: pd.DataFrame = all_pdf[all_pdf["config_name"].isin(COMPARE_CONFIGS)].copy()  # type: ignore[assignment]
+
+    return build_cdf_figure(
+        plot_pdf,
+        "norm_tests_passed",
+        title="Normalized Tests Passed (CDF)",
+        x_label="Tests passed / max tests discovered for repo",
+        x_format=".0%",
+        hover_extra_cols={
+            "tests_passed": "Tests passed",
+            "tests_discovered": "Tests discovered",
+            "repo_max_tests": "Max tests (all configs)",
+        },
+        config_order=COMPARE_CONFIGS,
+        config_colors=COMPARE_CONFIG_COLORS,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Generic CDF figure builder
 # ---------------------------------------------------------------------------
 def build_cdf_figure(
@@ -266,12 +369,26 @@ def build_cdf_figure(
         # Build per-point hover text to append fail marker
         hover_texts = []
         for _, row in sub.iterrows():
-            fail_label = " ✕ FAIL" if row["failed"] else ""
-            x_val = f"${row[x_col]:.2f}" if "cost" in x_col else f"{row[x_col]}"
-            lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {x_val}"]
+            fail_label = " ✕ FAIL" if bool(row["failed"]) else ""
+            if "cost" in x_col:
+                x_val = f"${row[x_col]:.2f}"
+            elif "time" in x_col or "seconds" in x_col:
+                x_val = f"{row[x_col]:.1f}"
+            else:
+                x_val = f"{row[x_col]}"
+            lines = [
+                f"<b>{row['repo_id']}</b>{fail_label}",
+                f"Config: {config}",
+                f"{x_label}: {x_val}",
+            ]
             for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
-                val = row[col_name] if pd.notna(row[col_name]) else 0
-                formatted = f"${val:.2f}" if "cost" in col_name else f"{val}"
+                val = row[col_name] if bool(pd.notna(row[col_name])) else 0
+                if "cost" in col_name:
+                    formatted = f"${val:.2f}"
+                elif "time" in col_name or "seconds" in col_name:
+                    formatted = f"{val:.1f}"
+                else:
+                    formatted = f"{val}"
                 lines.append(f"{label}: {formatted}")
             lines.append(f"CDF: {row['cdf']:.0%}")
             hover_texts.append("<br>".join(lines))
@@ -301,7 +418,7 @@ def build_cdf_figure(
         xaxis_title=x_label,
         yaxis_title="CDF",
         yaxis_tickformat=".0%",
-        template="plotly_dark",
+        template="plotly_white",
         height=height,
         hovermode="closest",
         legend={"font": {"size": 11}},
@@ -325,7 +442,7 @@ def build_figure(pdf: pd.DataFrame) -> go.Figure:
     return build_cdf_figure(
         pdf,
         "agent_walltime_seconds",
-        title="CDF — Agent Wall-clock Time by Codex Config",
+        title="Agent Wall-clock Time by Codex Config (CDF)",
         x_label="Agent walltime (seconds)",
         logx=True,
         hover_extra_cols={"cost_usd": "Cost"},
@@ -337,7 +454,7 @@ def build_cost_figure(pdf: pd.DataFrame) -> go.Figure:
     return build_cdf_figure(
         pdf,
         "cost_usd",
-        title="CDF — Inference Cost by Codex Config",
+        title="Inference Cost by Codex Config (CDF)",
         x_label="Inference cost (USD)",
         x_format="$,.2f",
         logx=True,
@@ -350,7 +467,7 @@ def build_claude_figure(pdf: pd.DataFrame) -> go.Figure:
     return build_cdf_figure(
         pdf,
         "agent_walltime_seconds",
-        title="CDF — Agent Wall-clock Time by Claude Config",
+        title="Agent Wall-clock Time by Claude Config (CDF)",
         x_label="Agent walltime (seconds)",
         logx=True,
         hover_extra_cols={"cost_usd": "Cost"},
@@ -364,7 +481,7 @@ def build_claude_cost_figure(pdf: pd.DataFrame) -> go.Figure:
     return build_cdf_figure(
         pdf,
         "cost_usd",
-        title="CDF — Inference Cost by Claude Config",
+        title="Inference Cost by Claude Config (CDF)",
         x_label="Inference cost (USD)",
         x_format="$,.2f",
         logx=True,

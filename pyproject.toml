@@ -77,5 +77,5 @@ known-first-party = ["keystone", "evals"]
 [tool.marimo.runtime]
 auto_instantiate = true
 on_cell_change = "autorun"
-module_watcher_mode = "autorun"
+auto_reload = "autorun"
 

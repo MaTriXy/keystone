@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eval Results — Parallel Coordinates</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-grid.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-theme-balham.css">
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.noStyle.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; background: #fafafa; }
+  h1 { margin-bottom: 4px; }
+  .subtitle { color: #666; margin-bottom: 12px; }
+  #parcoords { width: 100%; height: 560px; margin-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .controls .status { font-size: 14px; color: #555; }
+  .controls button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  #resetBtn { background: #6c757d; color: #fff; }
+  #resetBtn:hover { background: #5a6268; }
+  #grid { width: 100%; height: 600px; }
+</style>
+</head>
+<body>
+
+<h1>Eval Results — Parallel Coordinates</h1>
+<p class="subtitle">Drag ranges on axes to filter &bull; Click column headers to sort &bull; Use filter icons in grid</p>
+
+<div id="parcoords"></div>
+
+<div class="controls">
+  <span id="status" class="status">Loading&hellip;</span>
+  <button id="resetBtn" onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<div id="grid" class="ag-theme-balham"></div>
+
+<script>
+// ── Data (injected by Python) ──
+const DATA = "__DATA_PLACEHOLDER__";
+
+// ── State ──
+let plotDiv, allRows, gridApi;
+let currentMask;
+
+// Axis keys must match the order of dimensions built in buildParcoords
+const AXIS_KEYS = [
+  "repo_code",
+  "log_repo_max_tests",
+  "log_tests_passed",
+  "config_code",
+  "log_cost_usd",
+  "log_walltime",
+  "norm_tests_passed",
+];
+
+function prepareData(rows) {
+  // Build repo → numeric code mapping
+  const repos = [...new Set(rows.map(r => r.repo_id))].sort();
+  const repoMap = Object.fromEntries(repos.map((r, i) => [r, i]));
+
+  // Build config → numeric code mapping
+  const configs = [...new Set(rows.map(r => r.config_name))].sort();
+  const configMap = Object.fromEntries(configs.map((c, i) => [c, i]));
+
+  rows.forEach(r => {
+    r.repo_code = repoMap[r.repo_id] ?? -1;
+    r.config_code = configMap[r.config_name] ?? -1;
+    r.log_repo_max_tests = Math.log10(1 + (r.repo_max_tests || 0));
+    r.log_tests_passed = Math.log10(1 + (r.tests_passed || 0));
+    r.log_cost_usd = Math.log10(1 + (r.cost_usd || 0));
+    r.log_walltime = Math.log10(1 + (r.agent_walltime_seconds || 0));
+  });
+
+  return { repos, repoMap, configs, configMap };
+}
+
+// Generate log10(1+x) tick positions and labels for nice round numbers
+function logTicks(rawValues) {
+  const maxVal = Math.max(...rawValues);
+  const ticks = [0];
+  let v = 1;
+  while (v <= maxVal * 1.1) {
+    ticks.push(Math.log10(1 + v));
+    v *= 10;
+  }
+  return ticks;
+}
+function logTickLabels(rawValues) {
+  const maxVal = Math.max(...rawValues);
+  const labels = ["0"];
+  let v = 1;
+  while (v <= maxVal * 1.1) {
+    labels.push(v >= 1000 ? (v / 1000) + "k" : String(v));
+    v *= 10;
+  }
+  return labels;
+}
+
+// ── Parallel Coordinates ──
+function buildParcoords(rows, repos, repoMap, configs, configMap) {
+  const repoVals = Object.values(repoMap);
+  const repoTexts = Object.keys(repoMap);
+  const configVals = Object.values(configMap);
+  const configTexts = Object.keys(configMap);
+
+  // Sample tick labels for repos (show ~20 evenly spaced)
+  const repoTickStep = Math.max(1, Math.floor(repos.length / 20));
+  const repoTickvals = [];
+  const repoTicktext = [];
+  for (let i = 0; i < repos.length; i += repoTickStep) {
+    repoTickvals.push(i);
+    repoTicktext.push(repos[i]);
+  }
+
+  const dimensions = [
+    {
+      label: "Repo",
+      values: rows.map(r => r.repo_code),
+      tickvals: repoTickvals,
+      ticktext: repoTicktext,
+    },
+    {
+      label: "Max Tests (log₁₀)",
+      values: rows.map(r => r.log_repo_max_tests),
+      tickvals: logTicks(rows.map(r => r.repo_max_tests)),
+      ticktext: logTickLabels(rows.map(r => r.repo_max_tests)),
+    },
+    {
+      label: "Tests Passed (log₁₀)",
+      values: rows.map(r => r.log_tests_passed),
+      tickvals: logTicks(rows.map(r => r.tests_passed)),
+      ticktext: logTickLabels(rows.map(r => r.tests_passed)),
+    },
+    {
+      label: "Config",
+      values: rows.map(r => r.config_code),
+      tickvals: configVals,
+      ticktext: configTexts,
+    },
+    {
+      label: "Cost USD (log₁₀)",
+      values: rows.map(r => r.log_cost_usd),
+      tickvals: logTicks(rows.map(r => r.cost_usd)),
+      ticktext: logTickLabels(rows.map(r => r.cost_usd)),
+    },
+    {
+      label: "Walltime s (log₁₀)",
+      values: rows.map(r => r.log_walltime),
+      tickvals: logTicks(rows.map(r => r.agent_walltime_seconds)),
+      ticktext: logTickLabels(rows.map(r => r.agent_walltime_seconds)),
+    },
+    {
+      label: "Frac Tests Passed",
+      values: rows.map(r => r.norm_tests_passed),
+    },
+  ];
+
+  const normTests = rows.map(r => r.norm_tests_passed);
+
+  const trace = {
+    type: "parcoords",
+    line: {
+      color: normTests,
+      colorscale: "Portland",
+      showscale: true,
+      cmin: 0,
+      cmax: 1,
+      colorbar: { title: "Frac Tests Passed" },
+    },
+    dimensions: dimensions,
+    unselected: { line: { color: "lightgray", opacity: 0.3 } },
+  };
+
+  const layout = {
+    title: "Eval Results — Parallel Coordinates",
+    width: Math.max(document.body.clientWidth - 40, 800),
+    height: 540,
+    margin: { l: 80, r: 80, t: 80, b: 30 },
+  };
+
+  Plotly.newPlot(plotDiv, [trace], layout, { responsive: true });
+  plotDiv.on("plotly_restyle", updateSelection);
+}
+
+function updateSelection() {
+  const dims = plotDiv.data[0].dimensions;
+
+  currentMask = allRows.map((r) => {
+    for (let i = 0; i < dims.length; i++) {
+      const cr = dims[i].constraintrange;
+      if (cr == null) continue;
+      const val = r[AXIS_KEYS[i]];
+      if (typeof cr[0] === "number") {
+        if (val < cr[0] || val > cr[1]) return false;
+      } else {
+        let inAny = false;
+        for (const [lo, hi] of cr) {
+          if (val >= lo && val <= hi) { inAny = true; break; }
+        }
+        if (!inAny) return false;
+      }
+    }
+    return true;
+  });
+
+  const selected = allRows.filter((_, i) => currentMask[i]);
+  document.getElementById("status").textContent =
+    `${selected.length} / ${allRows.length} rows selected`;
+
+  if (gridApi) {
+    gridApi.setGridOption("rowData", selected);
+  }
+}
+
+function resetFilters() {
+  const update = {};
+  for (let i = 0; i < plotDiv.data[0].dimensions.length; i++) {
+    update[`dimensions[${i}].constraintrange`] = null;
+  }
+  Plotly.restyle(plotDiv, update, [0]);
+  currentMask = allRows.map(() => true);
+  document.getElementById("status").textContent =
+    `${allRows.length} / ${allRows.length} rows selected`;
+  if (gridApi) {
+    gridApi.setGridOption("rowData", allRows);
+  }
+}
+
+// ── AG Grid ──
+function buildGrid(rows) {
+  const columnDefs = [
+    { headerName: "Repo", field: "repo_id", width: 220, filter: true, pinned: "left" },
+    { headerName: "Config", field: "config_name", width: 280, filter: true },
+    {
+      headerName: "Tests Passed",
+      field: "tests_passed",
+      width: 120,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? Math.round(p.value) : "",
+    },
+    {
+      headerName: "Tests Failed",
+      field: "tests_failed",
+      width: 120,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? Math.round(p.value) : "",
+    },
+    {
+      headerName: "Tests Discovered",
+      field: "tests_discovered",
+      width: 140,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? Math.round(p.value) : "",
+    },
+    {
+      headerName: "Max Tests (repo)",
+      field: "repo_max_tests",
+      width: 140,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? Math.round(p.value) : "",
+    },
+    {
+      headerName: "Frac Passed",
+      field: "norm_tests_passed",
+      width: 120,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? (p.value * 100).toFixed(1) + "%" : "",
+    },
+    {
+      headerName: "Cost (USD)",
+      field: "cost_usd",
+      width: 110,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? "$" + p.value.toFixed(2) : "",
+    },
+    {
+      headerName: "Walltime (s)",
+      field: "agent_walltime_seconds",
+      width: 120,
+      filter: "agNumberColumnFilter",
+      valueFormatter: p => p.value != null ? p.value.toFixed(1) : "",
+    },
+    {
+      headerName: "Success",
+      field: "success",
+      width: 90,
+      cellRenderer: p => p.value ? "✓" : "✕",
+      cellStyle: p => ({ color: p.value ? "#28a745" : "#dc3545" }),
+    },
+  ];
+
+  const gridOptions = {
+    columnDefs,
+    rowData: rows,
+    defaultColDef: { sortable: true, resizable: true, filter: true },
+    domLayout: "normal",
+    animateRows: true,
+    tooltipShowDelay: 300,
+  };
+
+  const gridDiv = document.getElementById("grid");
+  gridApi = agGrid.createGrid(gridDiv, gridOptions);
+}
+
+// ── Init ──
+document.addEventListener("DOMContentLoaded", () => {
+  plotDiv = document.getElementById("parcoords");
+  allRows = (typeof DATA === "string") ? JSON.parse(DATA) : DATA;
+  currentMask = allRows.map(() => true);
+
+  const { repos, repoMap, configs, configMap } = prepareData(allRows);
+  buildParcoords(allRows, repos, repoMap, configs, configMap);
+  buildGrid(allRows);
+
+  document.getElementById("status").textContent =
+    `${allRows.length} / ${allRows.length} rows selected`;
+});
+</script>
+</body>
+</html>

@@ -47,20 +47,33 @@ def _(mo):
     if _evals_root not in sys.path:
         sys.path.insert(0, _evals_root)
 
+    import importlib
+
+    import eda.cdf_plot
+
+    # Force re-read from disk so `marimo run --watch` picks up changes to
+    # cdf_plot.py (--watch only detects notebook file changes, not imported
+    # modules, so without this reload we'd get stale cached code).
+    importlib.reload(eda.cdf_plot)
+
     from eda.cdf_plot import (
         DEFAULT_PARQUET,
         build_claude_cost_figure,
         build_claude_figure,
         build_cost_figure,
         build_figure,
+        build_normalized_tests_figure,
         export_html,
         export_xhtml,
+        load_all_data,
         load_claude_data,
         load_codex_data,
+        prepare_parcoords_data,
     )
 
     pdf = load_codex_data(DEFAULT_PARQUET)
     claude_pdf = load_claude_data(DEFAULT_PARQUET)
+    all_pdf = load_all_data(DEFAULT_PARQUET)
 
     BLOG_STATIC = Path.home() / "src" / "generallyintelligent.com" / "static" / "keystone"
 
@@ -71,14 +84,17 @@ def _(mo):
     return (
         BLOG_STATIC,
         Path,
+        all_pdf,
         build_claude_cost_figure,
         build_claude_figure,
         build_cost_figure,
         build_figure,
+        build_normalized_tests_figure,
         claude_pdf,
         export_html,
         export_xhtml,
         pdf,
+        prepare_parcoords_data,
     )
 
 
@@ -155,7 +171,12 @@ def _(BLOG_STATIC, Path, build_claude_figure, claude_pdf, export_html, export_xh
     export_html(fig_claude_time, _out, div_id="claude-walltime-cdf")
 
     _xhtml = BLOG_STATIC / "claude_walltime_cdf.xhtml"
-    export_xhtml(fig_claude_time, _xhtml, title="CDF — Claude Agent Wall-clock Time", div_id="claude-walltime-cdf")
+    export_xhtml(
+        fig_claude_time,
+        _xhtml,
+        title="CDF — Claude Agent Wall-clock Time",
+        div_id="claude-walltime-cdf",
+    )
     mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_claude_time,)
 
@@ -183,7 +204,9 @@ def _(BLOG_STATIC, Path, build_claude_cost_figure, claude_pdf, export_html, expo
     export_html(fig_claude_cost, _out, div_id="claude-cost-cdf")
 
     _xhtml = BLOG_STATIC / "claude_cost_cdf.xhtml"
-    export_xhtml(fig_claude_cost, _xhtml, title="CDF — Claude Inference Cost", div_id="claude-cost-cdf")
+    export_xhtml(
+        fig_claude_cost, _xhtml, title="CDF — Claude Inference Cost", div_id="claude-cost-cdf"
+    )
     mo.md(f"Saved → `{_out}`\n\nSaved → `{_xhtml}`")
     return (fig_claude_cost,)
 
@@ -191,6 +214,65 @@ def _(BLOG_STATIC, Path, build_claude_cost_figure, claude_pdf, export_html, expo
 @app.cell
 def _(fig_claude_cost, mo):
     mo.ui.plotly(fig_claude_cost)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## CDF — Normalized Tests Passed
+    Tests passed divided by the maximum tests discovered (passed + failed) for
+    each repo across **all** configs.
+    """)
+    return
+
+
+@app.cell
+def _(build_normalized_tests_figure, mo, all_pdf):
+    fig_norm_tests = build_normalized_tests_figure(all_pdf)
+    mo.ui.plotly(fig_norm_tests)
+    return (fig_norm_tests,)
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## Eval Results — Parallel Coordinates
+
+    Brush-select ranges on any axis to filter. The AG Grid below updates
+    to show only the selected rows.
+    """)
+    return
+
+
+@app.cell
+def _(Path, all_pdf, mo, prepare_parcoords_data):
+    import json as _json
+
+    _records = prepare_parcoords_data(all_pdf)
+
+    _template_path = Path(__file__).parent / "eval_parcoords.html"
+    _template = _template_path.read_text()
+    parcoords_html = _template.replace('"__DATA_PLACEHOLDER__"', _json.dumps(_records))
+
+    # Save standalone HTML
+    _out_path = Path(__file__).parent / "output" / "eval_parcoords.html"
+    _out_path.parent.mkdir(parents=True, exist_ok=True)
+    _out_path.write_text(parcoords_html)
+
+    mo.md(f"Parcoords: **{len(_records)}** rows across comparison configs → `{_out_path}`")
+    return (parcoords_html,)
+
+
+@app.cell
+def _(parcoords_html, mo):
+    import base64 as _b64
+
+    _data_uri = "data:text/html;base64," + _b64.b64encode(parcoords_html.encode()).decode()
+    mo.Html(
+        f'<iframe src="{_data_uri}" '
+        f'width="100%" height="1250" style="border:1px solid #ddd; border-radius:4px"></iframe>'
+    )
     return
 
 

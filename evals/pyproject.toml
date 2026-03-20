@@ -46,3 +46,9 @@ markers = [
     "local_docker: marks tests that expect a local Docker daemon",
     "agentic: marks tests that run a real coding agent (non-deterministic)",
 ]
+
+[tool.marimo.runtime]
+auto_instantiate = true
+on_cell_change = "autorun"
+auto_reload = "autorun"
+
