@@ -38,11 +38,11 @@ RUN_NAMES = [
     # "2026-03-11_opencode_vs_claude_v2",
     # "2026-03-12_opencode_vs_claude_cost_v2",
     # "2026-03-12_opencode_vs_claude_cost_v3",
+    "2026-03-18-cat",
     "2026-03-13_four_model_thad",
     "2026-03-13_five_model_full_v3",
     "2026-03-14_thad_eval",
     "main",
-    "2026-03-18-cat",
 ]
 
 RUN_LABELS = {
@@ -149,7 +149,11 @@ def load_run(
             continue
         if config_name not in models:
             models[config_name] = {}
-        models[config_name][result.repo_entry.id] = result
+        repo_id = result.repo_entry.id
+        existing = models[config_name].get(repo_id)
+        # Keep the best trial: prefer success over failure
+        if existing is None or (not existing.success and result.success):
+            models[config_name][repo_id] = result
 
     # Load rerun manifests (one per model directory)
     for rp in fs.glob(f"{base_prefix}/*/rerun.json"):
@@ -915,6 +919,7 @@ function initGrid() {
     headerHeight: 40,
     domLayout: 'autoHeight',
     defaultColDef: { sortable: true, resizable: true },
+    suppressFieldDotNotation: true,
     suppressCellFocus: true,
     animateRows: false,
     suppressStatusBar: true,
