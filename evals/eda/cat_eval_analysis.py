@@ -42,20 +42,20 @@ def _():
 
     # Extract config metadata from raw_json for the first row of each config
     config_rows = []
-    for cfg in sorted(df["config_name"].unique()):
-        row = df[df["config_name"] == cfg].iloc[0]
-        raw = json.loads(row["raw_json"])
-        eval_cfg = raw.get("eval_config", {})
+    for _cfg in sorted(df["config_name"].unique()):
+        _row = df[df["config_name"] == _cfg].iloc[0]
+        _raw = json.loads(_row["raw_json"])
+        _eval_cfg = _raw.get("eval_config", {})
         config_rows.append(
             {
-                "config_name": cfg,
-                "provider": eval_cfg.get("provider", ""),
-                "model": eval_cfg.get("model", ""),
-                "reasoning_level": eval_cfg.get("codex_reasoning_level")
-                or eval_cfg.get("claude_reasoning_level")
+                "config_name": _cfg,
+                "provider": _eval_cfg.get("provider", ""),
+                "model": _eval_cfg.get("model", ""),
+                "reasoning_level": _eval_cfg.get("codex_reasoning_level")
+                or _eval_cfg.get("claude_reasoning_level")
                 or "",
-                "n_rows": len(df[df["config_name"] == cfg]),
-                "success_rate": df[df["config_name"] == cfg]["success"].mean(),
+                "n_rows": len(df[df["config_name"] == _cfg]),
+                "success_rate": df[df["config_name"] == _cfg]["success"].mean(),
             }
         )
     config_df = pd.DataFrame(config_rows)
@@ -84,19 +84,19 @@ def _(df, mo, pd, px):
     df_holdout = df[df["trial_index"] == 2]
 
     _rows = []
-    for cfg in sorted(df["config_name"].unique()):
+    for _cfg in sorted(df["config_name"].unique()):
         _rows.append(
             {
-                "config": cfg,
+                "config": _cfg,
                 "split": "Train (trials 0+1)",
-                "success_rate": df_train[df_train["config_name"] == cfg]["success"].mean(),
+                "success_rate": df_train[df_train["config_name"] == _cfg]["success"].mean(),
             }
         )
         _rows.append(
             {
-                "config": cfg,
+                "config": _cfg,
                 "split": "Holdout (trial 2)",
-                "success_rate": df_holdout[df_holdout["config_name"] == cfg]["success"].mean(),
+                "success_rate": df_holdout[df_holdout["config_name"] == _cfg]["success"].mean(),
             }
         )
     split_df = pd.DataFrame(_rows)
@@ -182,28 +182,32 @@ def _(combinations, df, go, mo, np, pd):
         dtype=float,
     )
 
-    for cfg_a, cfg_b in combinations(configs, 2):
-        a_df = df[df["config_name"] == cfg_a][["repo_id", "trial_index", "success", "tests_passed"]]
-        b_df = df[df["config_name"] == cfg_b][["repo_id", "trial_index", "success", "tests_passed"]]
-        merged = a_df.merge(b_df, on=["repo_id", "trial_index"], suffixes=("_a", "_b"))
+    for _cfg_a, _cfg_b in combinations(configs, 2):
+        _a_df = df[df["config_name"] == _cfg_a][
+            ["repo_id", "trial_index", "success", "tests_passed"]
+        ]
+        _b_df = df[df["config_name"] == _cfg_b][
+            ["repo_id", "trial_index", "success", "tests_passed"]
+        ]
+        _merged = _a_df.merge(_b_df, on=["repo_id", "trial_index"], suffixes=("_a", "_b"))
         # Win = succeed when opponent fails, or both succeed but more tests passed
-        a_wins = (merged["success_a"] & ~merged["success_b"]) | (
-            merged["success_a"]
-            & merged["success_b"]
-            & (merged["tests_passed_a"].fillna(0) > merged["tests_passed_b"].fillna(0))
+        _a_wins = (_merged["success_a"] & ~_merged["success_b"]) | (
+            _merged["success_a"]
+            & _merged["success_b"]
+            & (_merged["tests_passed_a"].fillna(0) > _merged["tests_passed_b"].fillna(0))
         )
-        b_wins = (~merged["success_a"] & merged["success_b"]) | (
-            merged["success_a"]
-            & merged["success_b"]
-            & (merged["tests_passed_b"].fillna(0) > merged["tests_passed_a"].fillna(0))
+        _b_wins = (~_merged["success_a"] & _merged["success_b"]) | (
+            _merged["success_a"]
+            & _merged["success_b"]
+            & (_merged["tests_passed_b"].fillna(0) > _merged["tests_passed_a"].fillna(0))
         )
-        n = len(merged)
-        win_matrix.loc[cfg_a, cfg_b] = a_wins.sum() / n if n > 0 else 0.5
-        win_matrix.loc[cfg_b, cfg_a] = b_wins.sum() / n if n > 0 else 0.5
+        _n = len(_merged)
+        win_matrix.loc[_cfg_a, _cfg_b] = _a_wins.sum() / _n if _n > 0 else 0.5
+        win_matrix.loc[_cfg_b, _cfg_a] = _b_wins.sum() / _n if _n > 0 else 0.5
 
     # Fill diagonal with 0.5
-    for c in configs:
-        win_matrix.loc[c, c] = 0.5
+    for _c in configs:
+        win_matrix.loc[_c, _c] = 0.5
 
     fig_heatmap = go.Figure(
         data=go.Heatmap(
@@ -235,7 +239,7 @@ def _(combinations, df, go, mo, np, pd):
 def _(df, mo, pd, px, re):
     failed = df[~df["success"]].copy()
 
-    def _categorize_failure(row: pd.Series) -> str:
+    def _categorize_failure(row: "pd.Series") -> str:  # type: ignore[reportInvalidTypeForm]
         text = " ".join(
             [str(row.get("error_message", "") or ""), str(row.get("summary", "") or "")]
         ).lower()
@@ -286,11 +290,11 @@ def _(df, mo, pd, px, re):
 @app.cell
 def _(df, mo, pd, px, re):
     personality_df = df.copy()
-    summaries = personality_df["summary"].fillna("").str.lower()
+    _summaries = personality_df["summary"].fillna("").str.lower()
 
     # Laziness signals
     _lazy_pat = re.compile(r"\b(skip|mock|stub|placeholder|todo|hack|shortcut|dummy)\b")
-    personality_df["lazy_signals"] = summaries.apply(lambda s: len(_lazy_pat.findall(s)))
+    personality_df["lazy_signals"] = _summaries.apply(lambda s: len(_lazy_pat.findall(s)))
     personality_df["has_lazy"] = personality_df["lazy_signals"] > 0
 
     # Cheating signals
@@ -298,26 +302,26 @@ def _(df, mo, pd, px, re):
         r"(comment.?out|disable|remove.?test|mark.?skip|xfail|"
         r"skip.?test|delete.?test|pytest\.skip|@skip)"
     )
-    personality_df["cheat_signals"] = summaries.apply(lambda s: len(_cheat_pat.findall(s)))
+    personality_df["cheat_signals"] = _summaries.apply(lambda s: len(_cheat_pat.findall(s)))
     personality_df["has_cheat"] = personality_df["cheat_signals"] > 0
 
     # High effort signals
     personality_df["summary_len"] = personality_df["summary"].fillna("").str.len()
     _effort_pat = re.compile(r"\b(debug|iterate|investigat|fix|refactor|analyz|trace|diagnos)\w*")
-    personality_df["effort_signals"] = summaries.apply(lambda s: len(_effort_pat.findall(s)))
+    personality_df["effort_signals"] = _summaries.apply(lambda s: len(_effort_pat.findall(s)))
     personality_df["has_effort"] = personality_df["effort_signals"] > 0
 
     # Aggregate by config
     _pers_rows = []
-    for cfg in sorted(personality_df["config_name"].unique()):
-        cdf = personality_df[personality_df["config_name"] == cfg]
+    for _cfg in sorted(personality_df["config_name"].unique()):
+        _cdf = personality_df[personality_df["config_name"] == _cfg]
         _pers_rows.append(
             {
-                "config": cfg,
-                "lazy_rate": cdf["has_lazy"].mean(),
-                "cheat_rate": cdf["has_cheat"].mean(),
-                "effort_rate": cdf["has_effort"].mean(),
-                "median_summary_len": cdf["summary_len"].median(),
+                "config": _cfg,
+                "lazy_rate": _cdf["has_lazy"].mean(),
+                "cheat_rate": _cdf["has_cheat"].mean(),
+                "effort_rate": _cdf["has_effort"].mean(),
+                "median_summary_len": _cdf["summary_len"].median(),
             }
         )
     pers_summary = pd.DataFrame(_pers_rows)
@@ -427,15 +431,15 @@ def _(df, mo, px):
 # ---------------------------------------------------------------------------
 @app.cell
 def _(df, df_holdout, df_train, mo, np, pd):
-    def _success_rate(frame: pd.DataFrame, config: str) -> float:
+    def _success_rate(frame: "pd.DataFrame", config: str) -> float:  # type: ignore[reportInvalidTypeForm]
         subset = frame[frame["config_name"] == config]
         return subset["success"].mean() if len(subset) > 0 else np.nan
 
-    def _median_tests(frame: pd.DataFrame, config: str) -> float:
+    def _median_tests(frame: "pd.DataFrame", config: str) -> float:  # type: ignore[reportInvalidTypeForm]
         subset = frame[frame["config_name"] == config]
         return float(subset["tests_passed"].median()) if len(subset) > 0 else np.nan
 
-    def _cheat_rate(frame: pd.DataFrame, config: str) -> float:
+    def _cheat_rate(frame: "pd.DataFrame", config: str) -> float:  # type: ignore[reportInvalidTypeForm]
         import re as _re
 
         subset = frame[frame["config_name"] == config]
@@ -509,14 +513,14 @@ def _(df, df_holdout, df_train, mo, np, pd):
 @app.cell
 def _(df, mo, pd):
     # For each repo+trial, compute variance of success across configs
-    repo_var = (
+    _repo_var = (
         df.groupby(["repo_id", "trial_index"])["success"]
         .agg(["mean", "std", "sum", "count"])
         .reset_index()
     )
     # Repos where configs disagree most = highest std averaged across trials
     repo_disagree = (
-        repo_var.groupby("repo_id")["std"]
+        _repo_var.groupby("repo_id")["std"]
         .mean()
         .sort_values(ascending=False)
         .head(20)
@@ -526,21 +530,21 @@ def _(df, mo, pd):
 
     # Build detail table for top-disagreement repos
     top_repos = repo_disagree["repo_id"].tolist()
-    detail_rows = []
-    for repo in top_repos:
-        rdf = df[df["repo_id"] == repo]
-        for cfg in sorted(rdf["config_name"].unique()):
-            cdf = rdf[rdf["config_name"] == cfg]
-            detail_rows.append(
+    _detail_rows = []
+    for _repo in top_repos:
+        _rdf = df[df["repo_id"] == _repo]
+        for _cfg in sorted(_rdf["config_name"].unique()):
+            _cdf = _rdf[_rdf["config_name"] == _cfg]
+            _detail_rows.append(
                 {
-                    "repo_id": repo,
-                    "config": cfg,
-                    "success_rate": cdf["success"].mean(),
-                    "median_tests_passed": cdf["tests_passed"].median(),
-                    "trials": len(cdf),
+                    "repo_id": _repo,
+                    "config": _cfg,
+                    "success_rate": _cdf["success"].mean(),
+                    "median_tests_passed": _cdf["tests_passed"].median(),
+                    "trials": len(_cdf),
                 }
             )
-    detail_df = pd.DataFrame(detail_rows)
+    detail_df = pd.DataFrame(_detail_rows)
 
     mo.md(
         f"""
