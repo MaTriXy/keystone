@@ -64,6 +64,13 @@ def _(mo):
         "tests_discovered",
     )
 
+    # Failed runs that never reached verification have null test counts;
+    # treat them as 0 so they appear in plots rather than being silently dropped.
+    all_df = all_df.with_columns(
+        pl.col("tests_passed").fill_null(0).alias("tests_passed"),
+        pl.col("tests_discovered").fill_null(0).alias("tests_discovered"),
+    )
+
     # Compute repo_max_tests across ALL configs (deduplicated)
     repo_max = all_df.group_by("repo_id").agg(
         pl.col("tests_discovered").max().alias("repo_max_tests")
