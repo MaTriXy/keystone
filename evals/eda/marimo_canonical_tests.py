@@ -70,11 +70,11 @@ def _(mo):
         f"Extracted test names for **{len(repo_tests)}** repos "
         f"from **{len(raw_df)}** rows."
     )
-    return (mo, repo_tests)
+    return (repo_tests,)
 
 
 @app.cell
-def _(mo, repo_tests):
+def _(mo, repo_tests: dict[str, dict[str, set[str]]]):
     """Compute partition scores per repo."""
     import pandas as _pd
 
@@ -163,7 +163,7 @@ def _(mo, scores_df, scores_table):
 
 
 @app.cell
-def _(mo, repo_dropdown, repo_tests):
+def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
     """Build UpSet-style visualization for the selected repo."""
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -171,8 +171,9 @@ def _(mo, repo_dropdown, repo_tests):
     _selected_repo = repo_dropdown.value
     _config_map = repo_tests.get(_selected_repo, {})
 
+    _output = None
     if not _config_map:
-        mo.md(f"No test data for **{_selected_repo}**.")
+        _output = mo.md(f"No test data for **{_selected_repo}**.")
     else:
         # Sort configs by number of tests discovered (descending)
         _configs = sorted(_config_map.keys(), key=lambda c: len(_config_map[c]), reverse=True)
@@ -197,7 +198,7 @@ def _(mo, repo_dropdown, repo_tests):
         _top_patterns = _pattern_counts.most_common(30)
 
         if len(_top_patterns) == 0:
-            mo.md(f"No intersection patterns for **{_selected_repo}**.")
+            _output = mo.md(f"No intersection patterns for **{_selected_repo}**.")
         else:
             # Build the UpSet plot: bar chart on top, dot matrix below
             _bar_labels = []
@@ -308,20 +309,22 @@ def _(mo, repo_dropdown, repo_tests):
             _fig.update_xaxes(showticklabels=False, row=1, col=1)
             _fig.update_xaxes(showticklabels=False, row=2, col=1)
 
-            mo.ui.plotly(_fig)
+            _output = mo.ui.plotly(_fig)
+    _output
     return
 
 
 @app.cell
-def _(mo, repo_dropdown, repo_tests):
+def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
     """Test name detail table for the selected repo."""
     import pandas as _pd
 
     _selected_repo = repo_dropdown.value
     _config_map = repo_tests.get(_selected_repo, {})
 
+    _output = None
     if not _config_map:
-        mo.md("No test data.")
+        _output = mo.md("No test data.")
     else:
         # Build test_name -> set of configs
         _test_configs: dict[str, set[str]] = {}
@@ -345,16 +348,19 @@ def _(mo, repo_dropdown, repo_tests):
             "n_configs", ascending=False
         )
 
-        mo.md(
-            f"## Test Names — {_selected_repo}\n\n"
-            f"**{len(_detail_df)}** unique tests across **{_n_configs}** configs"
-        )
-        mo.ui.table(_detail_df, page_size=20)
+        _output = mo.vstack([
+            mo.md(
+                f"## Test Names — {_selected_repo}\n\n"
+                f"**{len(_detail_df)}** unique tests across **{_n_configs}** configs"
+            ),
+            mo.ui.table(_detail_df, page_size=20),
+        ])
+    _output
     return
 
 
 @app.cell
-def _(mo, repo_dropdown, repo_tests):
+def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
     """Canonical test candidates with configurable threshold."""
     _selected_repo = repo_dropdown.value
     _config_map = repo_tests.get(_selected_repo, {})
@@ -370,14 +376,20 @@ def _(mo, repo_dropdown, repo_tests):
 
 
 @app.cell
-def _(mo, repo_dropdown, repo_tests, threshold_slider):
+def _(
+    mo,
+    repo_dropdown,
+    repo_tests: dict[str, dict[str, set[str]]],
+    threshold_slider,
+):
     """Show canonical tests based on threshold."""
     _selected_repo = repo_dropdown.value
     _config_map = repo_tests.get(_selected_repo, {})
     _threshold = threshold_slider.value
 
+    _output = None
     if not _config_map:
-        mo.md("No test data.")
+        _output = mo.md("No test data.")
     else:
         _test_configs: dict[str, set[str]] = {}
         for _cfg, _names in _config_map.items():
@@ -391,12 +403,13 @@ def _(mo, repo_dropdown, repo_tests, threshold_slider):
         }
         _total = len(_test_configs)
 
-        mo.md(
+        _output = mo.md(
             f"## Canonical Tests — {_selected_repo}\n\n"
             f"Threshold: ≥ **{_threshold}** configs\n\n"
             f"**{len(_canonical)}** / {_total} tests "
             f"({100 * len(_canonical) / _total:.1f}%) are canonical"
         )
+    _output
     return
 
 
