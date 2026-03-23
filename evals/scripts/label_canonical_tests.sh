@@ -138,6 +138,23 @@ Each pattern object has:
 - "description": Brief human-readable description of what this pattern covers
 - "approximate_match_count": Roughly how many test names this pattern should match
 
+## Validation tool
+
+After creating or updating your canonical_test_names.json, validate it by running:
+
+```bash
+uv run python evals/scripts/validate_canonical_tests.py ${RESULTS_DIR} ${OUTPUT_DIR}/canonical_test_names.json
+```
+
+This will show you, for every trial:
+- Which tests each regex matched (ideally 1 per pattern, more for group patterns)
+- Which patterns matched NOTHING in that trial (the agent missed those tests — "lost points")
+- Which tests matched NO pattern (unaccounted tests — also "lost points")
+
+Use `-v` for verbose per-pattern details, or `--summary-only` for just the table.
+
+**Iterate on your patterns until coverage is high.** Unmatched tests usually mean you need more patterns. Unmatched patterns in a trial are expected (not every agent finds every test), but if a pattern matches nothing across ALL trials, it may be wrong.
+
 ## Important guidelines
 
 - **Ask me questions** if anything is ambiguous — e.g., "Should I include doc tests for this Rust project?" or "Config X found 344 tests but they look synthetic — should I use Config Y's 225 instead?"
