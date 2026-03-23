@@ -150,4 +150,4 @@ PROMPT="${PROMPT//\$\{RESULTS_DIR\}/$RESULTS_DIR}"
 PROMPT="${PROMPT//\$\{OUTPUT_DIR\}/$OUTPUT_DIR}"
 
 exec claude --allowedTools "Bash,Read,Write,Edit" \
-    -p "$PROMPT"
+    "$PROMPT"
