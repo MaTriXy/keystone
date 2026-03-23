@@ -41,8 +41,9 @@ Each row is one trial (one agent run on one repo). Columns:
 | `output_tokens` | int \| null | LLM output tokens consumed |
 | `image_build_seconds` | float \| null | Docker image build time |
 | `test_execution_seconds` | float \| null | Test suite execution time |
-| `tests_passed` | int \| null | Number of tests passed |
-| `tests_failed` | int \| null | Number of tests failed |
+| `tests_passed` | int \| null | Number of unique tests passed (deduplicated by test name; logical OR across duplicate runs) |
+| `tests_failed` | int \| null | Number of unique tests failed (deduplicated; tests where no execution passed) |
+| `tests_discovered` | int \| null | Total unique test names discovered (= tests_passed + tests_failed) |
 | `summary` | str \| null | `agent.summary.message` — the agent's final summary of what it did |
 | `status_messages` | str (JSON) | JSON array of `{"timestamp": "...", "message": "..."}` objects — the agent's step-by-step progress |
 

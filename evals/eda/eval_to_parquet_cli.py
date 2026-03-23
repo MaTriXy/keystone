@@ -42,6 +42,42 @@ app = typer.Typer(help="Package eval_result.json files into Parquet.")
 console = Console()
 
 
+def _deduped_test_names(ver: object | None) -> dict[str, bool] | None:
+    """Build {test_name: ever_passed} from verification test results, deduplicating by name.
+
+    Some agents run the test suite more than once, causing every test name to
+    appear multiple times.  We collapse duplicates and use logical-OR for the
+    passed flag so that a test counts as passed if *any* execution passed.
+    """
+    if ver is None:
+        return None
+    tr = ver.test_results  # type: ignore[union-attr]
+    if not tr:
+        return None
+    seen: dict[str, bool] = {}
+    for t in tr:
+        seen[t.name] = seen.get(t.name, False) or t.passed
+    return seen
+
+
+def _deduped_discovered(ver: object | None) -> int | None:
+    """Count of unique test names (passed + failed)."""
+    seen = _deduped_test_names(ver)
+    return len(seen) if seen is not None else None
+
+
+def _deduped_passed(ver: object | None) -> int | None:
+    """Count of unique test names where any execution passed."""
+    seen = _deduped_test_names(ver)
+    return sum(1 for v in seen.values() if v) if seen is not None else None
+
+
+def _deduped_failed(ver: object | None) -> int | None:
+    """Count of unique test names where no execution passed."""
+    seen = _deduped_test_names(ver)
+    return sum(1 for v in seen.values() if not v) if seen is not None else None
+
+
 def _build_record(r: KeystoneRepoResult, source_path: str) -> dict:
     """Flatten a KeystoneRepoResult into a dict suitable for a DataFrame row."""
     br = r.bootstrap_result
@@ -71,8 +107,9 @@ def _build_record(r: KeystoneRepoResult, source_path: str) -> dict:
         "output_tokens": cost.token_spending.output if cost else None,
         "image_build_seconds": ver.image_build_seconds if ver else None,
         "test_execution_seconds": ver.test_execution_seconds if ver else None,
-        "tests_passed": ver.tests_passed if ver else None,
-        "tests_failed": ver.tests_failed if ver else None,
+        "tests_passed": _deduped_passed(ver),
+        "tests_failed": _deduped_failed(ver),
+        "tests_discovered": _deduped_discovered(ver),
         "summary": agent.summary.message if agent and agent.summary else None,
         "status_messages": json.dumps(status_messages),
     }

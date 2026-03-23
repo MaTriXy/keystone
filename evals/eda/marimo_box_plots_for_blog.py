@@ -35,19 +35,11 @@ def _():
 
 @app.cell
 def _(mo):
-    import sys
     from pathlib import Path
 
     import pandas as pd
     import plotly.express as px
     import polars as pl
-
-    # Ensure the evals package root is importable
-    _evals_root = str(Path(__file__).resolve().parents[1])
-    if _evals_root not in sys.path:
-        sys.path.insert(0, _evals_root)
-
-    from eval_schema import KeystoneRepoResult
 
     PARQUET_PATH = Path.home() / "keystone_eval" / "blog.parquet"
 
@@ -59,7 +51,7 @@ def _(mo):
         "claude-haiku",
     ]
 
-    # Load all data — include raw_json for deduplicated test counting
+    # Parquet already has deduplicated tests_passed, tests_failed, tests_discovered
     all_df = pl.read_parquet(PARQUET_PATH).select(
         "config_name",
         "repo_id",
@@ -68,34 +60,8 @@ def _(mo):
         "agent_walltime_seconds",
         "cost_usd",
         "agent_timed_out",
-        "raw_json",
-    )
-
-    # Deduplicate test counts from raw_json: unique test names only,
-    # "passed" = any occurrence of that test name passed (logical OR).
-    # This fixes double-counting when an agent runs the test suite twice.
-    deduped_passed = []
-    deduped_discovered = []
-    for row in all_df.iter_rows(named=True):
-        try:
-            r = KeystoneRepoResult.model_validate_json(row["raw_json"])
-            tr = r.bootstrap_result.verification.test_results
-        except Exception:
-            tr = None
-        if not tr:
-            deduped_discovered.append(None)
-            deduped_passed.append(None)
-            continue
-        # Build a dict: test_name -> ever passed?
-        seen: dict[str, bool] = {}
-        for t in tr:
-            seen[t.name] = seen.get(t.name, False) or t.passed
-        deduped_discovered.append(len(seen))
-        deduped_passed.append(sum(1 for v in seen.values() if v))
-
-    all_df = all_df.drop("raw_json").with_columns(
-        pl.Series("tests_discovered", deduped_discovered, dtype=pl.Int64),
-        pl.Series("tests_passed", deduped_passed, dtype=pl.Int64),
+        "tests_passed",
+        "tests_discovered",
     )
 
     # Compute repo_max_tests across ALL configs (deduplicated)
