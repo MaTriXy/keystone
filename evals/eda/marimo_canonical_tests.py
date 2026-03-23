@@ -231,6 +231,8 @@ def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
                 go.Bar(
                     x=list(range(_n_patterns)),
                     y=_bar_values,
+                    text=_bar_values,
+                    textposition="outside",
                     marker_color="steelblue",
                     hovertext=[
                         f"{_count} tests<br>Configs: {', '.join(sorted(_pat))}"
