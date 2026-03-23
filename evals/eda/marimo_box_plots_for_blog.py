@@ -65,13 +65,19 @@ def _(mo):
     )
 
     # Collapse multiple trials per (repo, config) into a single row:
-    # pick the first successful trial; if none succeeded, pick trial 0.
-    all_df = all_df.sort("trial_index").with_columns(
+    # 1. Pick the first successful trial (lowest trial_index with success=True).
+    # 2. If none succeeded, prefer a trial that at least has cost/walltime data.
+    # 3. Otherwise fall back to trial 0.
+    all_df = all_df.with_columns(
         pl.col("success").cast(pl.Int8).alias("_success_int"),
+        pl.col("cost_usd").is_not_null().cast(pl.Int8).alias("_has_cost"),
     )
-    all_df = all_df.sort(["config_name", "repo_id", "_success_int", "trial_index"], descending=[False, False, True, False])
+    all_df = all_df.sort(
+        ["config_name", "repo_id", "_success_int", "_has_cost", "trial_index"],
+        descending=[False, False, True, True, False],
+    )
     all_df = all_df.group_by(["config_name", "repo_id"], maintain_order=True).first()
-    all_df = all_df.drop("_success_int")
+    all_df = all_df.drop("_success_int", "_has_cost")
 
     # Failed runs that never reached verification have null test counts;
     # treat them as 0 so they appear in plots rather than being silently dropped.
