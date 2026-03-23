@@ -98,8 +98,40 @@ def _(mo):
     # Enforce config ordering
     df["config_name"] = pd.Categorical(df["config_name"], categories=CONFIGS, ordered=True)
 
+    def make_box_plot(
+        data: pd.DataFrame,
+        y: str,
+        title: str,
+        y_label: str,
+        configs: list[str],
+        y_tickformat: str | None = None,
+    ) -> "plotly.graph_objects.Figure":  # noqa: F821
+        """Create a box plot with per-config (N=...) labels on the x-axis."""
+        # Count non-null y values per config for the N= labels
+        counts = data.dropna(subset=[y]).groupby("config_name", observed=True).size()
+        label_map = {c: f"{c}\n(N={int(counts.get(c, 0))})" for c in configs}
+        plot_df = data.copy()
+        plot_df["config_label"] = plot_df["config_name"].map(label_map)
+        ordered_labels = [label_map[c] for c in configs]
+
+        fig = px.box(
+            plot_df,
+            x="config_label",
+            y=y,
+            color="config_label",
+            points="all",
+            hover_data=["repo_id", "trial_index", "tests_passed"],
+            category_orders={"config_label": ordered_labels},
+            title=title,
+            labels={"config_label": "Config", y: y_label},
+        )
+        fig.update_layout(showlegend=False)
+        if y_tickformat:
+            fig.update_layout(yaxis_tickformat=y_tickformat)
+        return fig
+
     mo.md(f"Loaded **{len(df)}** rows for {len(CONFIGS)} configs from `{PARQUET_PATH.name}`")
-    return CONFIGS, Path, df, px
+    return CONFIGS, Path, df, make_box_plot, px
 
 
 @app.cell
@@ -111,22 +143,14 @@ def _(mo):
 
 
 @app.cell
-def _(CONFIGS, Path, df, mo, px):
-    fig_time = px.box(
+def _(CONFIGS, Path, df, make_box_plot, mo):
+    fig_time = make_box_plot(
         df,
-        x="config_name",
         y="agent_walltime_seconds",
-        color="config_name",
-        points="all",
-        hover_data=["repo_id", "trial_index", "tests_passed"],
-        category_orders={"config_name": CONFIGS},
         title="Agent Wall-clock Time by Config",
-        labels={
-            "config_name": "Config",
-            "agent_walltime_seconds": "Wall-clock Time (s)",
-        },
+        y_label="Wall-clock Time (s)",
+        configs=CONFIGS,
     )
-    fig_time.update_layout(showlegend=False)
 
     _out = Path(__file__).parent / "output" / "box_walltime.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
@@ -150,22 +174,14 @@ def _(mo):
 
 
 @app.cell
-def _(CONFIGS, Path, df, mo, px):
-    fig_cost = px.box(
+def _(CONFIGS, Path, df, make_box_plot, mo):
+    fig_cost = make_box_plot(
         df,
-        x="config_name",
         y="cost_usd",
-        color="config_name",
-        points="all",
-        hover_data=["repo_id", "trial_index", "tests_passed"],
-        category_orders={"config_name": CONFIGS},
         title="Inference Cost by Config",
-        labels={
-            "config_name": "Config",
-            "cost_usd": "Cost (USD)",
-        },
+        y_label="Cost (USD)",
+        configs=CONFIGS,
     )
-    fig_cost.update_layout(showlegend=False)
 
     _out = Path(__file__).parent / "output" / "box_cost.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
@@ -189,22 +205,15 @@ def _(mo):
 
 
 @app.cell
-def _(CONFIGS, Path, df, mo, px):
-    fig_tests = px.box(
+def _(CONFIGS, Path, df, make_box_plot, mo):
+    fig_tests = make_box_plot(
         df,
-        x="config_name",
         y="norm_tests_passed",
-        color="config_name",
-        points="all",
-        hover_data=["repo_id", "trial_index", "tests_passed"],
-        category_orders={"config_name": CONFIGS},
         title="Tests Passed (fraction of max discovered per repo)",
-        labels={
-            "config_name": "Config",
-            "norm_tests_passed": "Fraction of Max Tests Passed",
-        },
+        y_label="Fraction of Max Tests Passed",
+        configs=CONFIGS,
+        y_tickformat=".0%",
     )
-    fig_tests.update_layout(showlegend=False, yaxis_tickformat=".0%")
 
     _out = Path(__file__).parent / "output" / "box_norm_tests.html"
     _out.parent.mkdir(parents=True, exist_ok=True)
