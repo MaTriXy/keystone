@@ -64,6 +64,15 @@ def _(mo):
         "tests_discovered",
     )
 
+    # Collapse multiple trials per (repo, config) into a single row:
+    # pick the first successful trial; if none succeeded, pick trial 0.
+    all_df = all_df.sort("trial_index").with_columns(
+        pl.col("success").cast(pl.Int8).alias("_success_int"),
+    )
+    all_df = all_df.sort(["config_name", "repo_id", "_success_int", "trial_index"], descending=[False, False, True, False])
+    all_df = all_df.group_by(["config_name", "repo_id"], maintain_order=True).first()
+    all_df = all_df.drop("_success_int")
+
     # Failed runs that never reached verification have null test counts;
     # treat them as 0 so they appear in plots rather than being silently dropped.
     all_df = all_df.with_columns(
