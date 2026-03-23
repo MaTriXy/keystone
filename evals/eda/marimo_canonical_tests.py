@@ -221,7 +221,7 @@ def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
             _fig = make_subplots(
                 rows=2,
                 cols=1,
-                row_heights=[0.6, 0.4],
+                row_heights=[0.25, 0.75],
                 shared_xaxes=True,
                 vertical_spacing=0.02,
             )
