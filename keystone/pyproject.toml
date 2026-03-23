@@ -1,9 +1,14 @@
 [project]
-name = "keystone"
+name = "kystn"
 version = "0.1.0"
 description = "Automatically generates a working .devcontainer/ setup for any project using an AI agent"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "anthropic>=0.40.0",
     "junitparser>=3.0.0",
