@@ -1,0 +1,60 @@
+{
+  "description": "Four-model comparison, no guardrail, no evaluator. 2026-03-04.",
+  "repo_list_path": "evals/examples/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-04_cat_v1/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "claude-opus",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "claude",
+          "guardrail": false, "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      }
+    },
+    {
+      "name": "claude-haiku",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "claude",
+          "guardrail": false, "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "claude-haiku-4-5-20251001",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      }
+    },
+    {
+      "name": "codex-gpt-5.2",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "codex",
+          "guardrail": false, "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "gpt-5.2-codex",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      }
+    },
+    {
+      "name": "codex-mini-gpt-5.1",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "codex",
+          "guardrail": false, "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "gpt-5.1-codex-mini",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      }
+    }
+  ]
+}

@@ -1,51 +1,51 @@
 [project]
-name = "keystone"
+name = "build-config-aphq"
 version = "0.1.0"
-description = "Automatically generates a working .devcontainer/ setup for any project using an AI agent"
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "junitparser>=3.0.0",
-    "modal>=1.3.1",
-    "pandas>=2.0.0",
-    "pydantic>=2.0.0",
-    "pytest>=9.0.2",
-    "rich>=14.0.0",
-    "sqlalchemy>=2.0.0",
-    "syrupy>=4.0.0",
-    "typer>=0.21.1",
+    "ipykernel>=7.1.0",
+    "nbformat>=4.2.0",
+    "plotly>=6.5.2",
+    "keystone",
+    "evals",
+    "modal_registry",
+    "polars>=1.39.0",
+    "marimo>=0.20.4",
+    "pandas>=3.0.0",
+    "pyarrow>=23.0.1",
 ]
 
-[project.scripts]
-keystone = "keystone.keystone_cli:main"
+[tool.uv.workspace]
+members = ["keystone", "evals", "modal_registry"]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv.sources]
+keystone = { workspace = true }
+evals = { workspace = true }
+modal_registry = { workspace = true }
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/keystone"]
 
-[tool.pytest.ini_options]
-markers = [
-    "manual: marks tests as manual (deselect with '-k not manual')",
-]
-testpaths = ["tests"]
-log_cli = true
-log_cli_level = "INFO"
-addopts = "-s"
-
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff>=0.9.0",
     "pyright>=1.1.390",
     "pre-commit>=4.0.0",
+    "modal>=1.3.1",
     "pytest>=8.0.0",
+    "pytest-xdist>=3.0",
+    "playwright>=1.58.0",
+    "pytest-playwright>=0.7.2",
 ]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+exclude = ["github_datasets", "samples", "prototypes"]
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint.per-file-ignores]
+# marimo notebooks use inline imports, bare expressions for display, and unused args for reactive deps
+"evals/eda/test_discovery_analysis.py" = ["PLC0415", "B018", "ARG001", "I001"]
+"evals/eda/marimo_cdfs_for_blog.py" = ["PLC0415", "B018", "ARG001", "I001"]
 
 [tool.ruff.lint]
 select = [
@@ -70,4 +70,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["keystone"]
+known-first-party = ["keystone", "evals"]
+
+# Pyright config in pyrightconfig.json (needs explicit include to avoid hanging on symlinks)
+
+[tool.marimo.runtime]
+auto_instantiate = true
+on_cell_change = "autorun"
+auto_reload = "autorun"
+

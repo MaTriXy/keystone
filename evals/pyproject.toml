@@ -1,0 +1,54 @@
+[project]
+name = "evals"
+version = "0.1.0"
+description = "Eval harness for keystone"
+requires-python = ">=3.12"
+dependencies = [
+    "keystone",
+    "pydantic>=2.0",
+    "prefect>=3.0",
+    "typer>=0.9",
+    "rich>=13.0",
+    "json5>=0.9",
+    "boto3>=1.28",
+    "fsspec>=2024.0",
+    "s3fs>=2024.0",
+    "pytest>=8.0",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "ipywidgets>=8.1.8",
+    "anywidget>=0.9.21",
+    "ipyaggrid>=0.5.4",
+]
+
+[tool.uv.sources]
+keystone = { workspace = true }
+
+[project.optional-dependencies]
+dask = ["prefect-dask>=0.3"]
+eda = ["plotly>=5.0", "ipywidgets>=8.0", "numpy>=1.26"]
+
+[project.scripts]
+eval-harness = "eval_cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+sources = { "." = "" }
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+markers = [
+    "modal: marks tests that run on Modal (deterministic)",
+    "local_docker: marks tests that expect a local Docker daemon",
+    "agentic: marks tests that run a real coding agent (non-deterministic)",
+]
+
+[tool.marimo.runtime]
+auto_instantiate = true
+on_cell_change = "autorun"
+auto_reload = "autorun"
+

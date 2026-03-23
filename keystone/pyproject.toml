@@ -1,0 +1,84 @@
+[project]
+name = "keystone"
+version = "0.1.0"
+description = "Automatically generates a working .devcontainer/ setup for any project using an AI agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40.0",
+    "junitparser>=3.0.0",
+    "modal>=1.3.1",
+    "openai>=1.0.0",
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+    "pytest>=9.0.2",
+    "rich>=14.0.0",
+    "sqlalchemy>=2.0.0",
+    "pytest-xdist>=3.0",
+    "syrupy>=4.0.0",
+    "typer>=0.21.1",
+]
+
+[project.scripts]
+keystone = "keystone.keystone_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keystone"]
+
+[tool.pytest.ini_options]
+markers = [
+    "manual: marks tests as manual (deselect with '-k not manual')",
+    "modal: marks tests that run on Modal (deterministic)",
+    "local_docker: marks tests that expect a local Docker daemon",
+    "agentic: marks tests that run a real coding agent (non-deterministic)",
+]
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO"
+addopts = "-s"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "PTH",    # flake8-use-pathlib
+    "PLC",    # pylint conventions
+    "RUF",    # ruff-specific rules
+    "TID",    # flake8-tidy-imports (banned-api)
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (standard typer pattern)
+    "G004",   # f-string in logging (cleaner than % formatting)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["keystone"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses" = {msg = "Use pydantic.BaseModel instead of @dataclass."}
+"typing.Literal" = {msg = "Use an Enum instead of Literal for fixed sets of values."}

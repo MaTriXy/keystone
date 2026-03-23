@@ -1,0 +1,73 @@
+# Agent Instructions
+
+This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+
+## Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --status in_progress  # Claim work
+bd close <id>         # Complete work
+bd sync               # Sync with git
+```
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull
+   bd sync
+   git push origin HEAD:<feature-branch-name>  # Push to a feature branch, NOT main
+   git status  # MUST show "up to date with origin"
+   ```
+   **Note:** Always push to a feature branch (e.g., `git push origin HEAD:my-feature`).
+   Never push directly to main — let the user review and merge.
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- **NEVER push to main without explicit user permission** - Always push to a feature branch and let the user review/merge
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+- **Always use merge, never rebase** - Preserve commit history with merge commits
+- **Never amend or force-push commits already pushed** - Add new fix commits instead
+
+## Code Style
+
+- **No inline imports** - Put all imports at the top of the file, not inside functions
+- **Always use type annotations** - Add Python type annotations to all function parameters and return values
+- **Use uv for running Python** - Run tests with `uv run pytest`, not `python -m pytest`
+
+## Linting & Type Checking
+
+This project uses **ruff** (linter/formatter) and **pyright** (type checker). Pre-commit hooks run these automatically.
+
+```bash
+uv run ruff check .           # Lint
+uv run ruff check . --fix     # Auto-fix lint issues
+uv run ruff format .          # Format code
+uv run pyright                # Type check
+```
+
+**Fix all lint/type errors in files you touch, even pre-existing ones.** Don't leave warnings behind just because you didn't introduce them — if you edited the file, clean it up. (Exception: marimo notebooks have per-file ignores in `pyproject.toml` for cell-based import patterns; those are intentional.)
+
+To install pre-commit hooks after cloning:
+```bash
+uv sync
+uv run pre-commit install
+```
+
+## Skills
+
+- **eval-parquet** (`.agents/skills/eval-parquet/SKILL.md`) — Schema reference and example queries for the eval results Parquet files produced by `evals/eda/eval_to_parquet_cli.py`. Use when analyzing or querying Keystone eval results.
