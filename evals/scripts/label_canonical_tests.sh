@@ -153,7 +153,7 @@ This will show you, for every trial:
 - Which patterns matched NOTHING in that trial (the agent missed those tests — "lost points")
 - Which tests matched NO pattern (unaccounted tests — also "lost points")
 
-Use `-v` for verbose per-pattern details, or `--summary-only` for just the table.
+Use `--summary-only` for just the table.
 
 **Iterate on your patterns until coverage is high.** Unmatched tests usually mean you need more patterns. Unmatched patterns in a trial are expected (not every agent finds every test), but if a pattern matches nothing across ALL trials, it may be wrong.
 

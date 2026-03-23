@@ -52,8 +52,6 @@ def _find_trials(repo_dir: Path) -> list[tuple[str, Path]]:
 def validate_trial(
     tests: list[str],
     patterns: list[dict[str, str | int]],
-    *,
-    verbose: bool = False,
 ) -> tuple[int, int, int, list[str], list[str]]:
     """Validate patterns against a trial's test names.
 
@@ -78,19 +76,6 @@ def validate_trial(
             if rx.search(test_name):
                 matched_tests.add(test_idx)
                 pattern_matches[pat_idx].append(test_name)
-
-    # Report per-pattern matches if verbose
-    if verbose:
-        for pat_idx, (pat, _rx) in enumerate(compiled):
-            matches = pattern_matches[pat_idx]
-            regex_str = str(pat.get("regex", ""))
-            desc = str(pat.get("description", ""))
-            if len(matches) == 0:
-                print(f"  ❌ UNMATCHED PATTERN: {regex_str}  ({desc})")
-            elif len(matches) <= 3:
-                print(f"  ✓ {regex_str}  →  {matches}")
-            else:
-                print(f"  ✓ {regex_str}  →  {len(matches)} matches")
 
     unmatched_pattern_regexes = [
         str(compiled[i][0].get("regex", ""))
@@ -123,12 +108,6 @@ def main() -> None:
         help="Path to canonical_test_names.json",
     )
     parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Show per-pattern match details for each trial",
-    )
-    parser.add_argument(
         "--summary-only",
         action="store_true",
         help="Only show the summary table, not per-trial details",
@@ -159,9 +138,7 @@ def main() -> None:
             summaries.append((label, 0, 0, 0, len(patterns)))
             continue
 
-        total, matched, unmatched_t, unmatched_p, unmatched_names = validate_trial(
-            tests, patterns, verbose=args.verbose and not args.summary_only
-        )
+        total, matched, unmatched_t, unmatched_p, unmatched_names = validate_trial(tests, patterns)
 
         if not args.summary_only:
             print(f"=== {label} ===")
@@ -176,7 +153,7 @@ def main() -> None:
                     print(f"    {name}")
                 if len(unmatched_names) > 10:
                     print(f"    ... and {len(unmatched_names) - 10} more")
-            if unmatched_p and not args.verbose:
+            if unmatched_p:
                 shown_p = unmatched_p[:10]
                 print(f"  Unmatched patterns (first {len(shown_p)}):")
                 for regex in shown_p:
