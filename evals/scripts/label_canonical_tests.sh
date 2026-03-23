@@ -99,6 +99,8 @@ Watch for these red flags — do NOT include these as canonical tests:
 - The "canonical" set should represent tests that ANY competent agent setup should be able to pass — the tests that exist in the repo and work in a standard environment
 
 ### Step 5: Write regex patterns
+**Only write patterns for tests with good, reasonable, canonical names.** If a test name looks machine-generated, mangled, or nonsensical, skip it — even if it appears in the results. We want patterns that match real, human-authored test names that reflect actual test intent.
+
 For each canonical test (or group of related tests), write a regex that matches it across naming variations. Common variations to handle:
 - Trailing "()" on test names (some runners add it, some don't)
 - Class/module prefix differences (e.g., "MyClass::test_foo" vs "test_foo")
