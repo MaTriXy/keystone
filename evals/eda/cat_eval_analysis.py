@@ -621,8 +621,8 @@ def _(df, mo, np, px):
     )
 
     mo.md("## Tests Passed: opus-4.6 vs gpt-5.4 (log-log scatter, trial 0)")
-    scatter_log = mo.ui.plotly(fig_scatter_log)
-    return (scatter_log, fig_scatter_log)
+    mo.ui.plotly(fig_scatter_log)
+    return (fig_scatter_log,)
 
 
 if __name__ == "__main__":
