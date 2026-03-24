@@ -1,3 +1,32 @@
 // {"id": "tauri-template", "rank": 34, "repo": "https://github.com/tauri-apps/tauri-template", "language": "rust+typescript", "build_system": "cargo + npm", "tests": "cargo test + jest", "difficulty": "medium-hard", "notes": "Tauri template app; unit tests in Rust and JS, headless CI-friendly, GUI not required."}
 // {"id": "Neutrino", "rank": 35, "repo": "https://github.com/Neutrino-Dev/Neutrino", "language": "rust+js", "build_system": "cargo + npm", "tests": "cargo test + jest", "difficulty": "hard", "notes": "Open-source Tauri desktop app; unit + integration tests included; can run headless for CI."}
 {"id": "flask", "rank": 2, "repo": "https://github.com/pallets/flask", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python web framework; tests run quickly and reliably in Docker."}
+// can't recursive clone:
+{"repo": "https://github.com/albertalef/rubyshell", "language": "Ruby", "stars": 111, "size_mb": 1.6, "recent_commits_90d": 55, "test_files_total": 14, "test_files_by_name": 13, "files_in_test_dirs": 14, "notes": "Rubyist way to create Shell Scripts!!", "from_examples": false, "rank": 166, "id": "rubyshell", "commit_hash": "13bd40c9c5eb19a897d8dd2260ce6dfdb6847b74"}
+// ➜ git clone --recurse-submodules https://github.com/albertalef/rubyshell
+// Cloning into 'rubyshell'...
+// remote: Enumerating objects: 868, done.
+// remote: Counting objects: 100% (275/275), done.
+// remote: Compressing objects: 100% (117/117), done.
+// remote: Total 868 (delta 200), reused 173 (delta 158), pack-reused 593 (from 2)
+// Receiving objects: 100% (868/868), 1.62 MiB | 4.29 MiB/s, done.
+// Resolving deltas: 100% (433/433), done.
+// Submodule 'wiki' (git@github.com:albertalef/rubyshell.wiki.git) registered for path 'wiki'
+// Cloning into '/Users/thad/z/rubyshell/wiki'...
+// no such identity: /Users/thad/.ssh/id_ed25519: No such file or directory
+// git@github.com: Permission denied (publickey).
+// fatal: Could not read from remote repository.
+
+// Please make sure you have the correct access rights
+// and the repository exists.
+// fatal: clone of 'git@github.com:albertalef/rubyshell.wiki.git' into submodule path '/Users/thad/z/rubyshell/wiki' failed
+// Failed to clone 'wiki'. Retry scheduled
+// Cloning into '/Users/thad/z/rubyshell/wiki'...
+// no such identity: /Users/thad/.ssh/id_ed25519: No such file or directory
+// git@github.com: Permission denied (publickey).
+// fatal: Could not read from remote repository.
+
+// Please make sure you have the correct access rights
+// and the repository exists.
+// fatal: clone of 'git@github.com:albertalef/rubyshell.wiki.git' into submodule path '/Users/thad/z/rubyshell/wiki' failed
+// Failed to clone 'wiki' a second time, aborting
