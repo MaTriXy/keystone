@@ -57,7 +57,7 @@ Please don't forget to emit the summary before ending your turn.
 """
 
 LONG_FORM_AGENT_PROMPT_TEMPLATE = f"""
-We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
+We need to build an appropriate dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its tests runs successfully.
 
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
@@ -130,8 +130,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
 ## Tips and Notes
 
-* Run `./keystone_budget.sh` at the start to see your remaining time and budget.
-  Re-run it periodically to avoid running out of time or budget mid-task.
+* Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
 
 * Start by exploring the repository structure. Use commands like:
   - `ls -a` to list all files and directories in the current directory.
@@ -376,7 +375,7 @@ def _build_inline_prompt(config: AgentConfig) -> str:
 AGENTS_MD_CONTENTS = f"""\
 # Bootstrap Devcontainer - Agent Instructions
 
-You are setting up a reproducible dev container so this project's test suite passes.
+You are setting up a reproducible dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its test suite runs successfully.
 
 ## What you must create
 
@@ -418,7 +417,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 
 ## Workflow
 
-0. Run `./keystone_budget.sh` to check your time and budget limits.
+0. Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
 1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
 2. Identify language, test framework, and dependencies.
 3. Create the three files above.
@@ -446,7 +445,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 - **Coverage**: if it's enabled by default, disable it (`--no-cov`, etc.) — it's slow and not needed here.
 - **`docker run`** must use `--network=host` in this environment.
 - Only changes inside `.devcontainer/` are preserved.
-- **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and budget.
+- **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
 
 {STATUS_UPDATES_AND_SUMMARY_SECTION}
 
