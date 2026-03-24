@@ -108,3 +108,20 @@ class TestJUnitXMLParser:
         fixture = FIXTURES_DIR / "empty.xml"
         with pytest.raises(ParseError):
             parse_junit_xml(fixture)
+
+    def test_deduplicates_tests_across_runs(self) -> None:
+        """Duplicate test names are de-duped; a test that passes once counts as passed."""
+        fixture = FIXTURES_DIR / "duplicate_tests.xml"
+        results = parse_junit_xml(fixture)
+        names = [r.name for r in results]
+        # 3 unique tests, not 6
+        assert len(results) == 3
+        assert len(names) == len(set(names))
+        # test_add passed both times -> passed
+        # test_sub failed then passed -> passed (upgrade)
+        # test_mul passed then failed -> still passed (no downgrade)
+        by_name = {r.name: r for r in results}
+        assert by_name["tests.test_math::test_add"].passed
+        assert by_name["tests.test_math::test_sub"].passed
+        assert by_name["tests.test_math::test_mul"].passed
+

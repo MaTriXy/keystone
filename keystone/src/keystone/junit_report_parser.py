@@ -22,20 +22,27 @@ def parse_junit_xml(report_path: Path) -> list[TestResult]:
         return []
 
     xml = JUnitXml.fromfile(str(report_path))
-    results = []
+    # Track best result per unique test name: if a test passes at least once,
+    # count it as passed (agents sometimes run the suite multiple times).
+    seen: dict[str, TestResult] = {}
 
     def process_case(case: TestCase) -> None:
         classname = case.classname or ""
         name = case.name or ""
         full_name = f"{classname}::{name}" if classname else name
 
-        results.append(
-            TestResult(
-                name=full_name,
-                passed=case.is_passed,
-                skipped=case.is_skipped,
-            )
+        result = TestResult(
+            name=full_name,
+            passed=case.is_passed,
+            skipped=case.is_skipped,
         )
+
+        prev = seen.get(full_name)
+        if prev is None:
+            seen[full_name] = result
+        elif result.passed and not prev.passed:
+            # Upgrade: a later run passed
+            seen[full_name] = result
 
     # Handle testcases directly under root (Node.js style)
     for case in xml.iterchildren(TestCase):
@@ -46,4 +53,4 @@ def parse_junit_xml(report_path: Path) -> list[TestResult]:
         for case in suite:
             process_case(case)
 
-    return results
+    return list(seen.values())
