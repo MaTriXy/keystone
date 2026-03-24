@@ -4,7 +4,7 @@
     'agents_md': '''
       # Bootstrap Devcontainer - Agent Instructions
       
-      You are setting up a reproducible dev container so this project's test suite passes.
+      You are setting up a reproducible dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its test suite runs successfully.
       
       ## What you must create
       
@@ -46,7 +46,7 @@
       
       ## Workflow
       
-      0. Run `./keystone_budget.sh` to check your time and budget limits.
+      0. Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
       1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
       2. Identify language, test framework, and dependencies.
       3. Create the three files above.
@@ -75,7 +75,7 @@
       - **Coverage**: if it's enabled by default, disable it (`--no-cov`, etc.) — it's slow and not needed here.
       - **`docker run`** must use `--network=host` in this environment.
       - Only changes inside `.devcontainer/` are preserved.
-      - **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and budget.
+      - **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
       
       
       ## Status updates
@@ -115,7 +115,7 @@
     'agents_md': '''
       # Bootstrap Devcontainer - Agent Instructions
       
-      You are setting up a reproducible dev container so this project's test suite passes.
+      You are setting up a reproducible dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its test suite runs successfully.
       
       ## What you must create
       
@@ -157,7 +157,7 @@
       
       ## Workflow
       
-      0. Run `./keystone_budget.sh` to check your time and budget limits.
+      0. Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
       1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
       2. Identify language, test framework, and dependencies.
       3. Create the three files above.
@@ -185,7 +185,7 @@
       - **Coverage**: if it's enabled by default, disable it (`--no-cov`, etc.) — it's slow and not needed here.
       - **`docker run`** must use `--network=host` in this environment.
       - Only changes inside `.devcontainer/` are preserved.
-      - **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and budget.
+      - **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
       
       
       ## Status updates
@@ -222,7 +222,7 @@
 # name: test_inline_prompt[guardrail-modal]
   '''
   
-  We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
+  We need to build an appropriate dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its tests run successfully.
   
   You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
   This copy was created using `git archive`.
@@ -317,8 +317,7 @@
   
   ## Tips and Notes
   
-  * Run `./keystone_budget.sh` at the start to see your remaining time and budget.
-    Re-run it periodically to avoid running out of time or budget mid-task.
+  * Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
   
   * Start by exploring the repository structure. Use commands like:
     - `ls -a` to list all files and directories in the current directory.
@@ -495,7 +494,7 @@
 # name: test_inline_prompt[no_guardrail-modal]
   '''
   
-  We need to build an appropriate dev container, Dockerfile, and test runner in which this project's test suite runs successfully.
+  We need to build an appropriate dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its tests run successfully.
   
   You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
   This copy was created using `git archive`.
@@ -590,8 +589,7 @@
   
   ## Tips and Notes
   
-  * Run `./keystone_budget.sh` at the start to see your remaining time and budget.
-    Re-run it periodically to avoid running out of time or budget mid-task.
+  * Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
   
   * Start by exploring the repository structure. Use commands like:
     - `ls -a` to list all files and directories in the current directory.

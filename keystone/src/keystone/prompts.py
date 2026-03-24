@@ -57,7 +57,7 @@ Please don't forget to emit the summary before ending your turn.
 """
 
 LONG_FORM_AGENT_PROMPT_TEMPLATE = f"""
-We need to build an appropriate dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its tests runs successfully.
+We need to build an appropriate dev container, Dockerfile, and test runner in which this project's code can be edited, built, and executed, and its tests run successfully.
 
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
