@@ -57,10 +57,12 @@ class ManagedProcess:
         proc: Any,
         prefix: str = "",
         capture: bool = False,
+        sandbox: Any | None = None,
     ) -> None:
         self.proc = proc
         self.prefix = prefix
         self.capture = capture
+        self._sandbox = sandbox
         self._queue: queue.Queue[StreamEvent | None] | None = queue.Queue() if capture else None
 
         self._stdout_thread = threading.Thread(
@@ -138,7 +140,20 @@ class ManagedProcess:
         self.wait()
 
     def terminate(self) -> None:
-        """Terminate the underlying process."""
+        """Terminate the underlying process.
+
+        Modal's ContainerProcess doesn't expose a terminate/kill method, so we
+        use the sandbox to send SIGTERM to all processes owned by the 'agent'
+        user via ``pkill``.
+        """
+        if self._sandbox is not None:
+            try:
+                kill_proc = self._sandbox.exec("pkill", "-TERM", "-u", "agent")
+                kill_proc.wait()
+                return
+            except Exception:
+                logger.warning("pkill via sandbox failed", exc_info=True)
+        # Fallback for local subprocess (has .terminate())
         self.proc.terminate()
 
 
@@ -175,7 +190,7 @@ def run_modal_command(
         if _is_sandbox_crash(e):
             raise SandboxCrashedError(f"Sandbox died before exec '{name}': {e}") from e
         raise
-    return ManagedProcess(proc, prefix=name, capture=capture)
+    return ManagedProcess(proc, prefix=name, capture=capture, sandbox=sb)
 
 
 _SCRIPT_DIR = Path(__file__).parent
