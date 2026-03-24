@@ -1,5 +1,6 @@
 """Pytest fixtures and test utilities for keystone tests."""
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,6 +8,14 @@ from pathlib import Path
 import pytest
 
 from keystone.schema import BootstrapResult
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _silence_noisy_loggers() -> None:
+    """Suppress verbose hpack/http2 debug logs in test output."""
+    for name in ("hpack", "httpcore", "httpx"):
+        logging.getLogger(name).setLevel(logging.INFO)
+
 
 # Path to samples directory
 SAMPLES_DIR = Path(__file__).parent.parent.parent / "samples"

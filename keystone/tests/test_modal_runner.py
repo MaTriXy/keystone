@@ -20,10 +20,6 @@ logging.basicConfig(
 )
 # Enable DEBUG only for our project
 logging.getLogger("keystone").setLevel(logging.DEBUG)
-# Specifically silence known noisy hpack/http2 logs
-logging.getLogger("hpack").setLevel(logging.INFO)
-logging.getLogger("httpcore").setLevel(logging.INFO)
-logging.getLogger("httpx").setLevel(logging.INFO)
 
 logger = logging.getLogger("keystone.modal_test")
 
