@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="run1" tests="3">
+    <testcase classname="tests.test_math" name="test_add" time="0.01"/>
+    <testcase classname="tests.test_math" name="test_sub" time="0.01">
+      <failure message="AssertionError">assert 1 == 2</failure>
+    </testcase>
+    <testcase classname="tests.test_math" name="test_mul" time="0.01"/>
+  </testsuite>
+  <testsuite name="run2" tests="3">
+    <testcase classname="tests.test_math" name="test_add" time="0.02"/>
+    <testcase classname="tests.test_math" name="test_sub" time="0.02"/>
+    <testcase classname="tests.test_math" name="test_mul" time="0.02">
+      <failure message="AssertionError">assert 3 == 4</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
