@@ -12,10 +12,10 @@ Keystone generates a working `.devcontainer/` configuration for any git reposito
 
 ```bash
 # From PyPI
-pip install kystn
+pip install imbue-keystone
 
 # Or run without installing
-uvx kystn --help
+uvx imbue-keystone --help
 ```
 
 Both install the `keystone` CLI command.

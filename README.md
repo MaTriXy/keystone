@@ -42,16 +42,16 @@ In short: containerization is especially important for safety when your agent is
 
 ## Installation
 
-The package is published on PyPI as [`kystn`](https://pypi.org/project/kystn/). Install it with pip:
+The package is published on PyPI as [`imbue-keystone`](https://pypi.org/project/imbue-keystone/). Install it with pip:
 
 ```bash
-pip install kystn
+pip install imbue-keystone
 ```
 
 Or run it directly without installing using `uvx`:
 
 ```bash
-uvx kystn --help
+uvx imbue-keystone --help
 ```
 
 Both methods provide the `keystone` CLI command.
@@ -69,7 +69,7 @@ keystone \
   --project_root ./fastapi
 
 # Or run directly with uvx (no install needed):
-uvx kystn \
+uvx imbue-keystone \
   --max_budget_usd 1.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./fastapi
