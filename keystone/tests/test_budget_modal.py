@@ -13,7 +13,7 @@ from keystone.agent_runner import BUDGET_SCRIPT_PATH
 from keystone.modal.image import create_modal_image
 from keystone.modal.modal_runner import run_modal_command
 
-BUDGET_RE = re.compile(r"Remaining budget: \$([0-9.]+)")
+BUDGET_RE = re.compile(r"Remaining budget: ([0-9.]+) USD")
 TIME_RE = re.compile(r"Remaining time: (\d+) seconds")
 
 
@@ -62,32 +62,34 @@ export AGENT_TIME_DEADLINE=$(( $(date +%s) + 120 ))
         with sb.open("/env.sh", "w") as f:
             f.write(env_content)
 
-        # 1. Check budget BEFORE — should be full ($10)
+        # 1. Check budget BEFORE — ccusage has no session yet, so budget
+        #    reports "unknown" while time should be positive.
         rc, before_output = _run_in_sandbox(sb, "bash /project/keystone_budget.sh", name="budget-before")
         assert rc == 0, f"budget script failed (before):\n{before_output}"
 
-        before_match = BUDGET_RE.search(before_output)
-        assert before_match, f"No budget line in before output:\n{before_output}"
-        before_budget = float(before_match.group(1))
-        assert before_budget == pytest.approx(10.0, abs=0.01), f"Expected ~$10.00 before, got ${before_budget}"
-
         before_time = TIME_RE.search(before_output)
         assert before_time and int(before_time.group(1)) > 0, f"No positive time before:\n{before_output}"
+        # No ccusage session exists yet, so the script can't report a dollar amount
+        assert "ccusage failed" in before_output, (
+            f"Expected 'ccusage failed' before any claude session:\n{before_output}"
+        )
 
-        # 2. Run Claude to consume some budget
+        # 2. Run Claude to consume some budget (creates a ccusage session)
         rc, claude_output = _run_in_sandbox(
             sb, "claude -p 'say hello' --max-turns 1", name="claude"
         )
         assert rc == 0, f"claude call failed:\n{claude_output}"
 
-        # 3. Check budget AFTER — should be less than $10
+        # 3. Check budget AFTER — now ccusage has session data
         rc, after_output = _run_in_sandbox(sb, "bash /project/keystone_budget.sh", name="budget-after")
         assert rc == 0, f"budget script failed (after):\n{after_output}"
 
         after_match = BUDGET_RE.search(after_output)
         assert after_match, f"No budget line in after output:\n{after_output}"
         after_budget = float(after_match.group(1))
+        # Claude consumed some budget, so remaining should be less than the cap
         assert after_budget < 10.0, f"Expected budget < $10.00 after claude call, got ${after_budget}"
+        assert after_budget > 0.0, f"Budget should still be positive, got ${after_budget}"
 
         after_time = TIME_RE.search(after_output)
         assert after_time and int(after_time.group(1)) > 0, f"No positive time after:\n{after_output}"
