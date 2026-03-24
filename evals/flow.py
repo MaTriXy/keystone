@@ -184,16 +184,31 @@ def archive_repo_task(
             )
         log.info(f"{repo_id} at commit {commit_hash[:12]}")
 
-        # Create git archive tarball
-        archive_result = subprocess.run(
-            ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
-            cwd=clone_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if archive_result.returncode != 0:
-            raise RuntimeError(f"git archive failed: {archive_result.stderr}")
+        # Create git archive tarball (with submodule support)
+        has_submodules = (clone_path / ".gitmodules").exists()
+        if has_submodules:
+            _run_git(["submodule", "update", "--init", "--recursive"], cwd=clone_path)
+            ls_result = subprocess.run(
+                ["git", "ls-files", "--recurse-submodules", "-z"],
+                cwd=clone_path,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["tar", "-czf", str(clone_path / "archive.tar.gz"), "--null", "-T", "-"],
+                input=ls_result.stdout,
+                cwd=clone_path,
+                capture_output=True,
+                check=True,
+            )
+        else:
+            subprocess.run(
+                ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
+                cwd=clone_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
         tarball_bytes = (clone_path / "archive.tar.gz").read_bytes()
 
