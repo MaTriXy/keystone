@@ -294,3 +294,65 @@ def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> 
     assert result.exit_code != 0, "Expected non-zero exit code with time limit"
     assert not output.success, "Expected success=false with time limit"
     assert output.agent.timed_out, "Expected agent.timed_out=True"
+
+
+@pytest.mark.modal
+@pytest.mark.agentic
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
+def test_e2e_codex_cost_limit_on_modal(tmp_path: Path, project_root: Path) -> None:
+    """E2E test: verify the ccusage-polling cost monitor terminates Codex on Modal.
+
+    Sets --max_budget_usd to $0.01 so the very first ccusage poll detects the
+    budget is exceeded and terminates the agent process.  The CLI should report
+    cost_limit_exceeded=True in the JSON output and exit with code 1 (because
+    verification cannot succeed when the agent is killed early).
+    """
+    test_artifacts_dir = tmp_path / "test_artifacts"
+    cache_file = tmp_path / "codex_cost_limit_cache.sqlite"
+
+    logger.info("=" * 60)
+    logger.info("E2E Test: Codex cost-limit enforcement on Modal")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--log_db",
+        str(cache_file),
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5.3-codex",
+        "--max_budget_usd",
+        "0.01",
+        "--cost_poll_interval_seconds",
+        "5",
+        "--agent_in_modal",
+        "--docker_registry_mirror",
+        os.environ["DOCKER_REGISTRY_MIRROR"],
+        "--no_cache_replay",
+    ]
+
+    logger.info("Running: keystone %s", " ".join(cmd))
+
+    result = CliRunner().invoke(app, cmd)
+
+    # Surface CLI crashes before attempting to parse JSON output
+    if result.exception and not isinstance(result.exception, SystemExit):
+        logger.error("CLI raised an exception:\n%s", result.exception)
+        raise result.exception
+
+    logger.info("Exit code: %s", result.exit_code)
+
+    output = parse_bootstrap_result(result.stdout)
+
+    assert result.exit_code != 0, "Expected non-zero exit code when cost limit exceeded"
+    assert output.agent.cost_limit_exceeded, "Expected cost_limit_exceeded=True"
+    assert output.agent.exit_code == 1, "Expected agent exit_code=1"
+    assert output.agent.cost.cost_usd > 0, (
+        "Agent should have incurred some cost before termination"
+    )
+
