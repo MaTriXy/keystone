@@ -6,7 +6,7 @@ You are an experienced, pragmatic software engineering AI agent. Do not over-eng
 
 **Keystone** is an open-source agentic tool that automatically generates a working `.devcontainer/` configuration for any git repository. Given a source repo, it spins up a Modal sandbox running Claude Code to create a `devcontainer.json`, `Dockerfile`, and `run_all_tests.sh`.
 
-Published on PyPI as [`kystn`](https://pypi.org/project/kystn/).
+Published on PyPI as [`imbue-keystone`](https://pypi.org/project/imbue-keystone/).
 
 **Tech stack:** Python 3.12+, [Modal](https://modal.com/) (sandboxed execution), [uv](https://github.com/astral-sh/uv) (package manager), ruff (lint/format), pyright (type checking), pytest + pytest-xdist (testing), Playwright (browser tests in evals viewer), marimo (notebooks), polars/pandas/pyarrow (data analysis).
 
@@ -16,7 +16,7 @@ This is a **uv workspace monorepo** with three member packages:
 
 | Package | Path | Description |
 |---------|------|-------------|
-| `kystn` | `keystone/` | Core CLI and library (`keystone/src/keystone/`) |
+| `imbue-keystone` | `keystone/` | Core CLI and library (`keystone/src/keystone/`) |
 | `evals` | `evals/` | Evaluation framework for benchmarking Keystone |
 | `modal_registry` | `modal_registry/` | Shared Modal image definitions |
 
@@ -99,7 +99,7 @@ This project uses **ruff** (linter/formatter) and **pyright** (type checker). Pr
 
 ## Patterns
 
-- **Workspace packages import each other** — `evals` depends on `kystn`; use `from keystone.<module> import ...` to import core library code.
+- **Workspace packages import each other** — `evals` depends on `imbue-keystone`; use `from keystone.<module> import ...` to import core library code.
 - **Modal sandboxing** — All agent work runs inside Modal sandboxes. Docker-in-Docker is set up via `start_dockerd.sh` / `wait_for_docker.sh`.
 - **Test fixtures** — Keystone tests use sample repos from `samples/` and fixture data from `keystone/tests/fixtures/`.
 

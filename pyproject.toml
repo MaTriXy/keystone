@@ -6,7 +6,7 @@ dependencies = [
     "ipykernel>=7.1.0",
     "nbformat>=4.2.0",
     "plotly>=6.5.2",
-    "kystn",
+    "imbue-keystone",
     "evals",
     "modal_registry",
     "polars>=1.39.0",
@@ -19,7 +19,7 @@ dependencies = [
 members = ["keystone", "evals", "modal_registry"]
 
 [tool.uv.sources]
-kystn = { workspace = true }
+imbue-keystone = { workspace = true }
 evals = { workspace = true }
 modal_registry = { workspace = true }
 
