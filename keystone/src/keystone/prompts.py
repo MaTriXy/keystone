@@ -102,6 +102,11 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
       i. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
+          IMPORTANT: If there are configuration options when generating the JUnit XML report format,
+          make the report as fine-grained as possible (down to individual tests), and include as much
+          canonical contextual information in the test names as possible.
+          For example, if there's an option to include module or class names along with the test name, please use it.
+          But of course do not modify the JUnit XML emitted by standard tools, and if the project already has standard names for tests, stick with those.
           IMPORTANT: Do NOT hand-write or manually generate the JUnit XML.
           Do NOT write a custom script/program that parses test output and produces XML.
           The JUnit XML MUST be produced directly by the project's native test framework
@@ -226,6 +231,8 @@ ENV UV_LINK_MODE=copy
 
   For compiled languages (C++, Rust, Go) or build systems like Bazel, run the build step in a Dockerfile layer
   so that build artifacts are cached. This avoids rebuilding every time you run the tests.
+  But do set up run_all_tests.sh to re-compile any changes to the codebase at the time it is run in the built image.
+
   Examples:
 
   For Rust projects:
@@ -399,7 +406,8 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
      they exist during your session but are not part of the project source.
    - Do NOT create `.dockerignore` files.
    - For compiled languages (Rust, Go, C++), run the build inside a Dockerfile layer so
-     artifacts are cached and tests don't need to recompile from scratch each run.
+     artifacts are cached and tests don't need to recompile everything from scratch each run.
+     But do set up run_all_tests.sh to re-compile any changes to the codebase at the time it is run in the built image.
    - If the project needs config files or test fixtures that don't exist in the repo,
      create them in the Dockerfile (or in `run_all_tests.sh`) — changes outside `.devcontainer/` are lost.
 
@@ -436,6 +444,11 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 
 ## More tips
 
+- IMPORTANT: If there are configuration options when generating the JUnit XML report format, make the report
+  as fine-grained as possible (down to individual tests), and include as much canonical contextual information
+  in the test names as possible. For example, if there's an option to include module or class names along with the
+  test name, please use it. But of course do not modify the JUnit XML emitted by standard tools,
+  and if the project already has standard names for tests, stick with those.
 - **Python**: use `uv` for fast installs, and try to have packages pre-installed in the Dockerfile so that they are cached.
   Set `ENV UV_LINK_MODE=copy` in the Dockerfile to avoid problems with Modal's snapshotting —
   without this, Modal's snapshotting breaks on symlinks (hard-won lesson).
@@ -446,7 +459,6 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 - **`docker run`** must use `--network=host` in this environment.
 - Only changes inside `.devcontainer/` are preserved.
 - **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and token budget.
-
 {STATUS_UPDATES_AND_SUMMARY_SECTION}
 
 {{GUARDRAIL_REMINDER}}"""
