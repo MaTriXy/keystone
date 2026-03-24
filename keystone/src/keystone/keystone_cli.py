@@ -252,6 +252,17 @@ def bootstrap(
                 console.print(f"[bold red]Error:[/bold red] {err}")
             raise typer.Exit(code=1)
 
+    # OpenCode doesn't write transcript files that ccusage can read, so
+    # the cost-limit monitor cannot enforce a budget.  Reject early rather
+    # than silently ignoring the flag.
+    if provider_name == "opencode" and max_budget_usd and max_budget_usd > 0:
+        console.print(
+            "[bold red]Error:[/bold red] --max_budget_usd is not supported with the "
+            "opencode provider. OpenCode does not write transcript files that ccusage "
+            "can read, so cost-limit enforcement cannot work."
+        )
+        raise typer.Exit(code=1)
+
     # Build agent config early — needed for prompt generation and cache key.
     assert max_budget_usd is not None
     agent_config = AgentConfig(
