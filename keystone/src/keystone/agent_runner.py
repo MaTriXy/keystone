@@ -41,6 +41,7 @@ class AgentRunner(ABC):
         provider: AgentProvider,
         agents_md: str | None = None,
         guardrail: bool = True,
+        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
 
@@ -52,6 +53,7 @@ class AgentRunner(ABC):
             time_limit_seconds: Maximum time in seconds for agent execution.
             provider: LLM provider for command building and output parsing.
             agents_md: Optional AGENTS.md content to write into the project directory.
+            cost_poll_interval_seconds: How often to poll ccusage for cost enforcement (0 disables).
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -170,6 +172,7 @@ class LocalAgentRunner(AgentRunner):
         provider: AgentProvider,
         agents_md: str | None = None,
         guardrail: bool = True,
+        cost_poll_interval_seconds: int = 30,  # noqa: ARG002  # only used by ModalAgentRunner
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(

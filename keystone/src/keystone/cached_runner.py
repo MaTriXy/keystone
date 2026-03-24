@@ -84,6 +84,11 @@ class CachedAgentRunner(AgentRunner):
         """Whether the agent timed out."""
         return self._timed_out
 
+    @property
+    def cost_limit_exceeded(self) -> bool:
+        """Whether the agent was terminated for exceeding the cost limit."""
+        return getattr(self._inner, "cost_limit_exceeded", False)
+
     def run(
         self,
         prompt: str,
@@ -92,6 +97,7 @@ class CachedAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_secs: int,
         provider: AgentProvider,
+        cost_poll_interval_seconds: int,
         agents_md: str | None = None,
         guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
@@ -117,6 +123,7 @@ class CachedAgentRunner(AgentRunner):
                 provider,
                 agents_md=agents_md,
                 guardrail=guardrail,
+                cost_poll_interval_seconds=cost_poll_interval_seconds,
             )
 
     def _replay_cached(self, cached_run: AgentRunRecord) -> Iterator[StreamEvent]:
@@ -148,6 +155,7 @@ class CachedAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_secs: int,
         provider: AgentProvider,
+        cost_poll_interval_seconds: int,
         agents_md: str | None = None,
         guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
@@ -175,6 +183,7 @@ class CachedAgentRunner(AgentRunner):
                 time_limit_secs,
                 provider,
                 agents_md=agents_md,
+                cost_poll_interval_seconds=cost_poll_interval_seconds,
                 guardrail=guardrail,
             ):
                 collected_events.append(event)

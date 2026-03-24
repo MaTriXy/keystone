@@ -1,7 +1,7 @@
 """Schemas for the Keystone CLI."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, Field
@@ -19,7 +19,7 @@ def _ensure_iso_string(v: object) -> str:
 ISOTimestamp = Annotated[str, BeforeValidator(_ensure_iso_string)]
 
 
-class StreamType(str, Enum):
+class StreamType(StrEnum):
     """Type of output stream from the agent process."""
 
     STDOUT = "stdout"
@@ -33,7 +33,7 @@ class StreamEvent(BaseModel):
     line: str
 
 
-class LLMModel(str, Enum):
+class LLMModel(StrEnum):
     """LLM model choices for the agent (Claude, Codex, and OpenCode)."""
 
     # Claude models
@@ -82,6 +82,13 @@ class AgentConfig(BaseModel):
     codex_reasoning_level: str | None = Field(
         default=None,
         description="Reasoning level for Codex (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
+    )
+
+    # Cost monitoring — poll ccusage every N seconds while the agent runs.
+    # Set to 0 to disable mid-run cost monitoring.
+    cost_poll_interval_seconds: int = Field(
+        default=30,
+        description="How often (seconds) to poll ccusage and enforce max_budget_usd. 0 disables.",
     )
 
     # Feature toggles — all required so config files are explicit.
@@ -179,6 +186,7 @@ class AgentExecution(BaseModel):
     duration_seconds: float
     exit_code: int
     timed_out: bool = False
+    cost_limit_exceeded: bool = False
 
     summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []

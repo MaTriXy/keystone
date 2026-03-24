@@ -171,6 +171,11 @@ def bootstrap(
         "--codex_reasoning_level",
         help="Reasoning level for Codex provider (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
     ),
+    cost_poll_interval_seconds: int = typer.Option(
+        30,
+        "--cost_poll_interval_seconds",
+        help="How often (seconds) to poll ccusage and enforce --max_budget_usd. 0 disables.",
+    ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
@@ -260,6 +265,7 @@ def bootstrap(
         codex_reasoning_level=codex_reasoning_level,
         guardrail=guardrail,
         use_agents_md=use_agents_md,
+        cost_poll_interval_seconds=cost_poll_interval_seconds,
     )
 
     prompt_result = build_prompt(agent_config)
@@ -415,6 +421,7 @@ def bootstrap(
                 provider,
                 agents_md=prompt_result.agents_md,
                 guardrail=guardrail,
+                cost_poll_interval_seconds=agent_config.cost_poll_interval_seconds,
             ):
                 if event.stream == "stdout":
                     process_stdout_line(event.line)
@@ -428,6 +435,8 @@ def bootstrap(
         logging.info(f"Agent exited with code {exit_code}")
         cache_hit = runner.cache_hit
         agent_timed_out = runner.timed_out
+        if runner.cost_limit_exceeded:
+            logging.warning("Agent terminated: cost limit ($%.2f) exceeded", max_budget_usd)
         devcontainer_tarball = runner.get_devcontainer_tarball()
         logging.info(f"Devcontainer tarball size: {len(devcontainer_tarball)} bytes")
 
@@ -638,6 +647,7 @@ def bootstrap(
             duration_seconds=agent_work_seconds,
             exit_code=exit_code,
             timed_out=agent_timed_out,
+            cost_limit_exceeded=runner.cost_limit_exceeded,
             summary=agent_summary,
             status_messages=status_messages,
             error_messages=agent_errors,

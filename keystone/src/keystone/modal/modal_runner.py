@@ -199,6 +199,8 @@ class ModalAgentRunner(AgentRunner):
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
         self._cached_inference_cost: InferenceCost | None = None
+        self._cost_limit_exceeded: bool = False
+        self._agent_done: threading.Event = threading.Event()
 
     def ensure_sandbox(self) -> modal.Sandbox:
         """Create sandbox if not already created. Returns the sandbox."""
@@ -302,6 +304,37 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project_clean", name="upload").wait()
 
+    @property
+    def cost_limit_exceeded(self) -> bool:
+        """Whether the agent was terminated for exceeding the cost limit."""
+        return self._cost_limit_exceeded
+
+    def _cost_monitor(
+        self,
+        max_budget_usd: float,
+        provider_name: str,
+        agent: ManagedProcess,
+        poll_interval: int,
+    ) -> None:
+        """Background thread: poll ccusage and kill agent if over budget."""
+        while not self._agent_done.wait(timeout=poll_interval):
+            try:
+                cost = self.run_ccusage(provider_name)
+                if cost.cost_usd > max_budget_usd:
+                    logger.warning(
+                        "Cost limit exceeded: $%.4f > $%.4f — terminating agent process",
+                        cost.cost_usd,
+                        max_budget_usd,
+                    )
+                    self._cost_limit_exceeded = True
+                    agent.terminate()
+                    return
+                logger.info(
+                    "Cost check: $%.4f / $%.4f", cost.cost_usd, max_budget_usd
+                )
+            except Exception:
+                logger.warning("Cost monitor: ccusage poll failed, will retry", exc_info=True)
+
     def run(
         self,
         prompt: str,
@@ -312,6 +345,7 @@ class ModalAgentRunner(AgentRunner):
         provider: AgentProvider,
         agents_md: str | None = None,
         guardrail: bool = True,
+        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
@@ -319,7 +353,12 @@ class ModalAgentRunner(AgentRunner):
 
         try:
             yield from self._run_agent(
-                prompt, max_budget_usd, agent_cmd, time_limit_seconds, provider
+                prompt,
+                max_budget_usd,
+                agent_cmd,
+                time_limit_seconds,
+                provider,
+                cost_poll_interval_seconds=cost_poll_interval_seconds,
             )
         except SandboxCrashedError as e:
             logger.error("Sandbox crashed during agent run: %s", e)
@@ -346,10 +385,15 @@ class ModalAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_seconds: int,
         provider: AgentProvider,
+        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
         sb = self._sandbox
+
+        # Reset cost-monitor state for this run
+        self._cost_limit_exceeded = False
+        self._agent_done.clear()
 
         # Set up provider-specific env vars (e.g. API keys)
         logger.info("Starting agent (provider=%s)...", provider.name)
@@ -388,8 +432,29 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             name="agent",
             capture=True,
         )
-        yield from agent.stream()
-        self._exit_code = agent.wait()
+
+        # Start cost-monitor thread (if enabled)
+        monitor: threading.Thread | None = None
+        if cost_poll_interval_seconds > 0:
+            monitor = threading.Thread(
+                target=self._cost_monitor,
+                args=(max_budget_usd, provider.name, agent, cost_poll_interval_seconds),
+                daemon=True,
+                name="cost-monitor",
+            )
+            monitor.start()
+
+        try:
+            yield from agent.stream()
+            self._exit_code = agent.wait()
+        finally:
+            # Signal the monitor thread to stop and wait for it
+            self._agent_done.set()
+            if monitor is not None:
+                monitor.join(timeout=5)
+
+        if self._cost_limit_exceeded:
+            self._exit_code = 1
 
         # 5. Extract .devcontainer directory
         logger.info("Extracting .devcontainer from sandbox...")
