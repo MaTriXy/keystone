@@ -23,9 +23,9 @@ if [ -n "$AGENT_BUDGET_CAP_USD" ] && [ -n "$CCUSAGE_COMMAND" ]; then
   CURRENT_COST=$($CCUSAGE_COMMAND session --json 2>/dev/null \
     | jq -r '(.sessions[0].totalCost // 0)')
   if [ $? -eq 0 ] && [ -n "$CURRENT_COST" ]; then
-    REMAINING=$(echo "$AGENT_BUDGET_CAP_USD - $CURRENT_COST" | bc -l)
-    # Check if over budget (bc returns 1 for true, 0 for false)
-    IS_OVER=$(echo "$REMAINING <= 0" | bc -l)
+    REMAINING=$(awk "BEGIN {printf \"%.4f\", $AGENT_BUDGET_CAP_USD - $CURRENT_COST}")
+    # Check if over budget (awk prints 1 for true, 0 for false)
+    IS_OVER=$(awk "BEGIN {print ($REMAINING <= 0) ? 1 : 0}")
     if [ "$IS_OVER" -eq 1 ]; then
       printf "Remaining budget: %.2f USD (OVER BUDGET)\n" "$REMAINING"
       OVER_BUDGET=1
