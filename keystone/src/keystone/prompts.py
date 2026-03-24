@@ -130,7 +130,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
 ## Tips and Notes
 
-* Run `./budget.sh` at the start to see your remaining time and budget.
+* Run `./keystone_budget.sh` at the start to see your remaining time and budget.
   Re-run it periodically to avoid running out of time or budget mid-task.
 
 * Start by exploring the repository structure. Use commands like:
@@ -418,7 +418,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 
 ## Workflow
 
-0. Run `./budget.sh` to check your time and budget limits.
+0. Run `./keystone_budget.sh` to check your time and budget limits.
 1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
 2. Identify language, test framework, and dependencies.
 3. Create the three files above.
@@ -446,7 +446,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 - **Coverage**: if it's enabled by default, disable it (`--no-cov`, etc.) — it's slow and not needed here.
 - **`docker run`** must use `--network=host` in this environment.
 - Only changes inside `.devcontainer/` are preserved.
-- **Budget**: Run `./budget.sh` at the start and periodically to check remaining time and budget.
+- **Budget**: Run `./keystone_budget.sh` at the start and periodically to check remaining time and budget.
 
 {STATUS_UPDATES_AND_SUMMARY_SECTION}
 

@@ -312,10 +312,10 @@ class ModalAgentRunner(AgentRunner):
                 f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
             run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
-        # Upload budget.sh so the agent can check remaining time/budget
-        with sb.open("/project/budget.sh", "wb") as f:
+        # Upload keystone_budget.sh so the agent can check remaining time/budget
+        with sb.open("/project/keystone_budget.sh", "wb") as f:
             f.write(BUDGET_SCRIPT_PATH.read_bytes())
-        run_modal_command(sb, "chmod", "+x", "/project/budget.sh", name="upload").wait()
+        run_modal_command(sb, "chmod", "+x", "/project/keystone_budget.sh", name="upload").wait()
 
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:

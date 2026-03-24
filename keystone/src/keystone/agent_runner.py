@@ -20,7 +20,7 @@ from keystone.prompts import generate_devcontainer_json
 from keystone.schema import AgentConfig, InferenceCost, StreamEvent, StreamType, VerificationResult
 
 GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
-BUDGET_SCRIPT_PATH = Path(__file__).parent / "budget.sh"
+BUDGET_SCRIPT_PATH = Path(__file__).parent / "keystone_budget.sh"
 
 logger = getLogger(__name__)
 
@@ -220,7 +220,7 @@ class LocalAgentRunner(AgentRunner):
             dest_guardrail.chmod(0o755)
 
         # Copy budget script so the agent can check remaining time/budget
-        dest_budget = self._work_dir / "budget.sh"
+        dest_budget = self._work_dir / "keystone_budget.sh"
         dest_budget.write_bytes(BUDGET_SCRIPT_PATH.read_bytes())
         dest_budget.chmod(0o755)
 
