@@ -350,7 +350,7 @@ def run(
     repo_list: str = typer.Option(..., help="Path to repos.jsonl"),
     s3_prefix: str = typer.Option(..., help="S3 prefix for mutation tarballs"),
     n_mutations: int = typer.Option(5, help="Number of mutations per repo"),
-    limit: int | None = typer.Option(None, help="Limit to first N repos"),
+    limit_to_first_n_repos: int | None = typer.Option(None, help="Limit to first N repos"),
     modal_timeout_seconds: int = typer.Option(600, help="Modal sandbox timeout"),
 ) -> None:
     """Run the mutation pipeline."""
@@ -359,7 +359,7 @@ def run(
         repo_list_path=repo_list,
         s3_prefix=s3_prefix,
         n_mutations=n_mutations,
-        limit=limit,
+        limit=limit_to_first_n_repos,
         modal_timeout_seconds=modal_timeout_seconds,
     )
 
