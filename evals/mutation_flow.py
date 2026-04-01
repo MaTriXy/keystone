@@ -509,26 +509,52 @@ def _run_mutation_in_modal(
             else:
                 log.warning("Branch %s not found", branch_name)
 
-        # Pull the mutated repo back to the local clone
-        log.info("Downloading mutated repo from sandbox...")
-        run_modal_command(
-            sb,
-            "tar",
-            "-czf",
-            "/tmp/mutated.tar.gz",
-            "-C",
-            "/project",
-            ".",
-            name="mutation-tar",
-        ).wait()
-        with sb.open("/tmp/mutated.tar.gz", "rb") as f:
-            mutated_data = f.read()
+        # Pull patches from sandbox — much smaller than the full .git or working tree.
+        # For each broken branch, get the diff as a patch and apply locally.
+        log.info("Downloading patches from sandbox...")
+        for i, _commit_hash in enumerate(broken_hashes, 1):
+            branch_name = f"broken-{i}"
+            patch_file = f"/tmp/patch-{i}.diff"
+            run_modal_command(
+                sb,
+                "bash",
+                "-c",
+                f"cd /project && git diff main {branch_name} > {patch_file}",
+                name=f"patch-{branch_name}",
+            ).wait()
+            with sb.open(patch_file, "r") as f:
+                patch_data = f.read()
+            log.info("Patch %s: %d bytes", branch_name, len(patch_data))
 
-        subprocess.run(
-            ["tar", "-xzf", "-", "-C", str(clone_path)],
-            input=mutated_data,
-            check=True,
-        )
+            # Apply patch to local clone
+            _run_git(["checkout", "-b", branch_name, "main"], cwd=clone_path)
+            proc = subprocess.run(
+                ["git", "apply", "--allow-empty"],
+                input=patch_data,
+                cwd=clone_path,
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                log.warning("Failed to apply patch for %s: %s", branch_name, proc.stderr)
+            _run_git(["add", "-A"], cwd=clone_path)
+            _run_git(
+                [
+                    "-c",
+                    "user.name=mutation",
+                    "-c",
+                    "user.email=m@m",
+                    "commit",
+                    "--allow-empty",
+                    "-m",
+                    f"mutation {i}",
+                ],
+                cwd=clone_path,
+            )
+            # Update the hash to the local commit
+            result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
+            broken_hashes[i - 1] = result.stdout.strip()
+            _run_git(["checkout", "main"], cwd=clone_path)
 
         return broken_hashes
 
