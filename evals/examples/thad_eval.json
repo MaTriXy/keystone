@@ -1,7 +1,7 @@
 {
   "description": "Trying to get things working again!",
   "repo_list_path": "evals/examples/repos.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-24_thad_eval_v5/",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-04-01_thad_eval_v1/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   // "limit_to_first_n_repos": 3,
   "max_concurrent": 200,
@@ -26,78 +26,78 @@
       },
       "trials_per_repo": 1
     },
-    {
-      "name": "codex-gpt-5.3",
-      "keystone_config": {
-        "agent_config": {
-          "guardrail": true, 
-          "use_agents_md": true,
-          "agent_in_modal": true,
-          "provider": "codex",
-          "model": "gpt-5.3-codex",
-          "codex_reasoning_level": "high",
-          "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600,
-          "cost_poll_interval_seconds": 30,
-        }
-      },
-      "trials_per_repo": 1
-    },
-    {
-      "name": "gpt-5.4",
-      "keystone_config": {
-        "agent_config": {
-          "provider": "codex",
-          "guardrail": true,
-          "use_agents_md": true,
-          "agent_in_modal": true,
-          "model": "gpt-5.4",
-          "codex_reasoning_level": "high",
-          "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600,
-          "cost_poll_interval_seconds": 30,
-        }
-      },
-      "trials_per_repo": 1
-    },
+    // {
+    //   "name": "codex-gpt-5.3",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "guardrail": true, 
+    //       "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "provider": "codex",
+    //       "model": "gpt-5.3-codex",
+    //       "codex_reasoning_level": "high",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
+    // {
+    //   "name": "gpt-5.4",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "provider": "codex",
+    //       "guardrail": true,
+    //       "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "model": "gpt-5.4",
+    //       "codex_reasoning_level": "high",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
   
-    // --------------------------------------------------
-    // Small models
+    // // --------------------------------------------------
+    // // Small models
 
-    {
-      "name": "claude-haiku",
-      "keystone_config": {
-        "agent_config": {
-          "guardrail": true,
-          "use_agents_md": true,
-          "agent_in_modal": true,
-          "provider": "claude",
-          "model": "claude-haiku-4-5-20251001",
-          "claude_reasoning_level": "high",
-          "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600,
-          "cost_poll_interval_seconds": 30,
-        }
-      },
-      "trials_per_repo": 1
-    },
-    {
-      "name": "codex-mini-gpt-5.1",
-      "keystone_config": {
-        "agent_config": {
-          "guardrail": true,
-          "use_agents_md": true,
-          "agent_in_modal": true,
-          "provider": "codex",
-          "model": "gpt-5.1-codex-mini",
-          "codex_reasoning_level": "high",
-          "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600,
-          "cost_poll_interval_seconds": 30,
-        }
-      },
-      "trials_per_repo": 1
-    },
+    // {
+    //   "name": "claude-haiku",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "guardrail": true,
+    //       "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "provider": "claude",
+    //       "model": "claude-haiku-4-5-20251001",
+    //       "claude_reasoning_level": "high",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
+    // {
+    //   "name": "codex-mini-gpt-5.1",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "guardrail": true,
+    //       "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "provider": "codex",
+    //       "model": "gpt-5.1-codex-mini",
+    //       "codex_reasoning_level": "high",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
     
 
     // // --------------------------------------------------
