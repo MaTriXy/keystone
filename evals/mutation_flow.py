@@ -68,9 +68,12 @@ find . -type f | grep -v '/\\.git/' | grep -v __pycache__ | sed 's/.*\\.//' | so
 find . -type f \\( -name '*.py' -o -name '*.c' -o -name '*.cpp' -o -name '*.f90' -o -name '*.f' -o -name '*.go' -o -name '*.rs' -o -name '*.js' -o -name '*.ts' -o -name '*.rb' -o -name '*.java' \\) | grep -v test | grep -v __pycache__ | grep -v vendor | grep -v third.party | grep -v node_modules | head -30
 ```
 
-Step 2: Pick {n} files to mutate. SPREAD your mutations across:
-  - Different parts of the codebase (different directories/modules)
-  - Different languages if the project is polyglot (e.g. for scipy: some Python, some C, some Fortran)
+Step 2: Pick {n} files to mutate.
+  CRITICAL: Look at the file extension counts from Step 1. If the project has multiple
+  languages (e.g. .py AND .c AND .f90), you MUST spread mutations across ALL languages
+  present. For example, if a project has 1000 .py, 200 .c, and 10 .f90 files, create
+  mutations in Python, C, AND Fortran — not just the most common language.
+  Also spread across different directories/modules within each language.
   Pick core library files that are likely imported/compiled by tests, not scripts or docs.
 
 Step 3: For EACH i from 1 to {n}, immediately do:
