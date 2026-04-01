@@ -818,6 +818,23 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     error_message=f"Failed to extract source for {ref}",
                 )
 
+            # Touch extracted files so they have fresh timestamps before
+            # docker cp.  Archive timestamps are often older than pre-built
+            # object files in the image, causing incremental build tools to
+            # skip recompilation.
+            run_modal_command(
+                sb,
+                "find",
+                archive_dir,
+                "-type",
+                "f",
+                "-exec",
+                "touch",
+                "{}",
+                "+",
+                name=f"broken-touch-{ref_short}",
+            ).wait()
+
             # Copy source into the running container
             cp_proc = run_modal_command(
                 sb,
@@ -832,26 +849,6 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     success=False,
                     error_message=f"Failed to copy source for {ref}",
                 )
-
-            # Touch all source files so incremental builds (make, cmake, etc.)
-            # detect changes.  docker cp preserves the archive timestamps which
-            # are often older than the pre-built object files in the image,
-            # causing build tools to skip recompilation.
-            run_modal_command(
-                sb,
-                "docker",
-                "exec",
-                container_name,
-                "find",
-                project_dir_in_container,
-                "-type",
-                "f",
-                "-exec",
-                "touch",
-                "{}",
-                "+",
-                name=f"broken-touch-{ref_short}",
-            ).wait()
 
             # Run tests via shared helper (clears junit, extracts artifacts, parses)
             with tempfile.TemporaryDirectory(

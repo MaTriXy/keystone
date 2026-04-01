@@ -356,6 +356,23 @@ def main() -> None:
                                 check=True,
                                 capture_output=True,
                             )
+                            # Touch extracted files before docker cp so they
+                            # have fresh timestamps — only touches the changed
+                            # source files, not build artifacts in the container.
+                            if not args.no_touch:
+                                subprocess.run(
+                                    [
+                                        "find",
+                                        extract_dir,
+                                        "-type",
+                                        "f",
+                                        "-exec",
+                                        "touch",
+                                        "{}",
+                                        "+",
+                                    ],
+                                    capture_output=True,
+                                )
                             subprocess.run(
                                 [
                                     "docker",
@@ -368,25 +385,6 @@ def main() -> None:
                             )
                         finally:
                             Path(tmp_path).unlink(missing_ok=True)
-
-                    # Touch source files unless --no-touch
-                    if not args.no_touch:
-                        subprocess.run(
-                            [
-                                "docker",
-                                "exec",
-                                broken_container,
-                                "find",
-                                project_dir_in_container,
-                                "-type",
-                                "f",
-                                "-exec",
-                                "touch",
-                                "{}",
-                                "+",
-                            ],
-                            capture_output=True,
-                        )
 
                     # Run tests
                     with tempfile.TemporaryDirectory(prefix=f"broken-{ref}-") as artifacts_dir:
@@ -418,6 +416,20 @@ def main() -> None:
                                 check=True,
                                 capture_output=True,
                             )
+                            if not args.no_touch:
+                                subprocess.run(
+                                    [
+                                        "find",
+                                        extract_dir,
+                                        "-type",
+                                        "f",
+                                        "-exec",
+                                        "touch",
+                                        "{}",
+                                        "+",
+                                    ],
+                                    capture_output=True,
+                                )
                             subprocess.run(
                                 [
                                     "docker",
@@ -430,24 +442,6 @@ def main() -> None:
                             )
                         finally:
                             Path(tmp_path).unlink(missing_ok=True)
-
-                    if not args.no_touch:
-                        subprocess.run(
-                            [
-                                "docker",
-                                "exec",
-                                broken_container,
-                                "find",
-                                project_dir_in_container,
-                                "-type",
-                                "f",
-                                "-exec",
-                                "touch",
-                                "{}",
-                                "+",
-                            ],
-                            capture_output=True,
-                        )
 
                     with tempfile.TemporaryDirectory(prefix="restoration-") as artifacts_dir:
                         restore_result = _run_tests_in_container(
