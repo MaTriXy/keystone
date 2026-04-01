@@ -833,6 +833,26 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     error_message=f"Failed to copy source for {ref}",
                 )
 
+            # Touch all source files so incremental builds (make, cmake, etc.)
+            # detect changes.  docker cp preserves the archive timestamps which
+            # are often older than the pre-built object files in the image,
+            # causing build tools to skip recompilation.
+            run_modal_command(
+                sb,
+                "docker",
+                "exec",
+                container_name,
+                "find",
+                project_dir_in_container,
+                "-type",
+                "f",
+                "-exec",
+                "touch",
+                "{}",
+                "+",
+                name=f"broken-touch-{ref_short}",
+            ).wait()
+
             # Run tests via shared helper (clears junit, extracts artifacts, parses)
             with tempfile.TemporaryDirectory(
                 prefix=f"broken-artifacts-{ref_short}-"

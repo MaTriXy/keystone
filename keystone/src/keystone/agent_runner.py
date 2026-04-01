@@ -484,6 +484,27 @@ class LocalAgentRunner(AgentRunner):
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
+            # Touch all source files so incremental builds (make, cmake, etc.)
+            # detect changes.  docker cp preserves the archive timestamps which
+            # are often older than the pre-built object files in the image,
+            # causing build tools to skip recompilation.
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    container_name,
+                    "find",
+                    project_dir_in_container,
+                    "-type",
+                    "f",
+                    "-exec",
+                    "touch",
+                    "{}",
+                    "+",
+                ],
+                capture_output=True,
+            )
+
             # Run tests via the shared helper (extracts artifacts + parses JUnit)
             with tempfile.TemporaryDirectory(
                 prefix=f"broken-artifacts-{ref[:12]}-"

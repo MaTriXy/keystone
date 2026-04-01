@@ -27,6 +27,7 @@ dependencies = [
 [project.scripts]
 keystone = "keystone.keystone_cli:main"
 imbue-keystone = "keystone.keystone_cli:main"
+repro-verify = "keystone.repro_verify:main"
 
 [build-system]
 requires = ["hatchling"]
