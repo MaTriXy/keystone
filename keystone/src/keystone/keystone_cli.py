@@ -670,7 +670,7 @@ def bootstrap(
     # Compute unexpected passes from broken-commit verification results
     # (verification itself ran above, before sandbox cleanup)
     unexpected_broken_commit_passes = sum(
-        1 for v in broken_commit_verifications.values() if v.tests_failed == 0
+        1 for v in broken_commit_verifications.values() if v.success
     )
     if unexpected_broken_commit_passes > 0:
         logging.warning(
