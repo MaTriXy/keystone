@@ -97,8 +97,17 @@ RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
    a. run_all_tests.sh takes no arguments and is executable: `chmod +x .devcontainer/run_all_tests.sh`.
-   b. It always writes test artifacts to /test_artifacts inside the container filesystem.
-   c. /test_artifacts should be populated with artifacts from running the tests:
+   b. For projects with environment setup or build steps, run_all_tests.sh should ensure that the environment and
+      build steps are redone as necessary to respect the current state of the codebase, which may have changed
+      since the Dockerfile was built.
+      For example, using `uv run pytest ...` will correctly update the virtual environment
+      and install any new dependencies if the pyproject.toml or uv.lock file has changed.
+      Likewise for cmake projects, it's necessary to run `cmake --build .` (or similar) to rebuild the project
+      to ensure that the build artifacts are up to date.
+      The main idea is that if the code changes since the Dockerfile was last built, the environment setup or
+      build steps should be sensitive to that, while still using as much pre-cached work as possible from the Docker layers.
+   c. It always writes test artifacts to /test_artifacts inside the container filesystem.
+   d. /test_artifacts should be populated with artifacts from running the tests:
       i. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
@@ -124,12 +133,12 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           Verify that /test_artifacts/junit/ contains only files (not directories) with
           a <testsuites> or <testsuite> root element.
       ii. A file called /test_artifacts/final_result.json stating success/failure.
-   d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
-   e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
-   f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitly verify this behavior, though).
+   e. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
+   f. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
+   g. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitly verify this behavior, though).
       You can use `set -euo pipefail` to exit the script if any test fails.
-   g. There's no need to branch in run_all_tests.sh, because the code tree that you see now will always be the code tree that this script runs against.
-   h. If the project uses some framework to run tests (e.g., bazel, buck, CMake, pytest, Jest, Mocha, cargo-nextest), use that framework's built-in reporting capabilities to generate JUnit XML reports.
+   h. There's no need to branch in run_all_tests.sh, because the code tree that you see now will always be the code tree that this script runs against.
+   i. If the project uses some framework to run tests (e.g., bazel, buck, CMake, pytest, Jest, Mocha, cargo-nextest), use that framework's built-in reporting capabilities to generate JUnit XML reports.
 
 {STATUS_UPDATES_AND_SUMMARY_SECTION}
 
@@ -414,6 +423,15 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 3. **`.devcontainer/run_all_tests.sh`** (executable) — should run and document the full test suite:
    - Use `set -euo pipefail`
    - `mkdir -p /test_artifacts/junit` near the top
+   - For projects with environment setup or build steps, run_all_tests.sh should ensure that the environment and
+      build steps are redone as necessary to respect the current state of the codebase, which may have changed
+      since the Dockerfile was built.
+      For example, using `uv run pytest ...` will correctly update the virtual environment
+      and install any new dependencies if the pyproject.toml or uv.lock file has changed.
+      Likewise for cmake projects, it's necessary to run `cmake --build .` (or similar) to rebuild the project
+      to ensure that the build artifacts are up to date.
+      The main idea is that if the code changes since the Dockerfile was last built, the environment setup or
+      build steps should be sensitive to that, while still using as much pre-cached work as possible from the Docker layers.
    - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
      Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
      Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`

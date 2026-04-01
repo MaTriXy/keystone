@@ -125,6 +125,10 @@ class AgentRunner(ABC):
 class LocalAgentRunner(AgentRunner):
     """Run agent locally using subprocess.
 
+    .. deprecated::
+        Use ``ModalAgentRunner`` instead. Local execution is maintained for
+        backward compatibility but will be removed in a future release.
+
     The agent runs in a clean directory extracted from git archive, ensuring
     repeatability and better Docker build caching.
     """
@@ -414,6 +418,15 @@ class LocalAgentRunner(AgentRunner):
         image_name = "keystone-verify-local"
         container_name = "keystone-broken"
 
+        # Detect the WORKDIR from the image (where source files live in the container)
+        workdir_proc = subprocess.run(
+            ["docker", "inspect", image_name, "--format", "{{.Config.WorkingDir}}"],
+            capture_output=True,
+            text=True,
+        )
+        project_dir_in_container = workdir_proc.stdout.strip() or "/project"
+        logger.info("Container WORKDIR: %s", project_dir_in_container)
+
         # Start a persistent container from the already-built image
         logger.info("Starting persistent container for broken-commit verification...")
         subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
@@ -432,13 +445,21 @@ class LocalAgentRunner(AgentRunner):
             for ref in broken_refs:
                 logger.info("Testing broken ref %s...", ref)
                 verifications[ref] = self._run_single_broken_ref(
-                    ref, container_name, test_timeout_seconds, git_dir
+                    ref,
+                    container_name,
+                    test_timeout_seconds,
+                    git_dir,
+                    project_dir_in_container,
                 )
 
             # Restoration check
             logger.info("Running restoration check (HEAD)...")
             restoration = self._run_single_broken_ref(
-                "HEAD", container_name, test_timeout_seconds, git_dir
+                "HEAD",
+                container_name,
+                test_timeout_seconds,
+                git_dir,
+                project_dir_in_container,
             )
         finally:
             subprocess.run(["docker", "stop", container_name], capture_output=True)
@@ -452,6 +473,7 @@ class LocalAgentRunner(AgentRunner):
         container_name: str,
         test_timeout_seconds: int,
         git_dir: Path,
+        project_dir_in_container: str = "/project",
     ) -> VerificationResult:
         """Extract source at ref, copy into container, run tests."""
         try:
@@ -481,7 +503,12 @@ class LocalAgentRunner(AgentRunner):
                         capture_output=True,
                     )
                     cp_proc = subprocess.run(
-                        ["docker", "cp", f"{extract_dir}/.", f"{container_name}:/project_src/"],
+                        [
+                            "docker",
+                            "cp",
+                            f"{extract_dir}/.",
+                            f"{container_name}:{project_dir_in_container}/",
+                        ],
                         capture_output=True,
                         text=True,
                     )

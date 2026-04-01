@@ -8,6 +8,7 @@ import json
 import logging
 import queue
 import shlex
+import subprocess
 import sys
 import tarfile
 import threading
@@ -751,22 +752,49 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
     def run_broken_commit_verifications(
         self,
-        broken_commit_hashes: list[str],
+        broken_refs: list[str],
         test_timeout_seconds: int,
+        project_root: Path | None = None,
     ) -> tuple[dict[str, VerificationResult], VerificationResult | None]:
-        """Run tests against each broken commit, then restore base and re-run.
+        """Run tests against each broken ref, then restore base and re-run.
 
         Uses a single long-running detached Docker container so compiled
         build artifacts persist across runs.
 
+        ``project_root`` must be a local git repo containing the broken
+        branches/refs. ``git archive`` runs locally and the tarball is
+        uploaded to the sandbox for each ref.
+
         Returns (per-commit verifications dict, restoration verification).
         """
+        if project_root is None:
+            raise RuntimeError("project_root is required for broken-commit verification")
+
         sb = self.ensure_sandbox()
         image_name = "keystone-verify"
         container_name = "keystone-broken"
 
         # Start a long-running detached container from the already-built image
         logger.info("Starting long-running container for broken-commit verification...")
+
+        # Detect WORKDIR from the image (where source files live in the container)
+        workdir_proc = run_modal_command(
+            sb,
+            "docker",
+            "inspect",
+            image_name,
+            "--format",
+            "{{.Config.WorkingDir}}",
+            name="broken-workdir",
+            capture=True,
+        )
+        workdir_output = ""
+        for event in workdir_proc.stream():
+            workdir_output += event.line
+        workdir_proc.wait()
+        project_dir_in_container = workdir_output.strip() or "/project"
+        logger.info("Container WORKDIR: %s", project_dir_in_container)
+
         run_modal_command(sb, "docker", "rm", "-f", container_name, name="broken-cleanup").wait()
         start_proc = run_modal_command(
             sb,
@@ -787,17 +815,27 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         verifications: dict[str, VerificationResult] = {}
 
-        for commit_hash in broken_commit_hashes:
-            logger.info("Testing broken commit %s...", commit_hash[:12])
-            result = self._run_single_broken_commit(
-                sb, commit_hash, container_name, test_timeout_seconds
+        for ref in broken_refs:
+            logger.info("Testing broken ref %s...", ref)
+            result = self._run_single_broken_ref(
+                sb,
+                ref,
+                container_name,
+                test_timeout_seconds,
+                project_root,
+                project_dir_in_container,
             )
-            verifications[commit_hash] = result
+            verifications[ref] = result
 
         # Restoration check: copy base source back and re-run tests
-        logger.info("Running restoration check (base commit)...")
-        restoration = self._run_single_broken_commit(
-            sb, "HEAD", container_name, test_timeout_seconds
+        logger.info("Running restoration check (HEAD)...")
+        restoration = self._run_single_broken_ref(
+            sb,
+            "HEAD",
+            container_name,
+            test_timeout_seconds,
+            project_root,
+            project_dir_in_container,
         )
 
         # Stop and remove container
@@ -809,36 +847,54 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         return verifications, restoration
 
-    def _run_single_broken_commit(
+    def _run_single_broken_ref(
         self,
         sb: modal.Sandbox,
-        commit_hash: str,
+        ref: str,
         container_name: str,
         test_timeout_seconds: int,
+        project_root: Path,
+        project_dir_in_container: str = "/project",
     ) -> VerificationResult:
-        """Extract source tree at commit_hash, copy into container, run tests."""
+        """Extract source tree at ref locally, upload to sandbox, copy into container, run tests."""
         try:
-            # Extract source tree at the given commit into a temp dir in the sandbox
-            archive_dir = f"/tmp/broken_{commit_hash[:12]}"
-            run_modal_command(
-                sb, "rm", "-rf", archive_dir, name=f"broken-clean-{commit_hash[:8]}"
-            ).wait()
-            run_modal_command(
-                sb, "mkdir", "-p", archive_dir, name=f"broken-mkdir-{commit_hash[:8]}"
-            ).wait()
-
-            # Use git archive to get the source tree at the commit
-            archive_proc = run_modal_command(
-                sb,
-                "bash",
-                "-c",
-                f"cd /project && git archive {commit_hash} | tar -x -C {archive_dir}",
-                name=f"broken-archive-{commit_hash[:8]}",
+            # git archive locally — the sandbox doesn't have the full git repo
+            archive_proc = subprocess.run(
+                ["git", "archive", ref],
+                cwd=project_root,
+                capture_output=True,
             )
-            if archive_proc.wait() != 0:
+            if archive_proc.returncode != 0:
                 return VerificationResult(
                     success=False,
-                    error_message=f"Failed to extract source tree for commit {commit_hash}",
+                    error_message=f"git archive {ref} failed: {archive_proc.stderr.decode()}",
+                )
+
+            # Upload tarball to sandbox and extract
+            ref_short = ref[:12]
+            archive_dir = f"/tmp/broken_{ref_short}"
+            run_modal_command(sb, "rm", "-rf", archive_dir, name=f"broken-clean-{ref_short}").wait()
+            run_modal_command(
+                sb, "mkdir", "-p", archive_dir, name=f"broken-mkdir-{ref_short}"
+            ).wait()
+
+            # Write tar to sandbox and extract
+            sandbox_tar = f"/tmp/broken_{ref_short}.tar"
+            with sb.open(sandbox_tar, "wb") as f:
+                f.write(archive_proc.stdout)
+            extract_proc = run_modal_command(
+                sb,
+                "tar",
+                "xf",
+                sandbox_tar,
+                "-C",
+                archive_dir,
+                name=f"broken-extract-{ref_short}",
+            )
+            if extract_proc.wait() != 0:
+                return VerificationResult(
+                    success=False,
+                    error_message=f"Failed to extract source for {ref}",
                 )
 
             # Copy source into the running container
@@ -847,13 +903,13 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 "docker",
                 "cp",
                 f"{archive_dir}/.",
-                f"{container_name}:/project/",
-                name=f"broken-cp-{commit_hash[:8]}",
+                f"{container_name}:{project_dir_in_container}/",
+                name=f"broken-cp-{ref_short}",
             )
             if cp_proc.wait() != 0:
                 return VerificationResult(
                     success=False,
-                    error_message=f"Failed to copy source for commit {commit_hash}",
+                    error_message=f"Failed to copy source for {ref}",
                 )
 
             # Run tests
@@ -866,7 +922,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 "timeout",
                 str(test_timeout_seconds),
                 "/run_all_tests.sh",
-                name=f"broken-test-{commit_hash[:8]}",
+                name=f"broken-test-{ref_short}",
             )
             test_exit_code = test_proc.wait()
             test_execution_seconds = time.time() - test_start

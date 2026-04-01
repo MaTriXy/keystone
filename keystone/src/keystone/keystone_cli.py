@@ -536,6 +536,15 @@ def bootstrap(
         image_build_seconds: float | None = None
         test_execution_seconds: float | None = None
 
+        # Parse broken commit/branch refs for mutation-augmented eval
+        parsed_broken_refs = (
+            [h.strip() for h in broken_commit_hashes.split(",") if h.strip()]
+            if broken_commit_hashes
+            else []
+        )
+        broken_commit_verifications: dict[str, VerificationResult] = {}
+        post_broken_commits_verification: VerificationResult | None = None
+
         def _run_verification(tarball: bytes) -> VerificationResult:
             return runner.verify(
                 project_archive,
@@ -559,6 +568,26 @@ def bootstrap(
                 print("=" * 60, file=sys.stderr)
                 print(verification_error, file=sys.stderr)
                 print("=" * 60, file=sys.stderr)
+
+            # Run broken-commit verification while the sandbox is still alive
+            # (must happen before cleanup() terminates it).
+            if parsed_broken_refs and verification_success:
+                inner_runner = getattr(runner, "_inner", runner)
+                if isinstance(inner_runner, (LocalAgentRunner, ModalAgentRunner)):
+                    logging.info(
+                        "Running broken-commit re-verification for %d refs...",
+                        len(parsed_broken_refs),
+                    )
+                    try:
+                        broken_commit_verifications, post_broken_commits_verification = (
+                            inner_runner.run_broken_commit_verifications(
+                                parsed_broken_refs,
+                                test_timeout_seconds,
+                                project_root=project_root,
+                            )
+                        )
+                    except Exception as e:
+                        logging.error("Broken-commit verification failed: %s", e)
 
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
@@ -647,57 +676,16 @@ def bootstrap(
         run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
     )
 
-    # Broken-commit re-verification (mutation-augmented eval)
-    broken_commit_verifications: dict[str, VerificationResult] = {}
-    post_broken_commits_verification: VerificationResult | None = None
-    unexpected_broken_commit_passes = 0
-
-    parsed_broken_hashes = (
-        [h.strip() for h in broken_commit_hashes.split(",") if h.strip()]
-        if broken_commit_hashes
-        else []
+    # Compute unexpected passes from broken-commit verification results
+    # (verification itself ran above, before sandbox cleanup)
+    unexpected_broken_commit_passes = sum(
+        1 for v in broken_commit_verifications.values() if v.tests_failed == 0
     )
-    # Access the inner runner for broken-commit verification
-    inner_runner = getattr(runner, "_inner", runner)
-    has_broken_method = hasattr(inner_runner, "run_broken_commit_verifications")
-    if parsed_broken_hashes and overall_success and has_broken_method:
-        logging.info(
-            "Running broken-commit re-verification for %d commits...",
-            len(parsed_broken_hashes),
+    if unexpected_broken_commit_passes > 0:
+        logging.warning(
+            "⚠️  %d broken commit(s) unexpectedly passed all tests!",
+            unexpected_broken_commit_passes,
         )
-        try:
-            # LocalAgentRunner needs project_root for git archive;
-            # ModalAgentRunner uses the sandbox's /project repo.
-            if isinstance(inner_runner, LocalAgentRunner):
-                broken_commit_verifications, post_broken_commits_verification = (
-                    inner_runner.run_broken_commit_verifications(
-                        parsed_broken_hashes,
-                        test_timeout_seconds,
-                        project_root=project_root,
-                    )
-                )
-            elif isinstance(inner_runner, ModalAgentRunner):
-                broken_commit_verifications, post_broken_commits_verification = (
-                    inner_runner.run_broken_commit_verifications(
-                        parsed_broken_hashes,
-                        test_timeout_seconds,
-                    )
-                )
-            else:
-                logging.warning(
-                    "Broken-commit verification not supported for runner type: %s",
-                    type(inner_runner).__name__,
-                )
-            unexpected_broken_commit_passes = sum(
-                1 for v in broken_commit_verifications.values() if v.tests_failed == 0
-            )
-            if unexpected_broken_commit_passes > 0:
-                logging.warning(
-                    "⚠️  %d broken commit(s) unexpectedly passed all tests!",
-                    unexpected_broken_commit_passes,
-                )
-        except Exception as e:
-            logging.error("Broken-commit verification failed: %s", e)
 
     output = BootstrapResult(
         success=overall_success,
