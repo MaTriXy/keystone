@@ -1,8 +1,8 @@
 {
   "description": "Trying to get things working again!",
-  "repo_list_path": "evals/examples/repos.jsonl",
+  "repo_list_path": "evals/examples/repos_with_mutations.jsonl",
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-04-01_thad_eval_v1/",
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-mutations/",
   "limit_to_first_n_repos": 10,
   "max_concurrent": 200,
   "task_start_stagger_seconds": 1,
