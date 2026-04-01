@@ -342,7 +342,7 @@ class ModalAgentRunner(AgentRunner):
         """Background thread: poll ccusage and kill agent if over budget."""
         while not self._agent_done.wait(timeout=poll_interval):
             try:
-                cost = self.run_ccusage(provider_name)
+                cost = self.run_ccusage(provider_name, timeout_secs=20)
                 if cost.cost_usd > max_budget_usd:
                     logger.warning(
                         "Cost limit exceeded: $%.4f > $%.4f — terminating agent process",
@@ -354,7 +354,13 @@ class ModalAgentRunner(AgentRunner):
                     return
                 logger.info("Cost check: $%.4f / $%.4f", cost.cost_usd, max_budget_usd)
             except Exception:
-                logger.warning("Cost monitor: ccusage poll failed, will retry", exc_info=True)
+                logger.warning(
+                    "Cost monitor: ccusage poll failed — conservatively terminating agent",
+                    exc_info=True,
+                )
+                self._cost_limit_exceeded = True
+                agent.terminate()
+                return
 
     def run(
         self,
@@ -1007,7 +1013,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             logger.error(f"Error extracting agent dir tarball: {e}")
             return None
 
-    def run_ccusage(self, provider_name: str) -> InferenceCost:
+    def run_ccusage(self, provider_name: str, timeout_secs: int | None = None) -> InferenceCost:
         """Run ccusage/ccusage-codex in the sandbox to get accurate token counts and costs.
 
         This should be called after the agent finishes. The sandbox must still be alive.
@@ -1015,6 +1021,8 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         Args:
             provider_name: The LLM provider name ('claude', 'codex', etc.)
+            timeout_secs: Optional timeout in seconds. When set, the command is
+                wrapped with Linux ``timeout`` so a hung ccusage process is killed.
 
         Returns:
             InferenceCost populated from ccusage output, or a zero-cost default on failure.
@@ -1025,12 +1033,19 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         sb = self._sandbox
 
-        # Pick the right ccusage command based on provider
+        # Pick the right ccusage command based on provider.
+        # --offline avoids fetching pricing data from the network, which causes
+        # rate-limiting when many sandboxes poll in parallel during large evals.
         if provider_name == "codex":
-            ccusage_cmd = ["ccusage-codex", "session", "--json"]
+            ccusage_cmd = ["ccusage-codex", "session", "--json", "--offline"]
         else:
             # Default to claude ccusage for claude/opencode/other providers
-            ccusage_cmd = ["ccusage", "session", "--json"]
+            ccusage_cmd = ["ccusage", "session", "--json", "--offline"]
+
+        # Optionally wrap with Linux timeout to kill hung ccusage processes
+        shell_cmd = shlex.join(ccusage_cmd)
+        if timeout_secs is not None:
+            shell_cmd = f"timeout {timeout_secs} {shell_cmd}"
 
         try:
             logger.info("Running ccusage (provider=%s)...", provider_name)
@@ -1039,7 +1054,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 "su",
                 "agent",
                 "-c",
-                shlex.join(ccusage_cmd),
+                shell_cmd,
                 name="ccusage",
                 capture=True,
             )

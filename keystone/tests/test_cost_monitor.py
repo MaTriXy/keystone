@@ -71,20 +71,16 @@ class TestCostMonitor:
         assert runner._cost_limit_exceeded is False
         agent.terminate.assert_not_called()
 
-    def test_survives_ccusage_failure(self, runner: ModalAgentRunner) -> None:
-        """Monitor should keep polling even if ccusage raises an exception."""
+    def test_terminates_on_ccusage_failure(self, runner: ModalAgentRunner) -> None:
+        """Monitor should conservatively terminate the agent if ccusage fails."""
         agent = MagicMock()
-        call_count = 0
 
-        def flaky_ccusage(provider_name: str) -> InferenceCost:  # noqa: ARG001
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise RuntimeError("ccusage crashed")
-            # Second call returns over-budget to terminate
-            return InferenceCost(cost_usd=10.0)
+        def failing_ccusage(
+            provider_name: str, timeout_secs: int | None = None  # noqa: ARG001
+        ) -> InferenceCost:
+            raise RuntimeError("ccusage crashed")
 
-        with patch.object(runner, "run_ccusage", side_effect=flaky_ccusage):
+        with patch.object(runner, "run_ccusage", side_effect=failing_ccusage):
             runner._agent_done.clear()
             runner._cost_limit_exceeded = False
 
@@ -94,10 +90,9 @@ class TestCostMonitor:
                 daemon=True,
             )
             monitor.start()
-            monitor.join(timeout=10)
+            monitor.join(timeout=5)
 
-        # Should have retried after failure and then terminated
-        assert call_count >= 2
+        # Should have terminated on first failure (conservative behavior)
         assert runner._cost_limit_exceeded is True
         agent.terminate.assert_called_once()
 

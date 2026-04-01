@@ -20,7 +20,7 @@ fi
 
 # Budget remaining
 if [ -n "$AGENT_BUDGET_CAP_USD" ] && [ -n "$CCUSAGE_COMMAND" ]; then
-  CURRENT_COST=$($CCUSAGE_COMMAND session --json 2>/dev/null \
+  CURRENT_COST=$($CCUSAGE_COMMAND session --json --offline 2>/dev/null \
     | jq -r '(.sessions[0].totalCost // 0)')
   if [ $? -eq 0 ] && [ -n "$CURRENT_COST" ]; then
     REMAINING=$(awk "BEGIN {printf \"%.4f\", $AGENT_BUDGET_CAP_USD - $CURRENT_COST}")
