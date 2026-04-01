@@ -1,11 +1,11 @@
 {
-  // Minimal mutation eval: 1 repo (flask) x 1 model (claude-opus) x 1 broken branch
-  "description": "Smoke test: mutation-augmented eval with 1 repo, 1 broken branch.",
+  // Mutation eval: 2 repos (flask, requests) x claude-opus x all 20 broken branches
+  "description": "Mutation eval: flask + requests with all broken branches, claude-opus.",
   "repo_list_path": "evals/examples/repos_with_mutations.jsonl",
-  "limit_to_first_n_repos": 1,
+  "limit_to_first_n_repos": 2,
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/mutation-smoke-test/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-mutations/",
-  "max_concurrent": 1,
+  "max_concurrent": 2,
   "configs": [
     {
       "name": "claude-opus",
@@ -22,8 +22,7 @@
           "cost_poll_interval_seconds": 30
         }
       },
-      "trials_per_repo": 1,
-      "limit_broken_branch_mutations_testing_to_first_n": 1
+      "trials_per_repo": 1
     }
   ]
 }
