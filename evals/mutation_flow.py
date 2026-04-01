@@ -9,6 +9,7 @@ tarball uploaded to S3.
 import contextlib
 import json
 import logging
+import os
 import shlex
 import subprocess
 import tempfile
@@ -55,30 +56,30 @@ class MutationResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 MUTATION_PROMPT_TEMPLATE = """\
-You have about 90 seconds. Be fast — don't explore extensively.
+DO NOT OVERTHINK THIS. Act immediately. No planning, no exploration beyond a quick `find`.
 
 Your job: introduce {n} small test-breaking changes to source code in /project.
 Language: {language}. Build system: {build_system}. Tests: {tests}. {notes}
 
-IMPORTANT for polyglot projects: if this repo has multiple languages (e.g. Python +
-C/C++/Fortran), spread your mutations across different languages. For scipy, that
-means Python, C, C++, and Fortran files. Target source files that are likely
-exercised by tests — core library code, not build scripts or vendored deps.
+Step 1: Run `find /project -name '*.py' -o -name '*.c' -o -name '*.cpp' -o -name '*.f90' -o -name '*.go' -o -name '*.rs' -o -name '*.js' -o -name '*.rb' -o -name '*.java' | grep -v test | grep -v __pycache__ | head -20` to find source files.
 
-For EACH mutation (i=1 to {n}):
-  git checkout -b broken-{{i}} main
-  # Edit ONE source file (NOT test files) — e.g. insert `raise Exception("mutation")`
-  # at the top of an important function, or change `return x` to `return None`,
-  # or for C: add `#error "mutation"`, or for Fortran: `STOP "mutation"`
-  git add -A && git commit -m "mutation {{i}}"
-  git checkout main
+Step 2: For EACH i from 1 to {n}, immediately do:
+```bash
+git checkout -b broken-{{i}} main
+# Pick a different source file each time. Insert ONE broken line near the top:
+#   Python: raise Exception("mutation")
+#   C/C++: #error "mutation"
+#   Fortran: STOP "mutation"
+#   Go: panic("mutation")
+#   JS/TS: throw new Error("mutation")
+sed -i '1i raise Exception("mutation {{i}}")' /project/path/to/file.py  # example for Python
+git add -A && git commit -m "mutation {{i}}"
+git checkout main
+```
 
-Rules:
-- Each broken-{{i}} branch diverges from main independently (not chained).
-- Only modify SOURCE files, never test files.
-- Keep changes tiny — one line per mutation.
-- Do NOT run tests or install anything.
-- Skip vendored/submodule/third-party directories.
+For polyglot projects (e.g. Python + C + Fortran), spread mutations across languages.
+Only modify SOURCE files, never test files. Skip vendored/third-party directories.
+Do NOT run tests. Do NOT install anything. Do NOT read file contents. Just mutate and commit.
 
 When done: `git branch -v`
 """
@@ -415,9 +416,14 @@ def _run_mutation_in_modal(
         # Write a runner script (same pattern as keystone's /run_agent.sh)
         # --dangerously-skip-permissions prevents Claude from hanging on interactive prompts
         # --output-format stream-json gives us machine-readable output
+        # Must export ANTHROPIC_API_KEY so claude can authenticate
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            log.warning("ANTHROPIC_API_KEY not set — Claude Code will likely fail")
         runner_script = (
             "#!/bin/bash\n"
             "set -e\n"
+            f"export ANTHROPIC_API_KEY={shlex.quote(api_key)}\n"
             "cd /project\n"
             f"exec timeout {timeout_seconds} claude "
             "--dangerously-skip-permissions "
@@ -430,15 +436,39 @@ def _run_mutation_in_modal(
             f.write(runner_script)
         run_modal_command(sb, "chmod", "+x", "/tmp/run_mutation.sh", name="mutation-chmod").wait()
 
+        # Diagnostic: verify claude is available and key will be set in the script
+        run_modal_command(
+            sb,
+            "bash",
+            "-c",
+            "which claude && claude --version && cat /tmp/run_mutation.sh | head -5",
+            name="claude-diag",
+        ).wait()
+
         # Run Claude Code — capture=True streams stdout/stderr to Python logging in real time
         # (ManagedProcess._stream_reader daemon threads handle this, same as keystone's agent)
+        # Make project writable by the agent user (keystone's Modal image creates 'agent')
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="chown-project").wait()
+        run_modal_command(
+            sb,
+            "chown",
+            "agent:agent",
+            "/tmp/run_mutation.sh",
+            "/tmp/mutation_prompt.txt",
+            name="chown-scripts",
+        ).wait()
+
+        # Run as 'agent' user — Claude Code refuses --dangerously-skip-permissions as root
         log.info("Running Claude Code in sandbox (timeout=%ds)...", timeout_seconds)
         agent_proc = run_modal_command(
             sb,
-            "bash",
+            "su",
+            "agent",
+            "-c",
             "/tmp/run_mutation.sh",
             name="claude-mutation",
             capture=True,
+            pty=True,
         )
         for _event in agent_proc.stream():
             pass  # All output logged by ManagedProcess._stream_reader
