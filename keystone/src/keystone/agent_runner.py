@@ -516,6 +516,7 @@ class LocalAgentRunner(AgentRunner):
                     error_message=f"git diff failed for {ref}: {diff_proc.stderr}",
                 )
             changed_files = [f for f in diff_proc.stdout.strip().split("\n") if f]
+            logger.info("[%s] %d file(s) changed: %s", ref, len(changed_files), ", ".join(changed_files))
 
             # Apply: copy ref's versions of changed files into container
             if changed_files:
@@ -530,6 +531,7 @@ class LocalAgentRunner(AgentRunner):
                     return VerificationResult(success=False, error_message=err)
 
             # Run tests
+            logger.info("[%s] Running tests...", ref)
             with tempfile.TemporaryDirectory(
                 prefix=f"broken-artifacts-{ref[:12]}-"
             ) as artifacts_dir:
@@ -539,6 +541,11 @@ class LocalAgentRunner(AgentRunner):
                     test_artifacts_dir=Path(artifacts_dir),
                     use_docker_exec=True,
                 )
+            logger.info(
+                "[%s] Result: success=%s tests_passed=%s tests_failed=%s (%.1fs)",
+                ref, result.success, result.tests_passed, result.tests_failed,
+                result.test_execution_seconds or 0,
+            )
 
             # Reverse: restore HEAD versions of the changed files
             if changed_files:
