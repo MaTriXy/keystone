@@ -210,6 +210,7 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
         "agent_error_msgs": agent_error_msgs,
         "unexpected_broken_commit_passes": result.unexpected_broken_commit_passes,
         "restoration_check_failed": result.restoration_check_failed,
+        "num_broken_branches": len(result.repo_entry.broken_branches),
     }
 
 
@@ -339,6 +340,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .stat-chip .pct { font-weight: 700; font-size: 15px; }
   .stat-chip .label { color: #64748b; }
   .stat-chip .cost { color: #c4b5fd; font-size: 13px; font-weight: 600; margin-left: 2px; }
+  .stat-chip .win-pct { color: #6ee7b7; font-size: 13px; font-weight: 600; margin-left: 4px; cursor: default; }
 
   .stats-chevron { margin-left: auto; color: #475569; font-size: 13px; flex-shrink: 0; }
 
@@ -412,6 +414,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .cell-meta .cm-cost { color: #a78bfa; font-weight: 600; }
   .cell-meta .cm-time { color: #475569; font-size: 10px; }
   .rc-ubc { font-size: 11px; color: #fbbf24; font-weight: 600; }
+  .badge.test-winner { background: #064e3b; color: #6ee7b7; margin-left: 2px; font-size: 14px; }
 
   .detail-row td { padding: 0; }
   .detail-panel { padding: 16px 20px 20px; background: #12151f;
@@ -679,6 +682,31 @@ function renderStats() {
   const bar = document.getElementById("statsBar");
   const runData = DATA.runs[currentRun] || {};
   const models = modelOrder(currentRun);
+
+  // Compute test-winner counts per model across all repos.
+  // Uses the same criteria as buildRowData (see comments there).
+  const winCounts = {};
+  const winEligibleRows = { _total: 0 };
+  for (const m of models) { winCounts[m] = 0; }
+  for (const repo of DATA.repo_list) {
+    // Collect eligible cells for this row
+    const eligible = [];
+    for (const m of models) {
+      const r = (runData[m] || {})[repo];
+      if (r && r.success && r.num_broken_branches > 0
+          && r.unexpected_broken_commit_passes < r.num_broken_branches
+          && !r.restoration_check_failed) {
+        eligible.push({ model: m, ubc: r.unexpected_broken_commit_passes });
+      }
+    }
+    if (!eligible.length) continue;
+    winEligibleRows._total++;
+    const minUbc = Math.min(...eligible.map(e => e.ubc));
+    for (const e of eligible) {
+      if (e.ubc === minUbc) winCounts[e.model]++;
+    }
+  }
+
   const chips = models.map(model => {
     const repos = runData[model] || {};
     const total = Object.keys(repos).length;
@@ -692,11 +720,18 @@ function renderStats() {
       ? `<button class="rerun-btn" title="Rerun this config"
            onclick="showRerun(event,'${currentRun}','${model}')">&#x21ba;</button>`
       : "";
+    const winN = winCounts[model] || 0;
+    const winTotal = winEligibleRows._total || 0;
+    const winPct = winTotal ? Math.round(100 * winN / winTotal) : 0;
+    const winChip = winTotal
+      ? `<span class="win-pct" title="Test winner: fraction of eligible repos where this config caught the most mutations (${winN}/${winTotal})">&#9733;${winPct}%</span>`
+      : "";
     return `<div class="stat-chip">
       <div class="dot" style="background:${meta.color}"></div>
-      <span class="pct" style="color:${meta.color}">${pct}%</span>
-      <span class="label">${meta.label} (${passed}/${total})</span>
-      <span class="cost">· ${costStr}</span>
+      <span class="pct" style="color:${meta.color}" title="Percentage of repos where tests passed">${pct}%</span>
+      <span class="label" title="Pass count / total repos">${meta.label} (${passed}/${total})</span>
+      <span class="cost" title="Total agent cost for this config">· ${costStr}</span>
+      ${winChip}
       ${rerunBtn}
     </div>`;
   }).join("");
@@ -845,6 +880,37 @@ function buildRowData() {
       maxTestsPassed: tests_passing.length >= 2 ? Math.max(...tests_passing) : null,
       minIncorrectPasses: incorrect_passes.length >= 2 ? Math.min(...incorrect_passes) : null,
     };
+
+    // --- Test Winner computation ---
+    // A cell is a "test winner" for its row when ALL of:
+    //   1. The initial test run passed (success == true).
+    //   2. The repo has broken branches AND at least one was caught
+    //      (unexpected_broken_commit_passes < num_broken_branches),
+    //      i.e. not every mutation slipped through undetected.
+    //   3. This cell's unexpected_broken_commit_passes equals the
+    //      row-minimum — it caught the most mutations.
+    //   4. The restoration check passed (restoration_check_failed == false),
+    //      meaning re-running tests on the repaired code still succeeds.
+    // Multiple cells can win (tie), or none if no cell meets all criteria.
+    const eligible = vals.filter(v =>
+      v.success
+      && v.num_broken_branches > 0
+      && v.unexpected_broken_commit_passes < v.num_broken_branches
+      && !v.restoration_check_failed
+    );
+    const winnerMin = eligible.length ? Math.min(...eligible.map(v => v.unexpected_broken_commit_passes)) : null;
+    for (const m of models) {
+      const r = row[m];
+      if (!r) continue;
+      r._isTestWinner = (
+        winnerMin != null
+        && r.success
+        && r.num_broken_branches > 0
+        && r.unexpected_broken_commit_passes < r.num_broken_branches
+        && !r.restoration_check_failed
+        && r.unexpected_broken_commit_passes === winnerMin
+      );
+    }
     rows.push(row);
   });
   return rows;
@@ -964,36 +1030,39 @@ function buildColDefs() {
           const costStr = r.cost_usd ? "$" + r.cost_usd.toFixed(2) : "";
           const isBestCost = (best.minCost != null && r.cost_usd > 0 && r.cost_usd === best.minCost);
           const isBestTime = (best.minTime != null && r.duration_s > 0 && r.duration_s === best.minTime);
-          const costHtml = costStr ? (isBestCost ? `<b>${costStr}</b>` : costStr) : "";
-          const timeHtml = durStr ? (isBestTime ? `<b>${durStr}</b>` : durStr) : "";
+          const costHtml = costStr ? `<span title="Agent cost (USD)">${isBestCost ? `<b>${costStr}</b>` : costStr}</span>` : "";
+          const timeHtml = durStr ? `<span title="Agent wall-clock duration">${isBestTime ? `<b>${durStr}</b>` : durStr}</span>` : "";
           const ubcVal = r.unexpected_broken_commit_passes;
+          const ubcTotal = r.num_broken_branches || 0;
           const isBestUbc = (best.minIncorrectPasses != null && ubcVal != null && ubcVal === best.minIncorrectPasses);
-          const ubcHtml = (ubcVal > 0) ? `<span class="rc-ubc">${isBestUbc ? `<b>${ubcVal}</b>` : ubcVal}&#9760;</span>` : "";
+          const ubcHtml = (ubcVal > 0) ? `<span class="rc-ubc" title="Broken commits that unexpectedly passed (${ubcVal} of ${ubcTotal} mutations missed)">${isBestUbc ? `<b>${ubcVal}</b>` : ubcVal}&#9760;</span>` : "";
+          // Test winner badge (see buildRowData for full criteria)
+          const winnerHtml = r._isTestWinner ? `<span class="badge test-winner" title="Test winner: tests ran, caught the most mutations, restoration passed">&#9733;</span>` : "";
           const cat = categorizeError(r.error || "");
           let badge;
-          if (r.success) badge = `<span class="badge pass">&#10003;</span>`;
+          if (r.success) badge = `<span class="badge pass" title="Tests passed">&#10003;</span>`;
           else if (cat === "Agent timeout") badge = `<span class="badge timeout" title="Agent timeout">&#9201;</span>`;
           else if (INFRA_CATEGORIES.has(cat)) badge = `<span class="badge infra" title="${escHtml(cat)}">?</span>`;
-          else badge = `<span class="badge fail">&#10007;</span>`;
+          else badge = `<span class="badge fail" title="Tests failed">&#10007;</span>`;
           // Mutation integrity warning
           if (r.unexpected_broken_commit_passes > 0) {
-            badge += `<span class="badge" style="background:#78350f;color:#fbbf24;margin-left:2px" title="${r.unexpected_broken_commit_passes} broken commit(s) unexpectedly passed">&#9888;</span>`;
+            badge += `<span class="badge" style="background:#78350f;color:#fbbf24;margin-left:2px" title="${r.unexpected_broken_commit_passes} of ${ubcTotal} broken commit(s) unexpectedly passed">&#9888;</span>`;
           }
           if (!expanded) {
-            return `<div class="rc">${badge}<div class="rc-meta"><span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${ubcHtml}</div></div>`;
+            return `<div class="rc">${badge}${winnerHtml}<div class="rc-meta"><span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${ubcHtml}</div></div>`;
           }
           // Expanded: show full detail in-cell
           const isBestTests = (best.maxTestsPassed != null && r.tests_passed != null && r.tests_passed === best.maxTestsPassed);
           const tpStr = r.tests_passed != null ? `${r.tests_passed}` : "";
           const tpHtml = tpStr ? (isBestTests ? `<b>${tpStr}</b>` : tpStr) : "";
-          const tests = (r.tests_passed != null) ? `${tpHtml}\\u2713 ${r.tests_failed||0}\\u2717` : "";
+          const tests = (r.tests_passed != null) ? `<span title="Tests passed / failed">${tpHtml}\\u2713 ${r.tests_failed||0}\\u2717</span>` : "";
           const errHtml = r.error ? `<div class="rc-err">\\u2717 ${escHtml(r.error.slice(0,200))}</div>` : "";
           const summaryHtml = r.summary ? `<div class="rc-summary">${escHtml(r.summary.slice(0,300))}</div>` : "";
           const steps = r.status_messages || [];
           const lastSteps = steps.slice(-3).map(s => `<div class="rc-step">${escHtml(s)}</div>`).join("");
           const stepsHtml = lastSteps ? `<div class="rc-steps"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Agent steps</div>${lastSteps}</div>` : "";
           return `<div class="rc-expanded">
-            <div class="rc-expanded-header">${badge}<span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${tests ? `<span class="rc-tests">${tests}</span>` : ""}${ubcHtml}</div>
+            <div class="rc-expanded-header">${badge}${winnerHtml}<span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${tests ? `<span class="rc-tests">${tests}</span>` : ""}${ubcHtml}</div>
             ${errHtml}${stepsHtml}${summaryHtml}
           </div>`;
         },
