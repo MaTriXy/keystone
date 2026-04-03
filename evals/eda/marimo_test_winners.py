@@ -149,6 +149,75 @@ def _(df, pl):
 
 
 @app.cell
+def _(mo, wdf, pl):
+    """Bar chart: success rate and test-winner rate per model."""
+    import plotly.graph_objects as go
+
+    total_repos = wdf["repo_id"].n_unique()
+
+    stats = (
+        wdf.group_by("config_name")
+        .agg(
+            (pl.col("success").sum()).alias("n_success"),
+            (pl.col("test_winner").sum()).alias("n_winner"),
+            pl.len().alias("n_total"),
+        )
+        .with_columns(
+            (100.0 * pl.col("n_success") / pl.col("n_total")).round(1).alias("success_pct"),
+            (100.0 * pl.col("n_winner") / pl.col("n_total")).round(1).alias("winner_pct"),
+        )
+        .sort("success_pct", descending=True)
+    )
+
+    models = stats["config_name"].to_list()
+    success_pcts = stats["success_pct"].to_list()
+    winner_pcts = stats["winner_pct"].to_list()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            name="Success %",
+            x=models,
+            y=success_pcts,
+            marker_color="#4ade80",
+            text=[f"{v:.0f}%" for v in success_pcts],
+            textposition="outside",
+            textfont={"size": 12, "color": "#4ade80"},
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            name="Test Winner %",
+            x=models,
+            y=winner_pcts,
+            marker_color="#6366f1",
+            text=[f"{v:.0f}%" for v in winner_pcts],
+            textposition="outside",
+            textfont={"size": 12, "color": "#6366f1"},
+        )
+    )
+    fig.update_layout(
+        barmode="group",
+        title="Success Rate & Test Winner Rate per Model",
+        yaxis_title="Percentage",
+        yaxis_range=[0, 105],
+        template="plotly_dark",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "center", "x": 0.5},
+        height=400,
+    )
+
+    mo.md(
+        f"""
+        ## Model Overview
+
+        **{total_repos}** total repos in the eval run.
+        """
+    )
+
+    fig
+
+
+@app.cell
 def _(mo, total_eligible_repos, wdf, winner_counts, pl):
     """Show overall winner stats and identify gpt-5.4-only wins."""
 
