@@ -286,6 +286,10 @@ def bootstrap(
 
     prompt_result = build_prompt(agent_config)
 
+    # TODO: start_time is set before runner creation, so duration_seconds includes
+    # sandbox cold start, project setup, ccusage collection, and tarball extraction —
+    # not just agent execution. Move the timer to bracket only the agent run
+    # (e.g. around the runner.run_agent() call) for accurate wall-clock measurement.
     start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
 
