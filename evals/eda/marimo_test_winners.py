@@ -393,8 +393,8 @@ def _(mo, df, pl):
     """Box plots for agent wall-clock time and inference cost."""
     import plotly.express as px
 
-    # Prepare pandas df with successful runs only, for box plots
-    box_df = df.filter(pl.col("success")).to_pandas()
+    # Prepare pandas df with all runs for box plots
+    box_df = df.to_pandas()
 
     configs = sorted(box_df["config_name"].unique())
     import pandas as pd
