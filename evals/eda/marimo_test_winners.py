@@ -468,14 +468,14 @@ def _(mo, df, pl):
     fig_time = make_box(
         box_df,
         y="agent_walltime_seconds",
-        title="Agent Wall-clock Time by Config",
+        title="Agent Wall-clock Time by Config (per repo)",
         y_label="Wall-clock Time (s)",
     )
 
     fig_cost = make_box(
         box_df,
         y="cost_usd",
-        title="Inference Cost by Config",
+        title="Inference Cost by Config (per repo)",
         y_label="Cost (USD)",
         y_tickformat="$.2f",
     )
