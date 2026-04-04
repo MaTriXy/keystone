@@ -490,8 +490,8 @@ def _(mo, df, pl):
     fig_cost.write_image(str(_bplot_dir / "box_cost.png"), scale=2)
 
     mo.md("## Box Plots")
-    mo.output.append(mo.ui.plotly(fig_time))
     mo.output.append(mo.ui.plotly(fig_cost))
+    mo.output.append(mo.ui.plotly(fig_time))
 
 
 if __name__ == "__main__":
