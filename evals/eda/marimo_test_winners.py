@@ -151,6 +151,8 @@ def _(df, pl):
 @app.cell
 def _(mo, wdf, pl):
     """Bar chart: success rate and test-winner rate per model."""
+    import pathlib
+
     import plotly.graph_objects as go
 
     total_repos = wdf["repo_id"].n_unique()
@@ -206,11 +208,19 @@ def _(mo, wdf, pl):
         height=400,
     )
 
+    # Save plots
+    _plot_dir = pathlib.Path(__file__).parent / "blog_plots"
+    _plot_dir.mkdir(parents=True, exist_ok=True)
+    _cdn = "https://cdn.plot.ly/plotly-2.35.2.min.js"
+    fig.write_html(str(_plot_dir / "completed_and_test_winner.html"), include_plotlyjs=_cdn)
+    fig.write_image(str(_plot_dir / "completed_and_test_winner.png"), scale=2)
+
     mo.md(
         f"""
         ## Model Overview
 
         **{total_repos}** total repos in the eval run.
+        Plots saved to `{_plot_dir}/`.
         """
     )
 
@@ -391,6 +401,8 @@ def _(mo, gpt_only_repos):
 @app.cell
 def _(mo, df, pl):
     """Box plots for agent wall-clock time and inference cost."""
+    import pathlib as _pathlib
+
     import plotly.express as px
 
     # Prepare pandas df with all runs for box plots
@@ -445,6 +457,15 @@ def _(mo, df, pl):
         y_label="Cost (USD)",
         y_tickformat="$.2f",
     )
+
+    # Save plots
+    _bplot_dir = _pathlib.Path(__file__).parent / "blog_plots"
+    _bplot_dir.mkdir(parents=True, exist_ok=True)
+    _cdn2 = "https://cdn.plot.ly/plotly-2.35.2.min.js"
+    fig_time.write_html(str(_bplot_dir / "box_walltime.html"), include_plotlyjs=_cdn2)
+    fig_time.write_image(str(_bplot_dir / "box_walltime.png"), scale=2)
+    fig_cost.write_html(str(_bplot_dir / "box_cost.html"), include_plotlyjs=_cdn2)
+    fig_cost.write_image(str(_bplot_dir / "box_cost.png"), scale=2)
 
     mo.md("## Box Plots")
     mo.output.append(mo.ui.plotly(fig_time))

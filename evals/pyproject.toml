@@ -26,7 +26,7 @@ imbue-keystone = { workspace = true }
 
 [project.optional-dependencies]
 dask = ["prefect-dask>=0.3"]
-eda = ["plotly>=5.0", "ipywidgets>=8.0", "numpy>=1.26"]
+eda = ["plotly>=5.0", "ipywidgets>=8.0", "numpy>=1.26", "kaleido>=1.0"]
 
 [project.scripts]
 eval-harness = "eval_cli:app"
