@@ -168,10 +168,24 @@ def _(mo, wdf, pl):
             (100.0 * pl.col("n_success") / pl.col("n_total")).round(1).alias("success_pct"),
             (100.0 * pl.col("n_winner") / pl.col("n_total")).round(1).alias("winner_pct"),
         )
-        .sort("success_pct", descending=True)
     )
 
-    models = stats["config_name"].to_list()
+    # Fixed display order: haiku, opus, gpt center, codex right
+    _model_order = [
+        "claude-haiku",
+        "claude-opus",
+        "gpt-5.4",
+        "codex-gpt-5.3",
+        "codex-mini-gpt-5.1",
+    ]
+    available = set(stats["config_name"].to_list())
+    models = [m for m in _model_order if m in available]
+    # Reorder stats to match
+    stats = (
+        stats.filter(pl.col("config_name").is_in(models))
+        .with_columns(pl.col("config_name").cast(pl.Enum(models)))
+        .sort("config_name")
+    )
     success_pcts = stats["success_pct"].to_list()
     winner_pcts = stats["winner_pct"].to_list()
 
