@@ -2,8 +2,10 @@
 """Generate a self-contained HTML viewer for keystone eval results.
 
 Usage:
-    python evals/viewer/generate_viewer.py [--out path/to/viewer.html]
-    python evals/viewer/generate_viewer.py --local [--out path/to/viewer.html]
+    python evals/viewer/generate_viewer.py results.parquet [--out viewer.html]
+    python evals/viewer/generate_viewer.py run1.parquet run2.parquet --out viewer.html
+
+Parquet files are produced by evals/eda/eval_to_parquet_cli.py.
 """
 
 import argparse
@@ -11,9 +13,7 @@ import json
 import sys
 from pathlib import Path
 
-import fsspec
 import polars as pl
-from tqdm import tqdm
 
 # Ensure the project root is importable.
 _project_root = str(Path(__file__).resolve().parents[2])
@@ -21,51 +21,6 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from eval_schema import KeystoneRepoResult  # noqa: E402
-
-EVALS_DIR = Path.home() / "keystone_evals"
-DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
-VIEWER_CACHE_DIR = Path.home() / "keystone_evals" / "viewer_cache"
-
-# Which runs to include and in what order
-RUN_NAMES = [
-    # "2026-03-02_cat_v1",
-    # "2026-03-02_cat_v1_opencode",
-    # "2026-03-03_cat_v1_agents_md",
-    # "2026-03-02_thad_v2",
-    # "2026-03-05_cat_v1",
-    # "2026-03-05_cat_v2",
-    # "2026-03-10_four_model_thad",
-    # "2026-03-08_four_model_thad_v2",
-    # "2026-03-11_cat_v8",
-    # "2026-03-11_opencode_vs_claude_v2",
-    # "2026-03-12_opencode_vs_claude_cost_v2",
-    # "2026-03-12_opencode_vs_claude_cost_v3",
-    "2026-03-18-cat",
-    "2026-03-13_four_model_thad",
-    "2026-03-13_five_model_full_v3",
-    "2026-03-14_thad_eval",
-    "main",
-]
-
-RUN_LABELS = {
-    "2026-03-02_cat_v1": "Native (baseline)",
-    "2026-03-02_cat_v1_opencode": "OpenCode",
-    "2026-03-03_cat_v1_agents_md": "AGENTS.md ablation",
-    "2026-03-02_thad_v2": "Five-model 2026-03-05",
-    "2026-03-05_cat_v1": "Four-model 2026-03-05 (v1)",
-    "2026-03-05_cat_v2": "Four-model 2026-03-05 (v2)",
-    "2026-03-08_four_model_thad_v2": "Four-model 2026-03-08 (v2)",
-    "2026-03-10_four_model_thad": "Four-model 2026-03-10",
-    "2026-03-11_cat_v8": "Four-model 2026-03-11 (v8)",
-    "2026-03-11_opencode_vs_claude_v2": "OpenCode vs Claude 2026-03-11",
-    "2026-03-12_opencode_vs_claude_cost_v2": "OpenCode vs Claude (cost) 2026-03-12",
-    "2026-03-12_opencode_vs_claude_cost_v3": "OpenCode vs Claude (cost v3) 2026-03-12",
-    "2026-03-13_four_model_thad": "Four-model 2026-03-13",
-    "2026-03-13_five_model_full_v3": "Five-model full 2026-03-13",
-    "2026-03-14_thad_eval": "Thad eval 2026-03-14",
-    "main": "Main",
-    "2026-03-18-cat": "Four-model 2026-03-18",
-}
 
 # Canonical model display order & colors per run
 MODEL_META = {
@@ -127,52 +82,36 @@ def categorize_error(error: str) -> str:
     return "Other"
 
 
-def load_run(
-    run_uri: str, run_label: str
-) -> tuple[dict[str, dict[str, KeystoneRepoResult]], dict[str, dict]]:
-    """Load all results from a run directory (local path or fsspec URI).
+def load_parquet(parquet_path: Path) -> dict[str, dict[str, dict]]:
+    """Load a parquet file and return {config_name: {repo_id: summary_dict}}.
 
-    Returns ({model: {repo: KeystoneRepoResult}}, {model: rerun_meta}).
+    Parquet files are produced by evals/eda/eval_to_parquet_cli.py and contain
+    a raw_json column with the full KeystoneRepoResult serialized as JSON.
+    When multiple trials exist per (config, repo), the best trial is kept
+    (success preferred over failure).
     """
-    fs, base_prefix = fsspec.core.url_to_fs(run_uri)
-    base_prefix = base_prefix.rstrip("/")
-
+    raw_df = pl.read_parquet(parquet_path)
     models: dict[str, dict[str, KeystoneRepoResult]] = {}
-    rerun_meta: dict[str, dict] = {}
 
-    # Glob for all eval_result.json files under this run
-    json_paths = sorted(str(p) for p in fs.glob(f"{base_prefix}/**/eval_result.json"))
-    for path in tqdm(json_paths, desc=f"  {run_label}", unit="file"):
-        with fs.open(path) as f:
-            raw = json.load(f)
-        result = KeystoneRepoResult(**raw)
-        config_name = result.eval_config.name if result.eval_config else None
+    for row in raw_df.iter_rows(named=True):
+        result = KeystoneRepoResult.model_validate_json(row["raw_json"])
+        config_name = row.get("config_name") or (
+            result.eval_config.name if result.eval_config else None
+        )
         if not config_name:
             continue
         if config_name not in models:
             models[config_name] = {}
-        repo_id = result.repo_entry.id
+        repo_id = row.get("repo_id") or result.repo_entry.id
         existing = models[config_name].get(repo_id)
         # Keep the best trial: prefer success over failure
         if existing is None or (not existing.success and result.success):
             models[config_name][repo_id] = result
 
-    # Load rerun manifests (one per model directory)
-    for rp in fs.glob(f"{base_prefix}/*/rerun.json"):
-        rerun_path = str(rp)
-        try:
-            with fs.open(rerun_path) as f:
-                data = json.load(f)
-            rerun_config_name: str = data.get("name") or rerun_path.rstrip("/").split("/")[-2]
-            rerun_meta[rerun_config_name] = {
-                "s3_uri": f"s3://{rerun_path}",
-                "git_commit": data.get("git_commit", "unknown"),
-                "git_is_dirty": data.get("git_is_dirty", False),
-            }
-        except Exception:
-            pass
-
-    return models, rerun_meta
+    return {
+        model: {repo: extract_summary(result) for repo, result in repos.items()}
+        for model, repos in models.items()
+    }
 
 
 def extract_summary(result: KeystoneRepoResult) -> dict:
@@ -209,99 +148,45 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
         "status_messages": status_messages,
         "agent_error_msgs": agent_error_msgs,
         "unexpected_broken_commit_passes": result.unexpected_broken_commit_passes,
-        "restoration_check_failed": result.restoration_check_failed,
+        # Match marimo_test_winners.py eligibility: treat missing post-restoration
+        # verification as a restoration failure — without evidence that tests still
+        # pass after broken commits, mutation counts are unreliable.
+        "restoration_check_failed": (
+            result.restoration_check_failed
+            or result.bootstrap_result is None
+            or result.bootstrap_result.post_broken_commits_verification is None
+        ),
         "num_broken_branches": len(result.repo_entry.broken_branches),
     }
 
 
-def save_run_cache(run_name: str, models: dict[str, dict[str, KeystoneRepoResult]]) -> None:
-    """Serialize a run's results to a local parquet cache."""
-    rows = []
-    for config_name, repos in models.items():
-        for repo_id, result in repos.items():
-            summary = extract_summary(result)
-            rows.append(
-                {
-                    "config_name": config_name,
-                    "repo_id": repo_id,
-                    **summary,
-                    "status_messages": json.dumps(summary["status_messages"]),
-                    "agent_error_msgs": json.dumps(summary["agent_error_msgs"]),
-                }
-            )
-    if not rows:
-        return
-    VIEWER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(rows).write_parquet(VIEWER_CACHE_DIR / f"{run_name}.parquet")
-
-
-def load_run_cache(run_name: str) -> dict[str, dict[str, dict]] | None:
-    """Load cached run data, or None if no cache exists."""
-    cache_path = VIEWER_CACHE_DIR / f"{run_name}.parquet"
-    if not cache_path.exists():
-        return None
-    models: dict[str, dict[str, dict]] = {}
-    for row in pl.read_parquet(cache_path).to_dicts():
-        config_name = row.pop("config_name")
-        repo_id = row.pop("repo_id")
-        row["status_messages"] = json.loads(row["status_messages"])
-        row["agent_error_msgs"] = json.loads(row["agent_error_msgs"])
-        models.setdefault(config_name, {})[repo_id] = row
-    return models
-
-
-def build_data(
-    run_names: list[str],
-    use_s3: bool = True,
-    s3_prefix: str = DEFAULT_S3_PREFIX,
-    use_cache: bool = True,
-) -> dict:
-    """Build the full data dict for embedding in HTML."""
+def build_data(parquet_paths: list[Path]) -> dict:
+    """Build the full data dict for embedding in HTML from parquet files."""
     runs: dict[str, dict] = {}
-    rerun_meta: dict[str, dict] = {}
+    run_names: list[str] = []
+    run_labels: dict[str, str] = {}
     all_repos: set[str] = set()
 
-    for run_name in run_names:
-        # Try cache first
-        if use_cache:
-            cached = load_run_cache(run_name)
-            if cached is not None:
-                print(f"  Loading {run_name} from cache...")
-                for repos in cached.values():
-                    all_repos.update(repos.keys())
-                runs[run_name] = cached
-                continue
-
-        run_uri = f"{s3_prefix.rstrip('/')}/{run_name}" if use_s3 else str(EVALS_DIR / run_name)
-        print(f"  Loading {run_name} from {run_uri}...")
-        models, run_rerun = load_run(run_uri, run_label=run_name)
+    for pq_path in parquet_paths:
+        run_name = pq_path.stem  # filename without .parquet
+        print(f"  Loading {pq_path}...")
+        models = load_parquet(pq_path)
         if not models:
-            print(f"  [skip] {run_name} — no results found")
+            print(f"  [skip] {pq_path} — no results found")
             continue
-        rerun_meta[run_name] = run_rerun
-
-        # Collect repo names
         for repos in models.values():
             all_repos.update(repos.keys())
-        # Summarize and cache
-        runs[run_name] = {
-            model: {repo: extract_summary(result) for repo, result in repos.items()}
-            for model, repos in models.items()
-        }
-        if use_cache:
-            save_run_cache(run_name, models)
-
-    # Sort repos alphabetically
-    repo_list = sorted(all_repos)
+        runs[run_name] = models
+        run_names.append(run_name)
+        run_labels[run_name] = run_name
 
     return {
         "runs": runs,
-        "run_names": [r for r in run_names if r in runs],
-        "run_labels": RUN_LABELS,
-        "repo_list": repo_list,
+        "run_names": run_names,
+        "run_labels": run_labels,
+        "repo_list": sorted(all_repos),
         "model_meta": MODEL_META,
-        "rerun_meta": rerun_meta,
-        "s3_prefix": s3_prefix,
+        "rerun_meta": {},
     }
 
 
@@ -1373,11 +1258,20 @@ BLOG_STATIC = Path.home() / "src" / "generallyintelligent.com" / "static" / "key
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate keystone eval HTML viewer")
+    parser = argparse.ArgumentParser(
+        description="Generate keystone eval HTML viewer from parquet files"
+    )
+    parser.add_argument(
+        "parquets",
+        nargs="+",
+        type=Path,
+        help="One or more parquet files (produced by evals/eda/eval_to_parquet_cli.py). "
+        "Each file becomes a separate run tab in the viewer.",
+    )
     parser.add_argument(
         "--out",
-        default=str(EVALS_DIR / "viewer" / "viewer.html"),
-        help="Output path (local or any fsspec URI, e.g. s3://bucket/path.html)",
+        default="viewer.html",
+        help="Output HTML file path (default: viewer.html)",
     )
     parser.add_argument(
         "--blog",
@@ -1385,60 +1279,23 @@ def main():
         default=False,
         help=f"Save output to blog repo at {BLOG_STATIC / 'eval_viewer.html'}",
     )
-    parser.add_argument(
-        "--s3",
-        action="store_true",
-        default=True,
-        help="Load data from S3 (default)",
-    )
-    parser.add_argument(
-        "--local",
-        action="store_true",
-        default=False,
-        help="Load data from local EVALS_DIR instead of S3",
-    )
-    parser.add_argument(
-        "--s3_prefix",
-        default=DEFAULT_S3_PREFIX,
-        help=f"S3 prefix for eval results (default: {DEFAULT_S3_PREFIX})",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        default=False,
-        help=f"Skip local parquet cache and fetch from S3 (cache dir: {VIEWER_CACHE_DIR})",
-    )
-    parser.add_argument(
-        "runs",
-        nargs="*",
-        help="Run names to include (overrides built-in RUN_NAMES list). Can be any run name, not just those in RUN_NAMES.",
-    )
     args = parser.parse_args()
 
-    use_s3 = not args.local
-    run_names = args.runs if args.runs else RUN_NAMES
+    for pq in args.parquets:
+        if not pq.exists():
+            parser.error(f"Parquet file not found: {pq}")
 
     print("Loading eval data...")
-    data = build_data(
-        run_names, use_s3=use_s3, s3_prefix=args.s3_prefix, use_cache=not args.no_cache
-    )
+    data = build_data(args.parquets)
 
-    out_uri = str(BLOG_STATIC / "eval_viewer.html") if args.blog else args.out
+    out_path = Path(BLOG_STATIC / "eval_viewer.html") if args.blog else Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(data, indent=None))
-
-    out_fs, out_path = fsspec.core.url_to_fs(out_uri)
-    parent = out_fs._parent(out_path)
-    if parent:
-        out_fs.mkdirs(parent, exist_ok=True)
-    open_kwargs: dict[str, str] = {}
-    if out_uri.startswith("s3://"):
-        open_kwargs["ContentType"] = "text/html"
-    with out_fs.open(out_path, "w", **open_kwargs) as f:
-        f.write(html)
+    out_path.write_text(html)
 
     total = sum(len(repos) for run in data["runs"].values() for repos in run.values())
-    print(f"Written {total} results to {out_uri}")
+    print(f"Written {total} results to {out_path}")
 
 
 if __name__ == "__main__":
