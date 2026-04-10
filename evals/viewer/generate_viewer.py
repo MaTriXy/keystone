@@ -10,6 +10,7 @@ Parquet files are produced by evals/eda/eval_to_parquet_cli.py.
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -109,7 +110,10 @@ def load_parquet(parquet_path: Path) -> dict[str, dict[str, dict]]:
             models[config_name][repo_id] = result
 
     return {
-        model: {repo: extract_summary(result) for repo, result in repos.items()}
+        model: {
+            repo: _sanitize_summary(extract_summary(result))
+            for repo, result in repos.items()
+        }
         for model, repos in models.items()
     }
 
@@ -158,6 +162,32 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
         ),
         "num_broken_branches": len(result.repo_entry.broken_branches),
     }
+
+
+# Patterns to strip from free-text fields before embedding in HTML.
+_ORG_ID_RE = re.compile(r"org-[A-Za-z0-9]{20,}")
+_RATE_LIMIT_RE = re.compile(r"[Rr]ate limit[^\n]*")
+_S3_BUCKET_RE = re.compile(r"s3://[A-Za-z0-9._-]+/")
+
+
+def _sanitize_str(s: str) -> str:
+    """Remove sensitive substrings from a single string."""
+    s = _ORG_ID_RE.sub("<redacted-org>", s)
+    s = _RATE_LIMIT_RE.sub("<rate-limit-redacted>", s)
+    s = _S3_BUCKET_RE.sub("s3://<redacted>/", s)
+    return s
+
+
+def _sanitize_summary(summary: dict) -> dict:
+    """Sanitize free-text fields in a summary dict."""
+    for key in ("error", "summary"):
+        if summary.get(key):
+            summary[key] = _sanitize_str(summary[key])
+    if summary.get("status_messages"):
+        summary["status_messages"] = [_sanitize_str(m) for m in summary["status_messages"]]
+    if summary.get("agent_error_msgs"):
+        summary["agent_error_msgs"] = [_sanitize_str(m) for m in summary["agent_error_msgs"]]
+    return summary
 
 
 def build_data(parquet_paths: list[Path]) -> dict:
@@ -1144,7 +1174,7 @@ function copyRerunCmd() {
 }
 
 function getS3Path(run, model, repo) {
-  const prefix = (DATA.s3_prefix || "s3://int8-datasets/keystone/evals/").replace(/\\/+$/, "");
+  const prefix = (DATA.s3_prefix || "s3://redacted/evals/").replace(/\\/+$/, "");
   return prefix + "/" + run + "/" + model + "/" + repo + "/trial_0/";
 }
 
@@ -1154,7 +1184,7 @@ function getRerunCmd(run, model) {
     return "uv run python evals/eval_cli.py --config_file " + meta.s3_uri;
   }
   // Fallback: point at the rerun.json path
-  const prefix = (DATA.s3_prefix || "s3://int8-datasets/keystone/evals/").replace(/\\/+$/, "");
+  const prefix = (DATA.s3_prefix || "s3://redacted/evals/").replace(/\\/+$/, "");
   return "uv run python evals/eval_cli.py --config_file " + prefix + "/" + run + "/" + model + "/rerun.json";
 }
 
