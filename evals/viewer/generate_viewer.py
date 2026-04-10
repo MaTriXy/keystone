@@ -253,7 +253,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #94a3b8; }
   .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
-  .main { padding: 16px 24px; }
+  .main { padding: 16px 24px; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
   table { width: 100%; border-collapse: collapse; }
   thead th { position: sticky; top: 57px; background: #1a1d27; z-index: 50;
@@ -280,12 +280,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   .rc { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
         height: 100%; padding: 2px 0; line-height: 1; }
+  .rc-badges { display: flex; align-items: center; gap: 2px; }
   .rc-meta { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; padding-left: 2px; }
   .rc-cost { font-size: 11px; color: #a78bfa; font-weight: 600; }
   .rc-time { font-size: 10px; color: #475569; }
 
-  .rc-expanded { padding: 6px 4px; font-size: 12px; line-height: 1.4;
-                 max-height: 220px; overflow-y: auto; }
+  .rc-expanded { padding: 6px 4px; font-size: 12px; line-height: 1.4; }
   .rc-expanded-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
   .rc-tests { font-size: 11px; color: #64748b; }
   .rc-err { color: #fca5a5; font-size: 11px; margin-top: 4px; word-break: break-word; }
@@ -387,7 +387,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .btn.primary:hover { background: #3730a3; }
 
   /* AG Grid */
-  #myGrid { width: 100%; }
+  #myGrid { width: 100%; flex: 1; }
   #detailPanel { flex-shrink: 0; }
   .ag-theme-alpine-dark {
     --ag-background-color: #0f1117;
@@ -894,7 +894,14 @@ function buildColDefs() {
         minWidth: 120,
         flex: 1,
         sortable: true,
-        filter: false,
+        filter: "agTextColumnFilter",
+        filterValueGetter: params => {
+          const r = params.data[m];
+          if (!r) return "missing";
+          if (r.success) return "pass";
+          const cat = categorizeError(r.error || "");
+          return cat === "Agent timeout" ? "timeout" : "fail " + cat;
+        },
         tooltipValueGetter: params => {
           const r = params.value;
           if (!r) return "No data";
@@ -933,15 +940,15 @@ function buildColDefs() {
             badge += `<span class="badge" style="background:#78350f;color:#fbbf24;margin-left:2px" title="${r.unexpected_broken_commit_passes} of ${ubcTotal} broken commit(s) unexpectedly passed">&#9888;</span>`;
           }
           if (!expanded) {
-            return `<div class="rc">${badge}${winnerHtml}<div class="rc-meta"><span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${ubcHtml}</div></div>`;
+            return `<div class="rc"><div class="rc-badges">${badge}${winnerHtml}</div><div class="rc-meta"><span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${ubcHtml}</div></div>`;
           }
           // Expanded: show full detail in-cell
           const isBestTests = (best.maxTestsPassed != null && r.tests_passed != null && r.tests_passed === best.maxTestsPassed);
           const tpStr = r.tests_passed != null ? `${r.tests_passed}` : "";
           const tpHtml = tpStr ? (isBestTests ? `<b>${tpStr}</b>` : tpStr) : "";
           const tests = (r.tests_passed != null) ? `<span title="Tests passed / failed">${tpHtml}\\u2713 ${r.tests_failed||0}\\u2717</span>` : "";
-          const errHtml = r.error ? `<div class="rc-err">\\u2717 ${escHtml(r.error.slice(0,200))}</div>` : "";
-          const summaryHtml = r.summary ? `<div class="rc-summary">${escHtml(r.summary.slice(0,300))}</div>` : "";
+          const errHtml = r.error ? `<div class="rc-err">\\u2717 ${escHtml(r.error)}</div>` : "";
+          const summaryHtml = r.summary ? `<div class="rc-summary">${escHtml(r.summary)}</div>` : "";
           const steps = r.status_messages || [];
           const lastSteps = steps.slice(-3).map(s => `<div class="rc-step">${escHtml(s)}</div>`).join("");
           const stepsHtml = lastSteps ? `<div class="rc-steps"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Agent steps</div>${lastSteps}</div>` : "";
@@ -979,7 +986,6 @@ function initGrid() {
     columnDefs: buildColDefs(),
     rowData: buildRowData(),
     headerHeight: 40,
-    domLayout: 'autoHeight',
     defaultColDef: { sortable: true, resizable: true },
     suppressFieldDotNotation: true,
     suppressCellFocus: true,
